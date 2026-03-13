@@ -1,7 +1,8 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Search, Upload, Menu, X, LogOut } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Search, Upload, Menu, X, LogOut, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/lib/auth-context';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -13,9 +14,10 @@ const navItems = [
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { signOut, profile } = useAuth();
 
-  const handleLogout = () => {
-    localStorage.removeItem('crewscale_user');
+  const handleLogout = async () => {
+    await signOut();
     window.location.href = '/';
   };
 
@@ -30,6 +32,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
             <span className="text-xl font-bold text-primary-foreground tracking-tight">CrewScale</span>
           </Link>
+          {profile && (
+            <div className="mb-6 px-4 py-3 rounded-lg bg-sidebar-accent/50">
+              <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
+              <p className="text-xs text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
+            </div>
+          )}
           <nav className="space-y-1">
             {navItems.map(item => {
               const active = location.pathname === item.path;
@@ -50,13 +58,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
             })}
           </nav>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all"
-        >
-          <LogOut className="w-5 h-5" />
-          Sair
-        </button>
+        <div className="space-y-1">
+          <p className="px-4 text-xs text-sidebar-foreground/50">© {new Date().getFullYear()} Marcos Vinicius</p>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full"
+          >
+            <LogOut className="w-5 h-5" />
+            Sair
+          </button>
+        </div>
       </aside>
 
       {/* Mobile Header */}

@@ -1,29 +1,49 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
-import { getSchedule, getUser } from '@/lib/store';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/integrations/supabase/client';
 import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { ScheduleEntry } from '@/lib/types';
+
+interface ScheduleEntry {
+  id: string;
+  date: string;
+  flight_number: string;
+  departure: string;
+  arrival: string;
+  departure_time: string;
+  arrival_time: string;
+  status: string;
+  airline: string | null;
+  report_time: string | null;
+  duty_hours: number | null;
+}
 
 export default function DashboardPage() {
-  const user = getUser();
-  const schedule = getSchedule();
+  const { profile } = useAuth();
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from('schedule_entries').select('*').order('date', { ascending: true });
+      if (data) setSchedule(data as ScheduleEntry[]);
+    };
+    load();
+  }, []);
 
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const daysInMonth = new Date(now.getFullYear(), currentMonth + 1, 0).getDate();
 
     const monthEntries = schedule.filter(e => {
       const parts = e.date.split(/[\/\-]/);
       if (parts.length < 3) return false;
-      const month = parseInt(parts[1]) - 1;
-      return month === currentMonth;
+      return parseInt(parts[1]) - 1 === currentMonth;
     });
 
-    const totalHours = monthEntries.reduce((sum, e) => sum + (e.dutyHours || 0), 0);
+    const totalHours = monthEntries.reduce((sum, e) => sum + (e.duty_hours || 0), 0);
     const flightDays = new Set(monthEntries.map(e => e.date)).size;
     const daysOff = daysInMonth - flightDays;
 
@@ -39,14 +59,7 @@ export default function DashboardPage() {
       return entryDate >= now;
     });
 
-    return {
-      totalFlights: monthEntries.length,
-      totalHours: Math.round(totalHours * 10) / 10,
-      daysOff,
-      flightDays,
-      nextFlight,
-      maxHours: 85,
-    };
+    return { totalFlights: monthEntries.length, totalHours: Math.round(totalHours * 10) / 10, daysOff, flightDays, nextFlight, maxHours: 85 };
   }, [schedule]);
 
   const hoursPercentage = Math.min((stats.totalHours / stats.maxHours) * 100, 100);
@@ -54,16 +67,10 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="mb-8">
-        <motion.h1
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-2xl md:text-3xl font-bold text-foreground"
-        >
-          Olá, {user?.name || 'Tripulante'} ✈️
+        <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold text-foreground">
+          Olá, {profile?.name || 'Tripulante'} ✈️
         </motion.h1>
-        <p className="text-muted-foreground mt-1">
-          {user?.airline ? `${user.airline} • ` : ''}Resumo do mês atual
-        </p>
+        <p className="text-muted-foreground mt-1">{profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -73,13 +80,7 @@ export default function DashboardPage() {
         <StatCard title="Dias de voo" value={stats.flightDays} icon={CalendarDays} />
       </div>
 
-      {/* Hours Progress */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-card rounded-xl p-6 shadow-card mb-8"
-      >
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card rounded-xl p-6 shadow-card mb-8">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
@@ -88,12 +89,7 @@ export default function DashboardPage() {
           <span className="text-sm font-mono text-muted-foreground">{stats.totalHours}h / {stats.maxHours}h</span>
         </div>
         <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${hoursPercentage}%` }}
-            transition={{ duration: 1, ease: 'easeOut' }}
-            className={`h-full rounded-full ${hoursPercentage > 90 ? 'bg-destructive' : 'gradient-sky'}`}
-          />
+          <motion.div initial={{ width: 0 }} animate={{ width: `${hoursPercentage}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={`h-full rounded-full ${hoursPercentage > 90 ? 'bg-destructive' : 'gradient-sky'}`} />
         </div>
         {hoursPercentage > 80 && (
           <div className="flex items-center gap-2 mt-3 text-destructive text-sm">
@@ -103,30 +99,24 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
-      {/* Next Flight */}
       {stats.nextFlight && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-card rounded-xl p-6 shadow-card mb-8"
-        >
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl p-6 shadow-card mb-8">
           <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
             <Plane className="w-5 h-5 text-primary" />
             Próximo Voo
           </h2>
-          <NextFlightInfo flight={stats.nextFlight} />
+          <div className="flex flex-wrap items-center gap-6">
+            <div><p className="text-xs text-muted-foreground">Data</p><p className="font-bold text-foreground">{stats.nextFlight.date}</p></div>
+            <div><p className="text-xs text-muted-foreground">Voo</p><p className="font-bold text-foreground">{stats.nextFlight.flight_number}</p></div>
+            <div><p className="text-xs text-muted-foreground">Rota</p><p className="font-bold text-foreground">{stats.nextFlight.departure} → {stats.nextFlight.arrival}</p></div>
+            <div><p className="text-xs text-muted-foreground">Apresentação</p><p className="font-bold text-primary">{stats.nextFlight.report_time || stats.nextFlight.departure_time}</p></div>
+            <div><p className="text-xs text-muted-foreground">Duty</p><p className="font-bold text-foreground">{stats.nextFlight.duty_hours}h</p></div>
+          </div>
         </motion.div>
       )}
 
-      {/* Recent Schedule */}
       {schedule.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-card rounded-xl p-6 shadow-card"
-        >
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-card rounded-xl p-6 shadow-card">
           <h2 className="font-semibold text-foreground mb-4">Últimos voos da escala</h2>
           <div className="space-y-3">
             {schedule.slice(-5).reverse().map(entry => (
@@ -136,13 +126,13 @@ export default function DashboardPage() {
                     <Plane className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm text-foreground">{entry.flightNumber}</p>
+                    <p className="font-medium text-sm text-foreground">{entry.flight_number}</p>
                     <p className="text-xs text-muted-foreground">{entry.departure} → {entry.arrival}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-mono text-foreground">{entry.date}</p>
-                  <p className="text-xs text-muted-foreground">{entry.departureTime} - {entry.arrivalTime}</p>
+                  <p className="text-xs text-muted-foreground">{entry.departure_time} - {entry.arrival_time}</p>
                 </div>
               </div>
             ))}
@@ -151,43 +141,12 @@ export default function DashboardPage() {
       )}
 
       {schedule.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="bg-card rounded-xl p-12 shadow-card text-center"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl p-12 shadow-card text-center">
           <Plane className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-foreground mb-2">Nenhuma escala importada</h3>
           <p className="text-sm text-muted-foreground">Importe sua escala na aba "Importar" para ver seus dados aqui.</p>
         </motion.div>
       )}
     </AppLayout>
-  );
-}
-
-function NextFlightInfo({ flight }: { flight: ScheduleEntry }) {
-  return (
-    <div className="flex items-center gap-6">
-      <div>
-        <p className="text-xs text-muted-foreground">Data</p>
-        <p className="font-bold text-foreground">{flight.date}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">Voo</p>
-        <p className="font-bold text-foreground">{flight.flightNumber}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">Rota</p>
-        <p className="font-bold text-foreground">{flight.departure} → {flight.arrival}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">Apresentação</p>
-        <p className="font-bold text-primary">{flight.reportTime || flight.departureTime}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">Duty</p>
-        <p className="font-bold text-foreground">{flight.dutyHours}h</p>
-      </div>
-    </div>
   );
 }
