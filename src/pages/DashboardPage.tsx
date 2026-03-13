@@ -1,7 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
-import { RouteHeatMap } from '@/components/RouteHeatMap';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp } from 'lucide-react';
@@ -65,9 +64,6 @@ export default function DashboardPage() {
 
   const hoursPercentage = Math.min((stats.totalHours / stats.maxHours) * 100, 100);
 
-  const allDepartures = schedule.map(e => e.departure);
-  const allArrivals = schedule.map(e => e.arrival);
-
   return (
     <AppLayout>
       <div className="mb-8">
@@ -101,11 +97,6 @@ export default function DashboardPage() {
             <span>Atenção: próximo do limite de horas mensais</span>
           </div>
         )}
-      </motion.div>
-
-      {/* Heat Map */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mb-8">
-        <RouteHeatMap departures={allDepartures} arrivals={allArrivals} />
       </motion.div>
 
       {stats.nextFlight && (
