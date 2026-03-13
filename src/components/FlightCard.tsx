@@ -1,5 +1,5 @@
 import { FlightInfo } from '@/lib/types';
-import { Plane, Clock, MapPin, Ban, AlertTriangle, Radio } from 'lucide-react';
+import { Plane, Clock, MapPin, Ban, AlertTriangle, Radio, Tag } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface FlightCardProps {
@@ -114,14 +114,23 @@ export function FlightCard({ flight, index = 0 }: FlightCardProps) {
         </div>
       </div>
 
-      {flight.aircraft && (
-        <div className="mt-4 pt-3 border-t border-border">
+      {/* Aircraft prefix/registration - always visible */}
+      <div className="mt-4 pt-3 border-t border-border">
+        <div className="flex items-center gap-2">
+          <Tag className="w-3.5 h-3.5 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
-            Aeronave: <span className="font-mono font-medium text-foreground">{flight.aircraft.registration || 'N/A'}</span>
-            {flight.aircraft.iata && ` • ${flight.aircraft.iata}`}
+            Prefixo: <span className="font-mono font-semibold text-foreground">
+              {flight.aircraft?.registration || 'N/D'}
+            </span>
+            {flight.aircraft?.iata && (
+              <span className="ml-2 text-muted-foreground">• Tipo: <span className="font-mono font-medium text-foreground">{flight.aircraft.iata}</span></span>
+            )}
+            {flight.aircraft?.icao && (
+              <span className="ml-2 text-muted-foreground">• ICAO: <span className="font-mono font-medium text-foreground">{flight.aircraft.icao}</span></span>
+            )}
           </p>
         </div>
-      )}
+      </div>
 
       {flight.live && (
         <div className="mt-3 pt-3 border-t border-border">
