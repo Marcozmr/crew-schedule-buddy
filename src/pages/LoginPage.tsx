@@ -5,17 +5,25 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { saveUser } from '@/lib/store';
+import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
+import airplaneBg from '@/assets/airplane-bg.jpg';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { signIn, signUp, session } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Redirect if already logged in
+  if (session) {
+    navigate('/dashboard', { replace: true });
+    return null;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -31,73 +39,55 @@ export default function LoginPage() {
       return;
     }
 
-    // Simulate auth with localStorage
-    setTimeout(() => {
-      const users = JSON.parse(localStorage.getItem('crewscale_users') || '{}');
-      
+    try {
       if (isRegister) {
-        if (users[form.email]) {
-          toast.error('E-mail já cadastrado');
-          setLoading(false);
-          return;
-        }
-        users[form.email] = { password: form.password, name: form.name };
-        localStorage.setItem('crewscale_users', JSON.stringify(users));
-        saveUser({ id: crypto.randomUUID(), name: form.name, email: form.email, airline: '', registration: '' });
-        toast.success('Conta criada com sucesso!');
-        navigate('/dashboard');
+        await signUp(form.email, form.password, form.name);
+        toast.success('Conta criada com sucesso! Verifique seu e-mail.');
       } else {
-        const user = users[form.email];
-        if (!user || user.password !== form.password) {
-          toast.error('E-mail ou senha incorretos');
-          setLoading(false);
-          return;
-        }
-        saveUser({ id: crypto.randomUUID(), name: user.name, email: form.email, airline: '', registration: '' });
+        await signIn(form.email, form.password);
         toast.success('Bem-vindo de volta!');
-        navigate('/dashboard');
       }
-      setLoading(false);
-    }, 800);
+      navigate('/dashboard');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro na autenticação');
+    }
+
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex">
-      {/* Left - Branding */}
-      <div className="hidden lg:flex flex-1 gradient-dark items-center justify-center p-12 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full gradient-sky"
-              style={{
-                width: `${100 + i * 80}px`,
-                height: `${100 + i * 80}px`,
-                top: `${10 + i * 12}%`,
-                left: `${5 + i * 15}%`,
-                opacity: 0.1 + i * 0.03,
-              }}
-            />
-          ))}
-        </div>
+      {/* Left - Airplane Background */}
+      <div className="hidden lg:flex flex-1 relative overflow-hidden">
+        <img
+          src={airplaneBg}
+          alt="Avião voando sobre nuvens ao pôr do sol"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-transparent" />
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="relative z-10 text-center"
+          className="relative z-10 flex flex-col justify-between p-12 w-full"
         >
-          <div className="w-20 h-20 rounded-2xl gradient-sky flex items-center justify-center mx-auto mb-8 shadow-elevated">
-            <Plane className="w-10 h-10 text-primary-foreground" />
+          <div>
+            <div className="w-16 h-16 rounded-2xl gradient-sky flex items-center justify-center mb-8 shadow-elevated">
+              <Plane className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <h1 className="text-5xl font-extrabold text-white tracking-tight mb-4">CrewScale</h1>
+            <p className="text-lg text-white/80 max-w-md">
+              Gerencie sua escala de voo com inteligência. Visualize horas, folgas e voos em tempo real.
+            </p>
           </div>
-          <h1 className="text-5xl font-extrabold text-primary-foreground tracking-tight mb-4">CrewScale</h1>
-          <p className="text-lg text-sidebar-foreground max-w-md">
-            Gerencie sua escala de voo com inteligência. Visualize horas, folgas e voos em tempo real.
+          <p className="text-white/50 text-sm">
+            © {new Date().getFullYear()} CrewScale — Desenvolvido por Marcos Vinicius
           </p>
         </motion.div>
       </div>
 
       {/* Right - Form */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-background">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 bg-background">
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -176,6 +166,10 @@ export default function LoginPage() {
             </button>
           </p>
         </motion.div>
+
+        <p className="lg:hidden mt-8 text-muted-foreground text-xs">
+          © {new Date().getFullYear()} CrewScale — Desenvolvido por Marcos Vinicius
+        </p>
       </div>
     </div>
   );

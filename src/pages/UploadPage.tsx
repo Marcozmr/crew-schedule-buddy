@@ -4,61 +4,78 @@ import { Upload, FileText, CheckCircle, AlertCircle, Plane } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
-import { addScheduleEntries, parseMockSchedule, detectAirline, saveUser, getUser } from '@/lib/store';
+import { parseMockSchedule, detectAirline } from '@/lib/store';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export default function UploadPage() {
+  const { user, profile, refreshProfile } = useAuth();
   const [textInput, setTextInput] = useState('');
   const [fileName, setFileName] = useState('');
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<{ count: number; airline: string } | null>(null);
 
-  const processText = useCallback((text: string) => {
+  const processText = useCallback(async (text: string) => {
+    if (!user) return;
     setProcessing(true);
     setResult(null);
-    setTimeout(() => {
-      const entries = parseMockSchedule(text);
-      if (entries.length === 0) {
-        toast.error('Não foi possível identificar voos. Verifique o formato: data, número do voo, aeroportos e horários.');
-        setProcessing(false);
-        return;
-      }
 
-      const airline = detectAirline(text);
-      addScheduleEntries(entries);
-
-      const user = getUser();
-      if (user && airline !== 'Não identificada') {
-        saveUser({ ...user, airline });
-      }
-
-      setResult({ count: entries.length, airline });
-      setTextInput('');
-      toast.success(`✅ ${entries.length} voos importados! Acesse o Dashboard para ver os dados.`);
+    const entries = parseMockSchedule(text);
+    if (entries.length === 0) {
+      toast.error('Não foi possível identificar voos. Verifique o formato.');
       setProcessing(false);
-    }, 1200);
-  }, []);
+      return;
+    }
+
+    const airline = detectAirline(text);
+
+    // Insert into database
+    const rows = entries.map(e => ({
+      user_id: user.id,
+      date: e.date,
+      flight_number: e.flightNumber,
+      departure: e.departure,
+      arrival: e.arrival,
+      departure_time: e.departureTime,
+      arrival_time: e.arrivalTime,
+      status: e.status,
+      airline: e.airline,
+      report_time: e.reportTime || null,
+      duty_hours: e.dutyHours || null,
+    }));
+
+    const { error } = await supabase.from('schedule_entries').insert(rows);
+    if (error) {
+      toast.error('Erro ao salvar escala no banco de dados');
+      setProcessing(false);
+      return;
+    }
+
+    // Update airline on profile
+    if (airline !== 'Não identificada') {
+      await supabase.from('profiles').update({ airline }).eq('user_id', user.id);
+      await refreshProfile();
+    }
+
+    setResult({ count: entries.length, airline });
+    setTextInput('');
+    toast.success(`✅ ${entries.length} voos importados! Acesse o Dashboard.`);
+    setProcessing(false);
+  }, [user, refreshProfile]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setFileName(file.name);
     setResult(null);
-
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      processText(text);
-    };
+    reader.onload = (event) => processText(event.target?.result as string);
     reader.readAsText(file);
   };
 
   const handlePasteSubmit = () => {
-    if (!textInput.trim()) {
-      toast.error('Cole o conteúdo da escala');
-      return;
-    }
+    if (!textInput.trim()) { toast.error('Cole o conteúdo da escala'); return; }
     setResult(null);
     processText(textInput);
   };
@@ -79,51 +96,25 @@ export default function UploadPage() {
     <AppLayout>
       <div className="max-w-3xl mx-auto">
         <h1 className="text-2xl font-bold text-foreground mb-2">Importar Escala</h1>
-        <p className="text-muted-foreground mb-8">Envie sua escala em formato texto, PDF ou planilha. O app identifica a companhia automaticamente.</p>
+        <p className="text-muted-foreground mb-8">Envie sua escala em formato texto, PDF ou planilha.</p>
 
-        {/* File Upload */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-xl p-8 shadow-card mb-6"
-        >
-          <label
-            htmlFor="file-upload"
-            className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-10 cursor-pointer hover:border-primary/50 transition-colors"
-          >
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl p-8 shadow-card mb-6">
+          <label htmlFor="file-upload" className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-10 cursor-pointer hover:border-primary/50 transition-colors">
             <Upload className="w-10 h-10 text-muted-foreground mb-3" />
             <p className="font-medium text-foreground">Arraste ou clique para enviar</p>
             <p className="text-sm text-muted-foreground mt-1">PDF, CSV, TXT, XLS</p>
             {fileName && (
               <div className="mt-3 flex items-center gap-2 text-sm text-primary">
-                <FileText className="w-4 h-4" />
-                {fileName}
+                <FileText className="w-4 h-4" />{fileName}
               </div>
             )}
           </label>
-          <input
-            id="file-upload"
-            type="file"
-            accept=".txt,.csv,.pdf,.xls,.xlsx"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
+          <input id="file-upload" type="file" accept=".txt,.csv,.pdf,.xls,.xlsx" onChange={handleFileUpload} className="hidden" />
         </motion.div>
 
-        {/* Text Paste */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-card rounded-xl p-6 shadow-card mb-6"
-        >
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card rounded-xl p-6 shadow-card mb-6">
           <h2 className="font-semibold text-foreground mb-3">Ou cole sua escala aqui</h2>
-          <Textarea
-            placeholder="Cole o texto da sua escala aqui..."
-            value={textInput}
-            onChange={e => setTextInput(e.target.value)}
-            className="min-h-[160px] font-mono text-sm mb-4"
-          />
+          <Textarea placeholder="Cole o texto da sua escala aqui..." value={textInput} onChange={e => setTextInput(e.target.value)} className="min-h-[160px] font-mono text-sm mb-4" />
           <div className="flex gap-3">
             <Button onClick={handlePasteSubmit} disabled={processing} className="gradient-sky text-primary-foreground">
               {processing ? 'Processando...' : 'Processar Escala'}
@@ -134,13 +125,8 @@ export default function UploadPage() {
           </div>
         </motion.div>
 
-        {/* Result */}
         {result && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-card rounded-xl p-6 shadow-card border border-success/30"
-          >
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-card rounded-xl p-6 shadow-card border border-success/30">
             <div className="flex items-center gap-3 mb-4">
               <CheckCircle className="w-6 h-6 text-success" />
               <h2 className="font-semibold text-foreground">Escala importada com sucesso!</h2>
@@ -161,17 +147,11 @@ export default function UploadPage() {
           </motion.div>
         )}
 
-        {/* Info */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mt-6 flex items-start gap-3 bg-primary/5 rounded-xl p-4"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-6 flex items-start gap-3 bg-primary/5 rounded-xl p-4">
           <AlertCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
           <div className="text-sm text-muted-foreground">
             <p className="font-medium text-foreground mb-1">Formatos aceitos</p>
-            <p>A escala deve conter datas (DD/MM/AAAA), número do voo, aeroportos (código IATA) e horários. O sistema identifica automaticamente a companhia aérea pelo prefixo do voo.</p>
+            <p>A escala deve conter datas (DD/MM/AAAA), número do voo, aeroportos (código IATA) e horários.</p>
           </div>
         </motion.div>
       </div>
