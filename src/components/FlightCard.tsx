@@ -7,6 +7,15 @@ interface FlightCardProps {
   index?: number;
 }
 
+const statusLabels: Record<string, string> = {
+  scheduled: 'Programado',
+  active: 'Em voo',
+  landed: 'Pousado',
+  cancelled: 'Cancelado',
+  incident: 'Incidente',
+  diverted: 'Desviado',
+};
+
 const statusColors: Record<string, string> = {
   scheduled: 'bg-primary/10 text-primary',
   active: 'bg-success/10 text-success',
@@ -44,7 +53,7 @@ export function FlightCard({ flight, index = 0 }: FlightCardProps) {
           </div>
         </div>
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[flight.flight_status] || 'bg-muted text-muted-foreground'}`}>
-          {flight.flight_status}
+          {statusLabels[flight.flight_status] || flight.flight_status}
         </span>
       </div>
 
