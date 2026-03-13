@@ -7,6 +7,15 @@ interface FlightCardProps {
   index?: number;
 }
 
+const statusLabels: Record<string, string> = {
+  scheduled: 'Programado',
+  active: 'Em voo',
+  landed: 'Pousado',
+  cancelled: 'Cancelado',
+  incident: 'Incidente',
+  diverted: 'Desviado',
+};
+
 const statusColors: Record<string, string> = {
   scheduled: 'bg-primary/10 text-primary',
   active: 'bg-success/10 text-success',
