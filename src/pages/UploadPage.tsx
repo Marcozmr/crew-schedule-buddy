@@ -49,7 +49,7 @@ export default function UploadPage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      processText(text, file.name);
+      processText(text);
     };
     reader.readAsText(file);
   };
