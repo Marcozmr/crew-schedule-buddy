@@ -1,25 +1,52 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Search, Upload, Menu, X, LogOut, Bell } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Search, Upload, Menu, X, LogOut, Bell, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { supabase } from '@/integrations/supabase/client';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/schedule', label: 'Escala', icon: Calendar },
   { path: '/upload', label: 'Importar', icon: Upload },
   { path: '/search', label: 'Buscar Voos', icon: Search },
+  { path: '/notifications', label: 'Notificações', icon: Bell },
+  { path: '/profile', label: 'Meu Perfil', icon: User },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false);
+      setUnreadCount(count || 0);
+    };
+    load();
+
+    const channel = supabase
+      .channel('notif-badge')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => load())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut();
     window.location.href = '/';
   };
+
+  const initials = profile?.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -33,10 +60,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <span className="text-xl font-bold text-primary-foreground tracking-tight">CrewScale</span>
           </Link>
           {profile && (
-            <div className="mb-6 px-4 py-3 rounded-lg bg-sidebar-accent/50">
-              <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
-              <p className="text-xs text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
-            </div>
+            <Link to="/profile" className="mb-6 px-4 py-3 rounded-lg bg-sidebar-accent/50 flex items-center gap-3 hover:bg-sidebar-accent transition-colors block">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={profile.avatar_url || undefined} />
+                <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary-foreground">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
+                <p className="text-xs text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
+              </div>
+            </Link>
           )}
           <nav className="space-y-1">
             {navItems.map(item => {
@@ -45,7 +78,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all relative ${
                     active
                       ? 'bg-primary/20 text-primary-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
@@ -53,6 +86,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 >
                   <item.icon className="w-5 h-5" />
                   {item.label}
+                  {item.path === '/notifications' && unreadCount > 0 && (
+                    <span className="ml-auto bg-destructive text-destructive-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -78,9 +116,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <span className="text-lg font-bold text-primary-foreground">CrewScale</span>
         </Link>
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-primary-foreground p-1">
-          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link to="/notifications" className="relative p-1 text-primary-foreground">
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
+          </Link>
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-primary-foreground p-1">
+            {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Nav */}
