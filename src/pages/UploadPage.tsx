@@ -13,12 +13,13 @@ export default function UploadPage() {
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<{ count: number; airline: string } | null>(null);
 
-  const processText = useCallback((text: string, source?: string) => {
+  const processText = useCallback((text: string) => {
     setProcessing(true);
+    setResult(null);
     setTimeout(() => {
       const entries = parseMockSchedule(text);
       if (entries.length === 0) {
-        toast.error('Não foi possível identificar voos na escala');
+        toast.error('Não foi possível identificar voos. Verifique o formato: data, número do voo, aeroportos e horários.');
         setProcessing(false);
         return;
       }
@@ -26,16 +27,16 @@ export default function UploadPage() {
       const airline = detectAirline(text);
       addScheduleEntries(entries);
 
-      // Update user airline
       const user = getUser();
       if (user && airline !== 'Não identificada') {
         saveUser({ ...user, airline });
       }
 
       setResult({ count: entries.length, airline });
-      toast.success(`${entries.length} voos importados com sucesso!`);
+      setTextInput('');
+      toast.success(`✅ ${entries.length} voos importados! Acesse o Dashboard para ver os dados.`);
       setProcessing(false);
-    }, 1500);
+    }, 1200);
   }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,7 +49,7 @@ export default function UploadPage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      processText(text, file.name);
+      processText(text);
     };
     reader.readAsText(file);
   };
@@ -59,7 +60,7 @@ export default function UploadPage() {
       return;
     }
     setResult(null);
-    processText(textInput, 'texto colado');
+    processText(textInput);
   };
 
   const sampleData = `LATAM Airlines - Escala Março 2025

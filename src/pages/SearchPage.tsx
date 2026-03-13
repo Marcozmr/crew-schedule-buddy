@@ -19,26 +19,23 @@ export default function SearchPage() {
   const [searched, setSearched] = useState(false);
 
   const handleSearch = async () => {
-    if (!query.trim()) {
-      toast.error('Digite um termo de busca');
-      return;
-    }
-
     setLoading(true);
     setSearched(true);
 
     const params: Record<string, string> = {};
     const q = query.trim().toUpperCase();
 
-    if (searchType === 'flight') {
-      params.flight_iata = q;
-    } else if (searchType === 'departure') {
-      params.dep_iata = q;
-    } else {
-      params.arr_iata = q;
+    if (q) {
+      if (searchType === 'flight') {
+        params.flight_iata = q;
+      } else if (searchType === 'departure') {
+        params.dep_iata = q;
+      } else {
+        params.arr_iata = q;
+      }
     }
 
-    if (statusFilter) {
+    if (statusFilter && statusFilter !== 'all') {
       params.flight_status = statusFilter;
     }
 
