@@ -60,7 +60,7 @@ export default function UploadPage() {
       return;
     }
     setResult(null);
-    processText(textInput, 'texto colado');
+    processText(textInput);
   };
 
   const sampleData = `LATAM Airlines - Escala Março 2025
