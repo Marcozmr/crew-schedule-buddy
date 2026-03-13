@@ -14,7 +14,126 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          airline: string | null
+          avatar_url: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          registration: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          airline?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          registration?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          airline?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          registration?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      schedule_entries: {
+        Row: {
+          aircraft_prefix: string | null
+          airline: string | null
+          arrival: string
+          arrival_time: string
+          created_at: string
+          date: string
+          departure: string
+          departure_time: string
+          duty_hours: number | null
+          flight_number: string
+          id: string
+          report_time: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aircraft_prefix?: string | null
+          airline?: string | null
+          arrival?: string
+          arrival_time?: string
+          created_at?: string
+          date: string
+          departure?: string
+          departure_time?: string
+          duty_hours?: number | null
+          flight_number: string
+          id?: string
+          report_time?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aircraft_prefix?: string | null
+          airline?: string | null
+          arrival?: string
+          arrival_time?: string
+          created_at?: string
+          date?: string
+          departure?: string
+          departure_time?: string
+          duty_hours?: number | null
+          flight_number?: string
+          id?: string
+          report_time?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
