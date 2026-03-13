@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Plane, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -29,21 +29,25 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    if (!form.email) {
+    const normalizedEmail = form.email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
       toast.error('Informe seu e-mail');
       setLoading(false);
       return;
     }
 
     if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
+
       if (error) {
         toast.error(error.message);
       } else {
         toast.success('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
       }
+
       setLoading(false);
       return;
     }
@@ -54,7 +58,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (mode === 'register' && !form.name) {
+    if (mode === 'register' && !form.name.trim()) {
       toast.error('Informe seu nome');
       setLoading(false);
       return;
@@ -62,18 +66,18 @@ export default function LoginPage() {
 
     try {
       if (mode === 'register') {
-        await signUp(form.email, form.password, form.name);
+        await signUp(normalizedEmail, form.password, form.name.trim());
         toast.success('Conta criada com sucesso!');
         navigate('/dashboard');
       } else {
-        await signIn(form.email, form.password);
+        await signIn(normalizedEmail, form.password);
         toast.success('Bem-vindo de volta!');
         navigate('/dashboard');
       }
     } catch (error: any) {
       const msg = error.message || '';
       if (msg.includes('Invalid login')) {
-        toast.error('E-mail ou senha incorretos. Verifique suas credenciais ou crie uma nova conta.');
+        toast.error('E-mail ou senha inválidos. Se necessário, use “Esqueceu a senha?” para recuperar.');
       } else if (msg.includes('already registered')) {
         toast.error('Este e-mail já está cadastrado. Faça login.');
       } else {
@@ -117,9 +121,7 @@ export default function LoginPage() {
               <Plane className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-extrabold text-white tracking-tight">CrewScale</h1>
-            <p className="text-sm text-white/60 mt-1">
-              Gerencie sua escala de voo com inteligência
-            </p>
+            <p className="text-sm text-white/60 mt-1">Gerencie sua escala de voo com inteligência</p>
           </div>
 
           {mode === 'forgot' && (
@@ -150,6 +152,10 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="seu@email.com"
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
@@ -164,6 +170,7 @@ export default function LoginPage() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                     placeholder="••••••••"
                     value={form.password}
                     onChange={e => setForm(f => ({ ...f, password: e.target.value }))}

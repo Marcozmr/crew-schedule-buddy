@@ -7,8 +7,8 @@ interface Profile {
   user_id: string;
   name: string;
   email: string;
-  airline: string;
-  registration: string;
+  airline: string | null;
+  registration: string | null;
   avatar_url: string | null;
 }
 
@@ -25,6 +25,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -36,8 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
-    if (data) setProfile(data as Profile);
+      .maybeSingle();
+
+    setProfile((data as Profile | null) ?? null);
   };
 
   useEffect(() => {
@@ -45,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        setTimeout(() => fetchProfile(session.user.id), 500);
+        setTimeout(() => fetchProfile(session.user.id), 200);
       } else {
         setProfile(null);
       }
@@ -63,16 +66,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {
+    const normalizedEmail = normalizeEmail(email);
+
     const { error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
-      options: { data: { name } },
+      options: {
+        data: { name },
+        emailRedirectTo: window.location.origin,
+      },
     });
+
     if (error) throw error;
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const normalizedEmail = normalizeEmail(email);
+    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) throw error;
   };
 
