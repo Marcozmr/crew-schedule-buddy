@@ -68,7 +68,7 @@ export default function LoginPage() {
         prompt: 'consent',
         access_type: 'offline',
         include_granted_scopes: 'true',
-        scopes: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
+        scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
       },
     });
 
