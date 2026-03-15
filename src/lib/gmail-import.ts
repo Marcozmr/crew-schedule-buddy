@@ -32,27 +32,43 @@ type GmailPayload = {
   parts?: GmailPayload[];
 };
 
-type GmailAttachmentLog = {
+export type GmailAttachmentFound = {
   messageId: string;
-  filename: string;
+  name: string;
+  mimeType: string;
   attachmentId: string;
 };
 
-type ImportDebugLog = {
-  emailCount: number;
-  subjects: string[];
-  pdfAttachments: GmailAttachmentLog[];
-  selectedAttachmentId: string | null;
-  downloadSucceeded: boolean;
+export type ImportDiagnostic = {
+  authenticated: boolean;
+  gmail_scope_ok: boolean;
+  emails_found: number;
+  matched_email_subjects: string[];
+  attachments_found: GmailAttachmentFound[];
+  selected_attachment_name: string | null;
+  attachment_download_ok: boolean;
+  pdf_saved_ok: boolean;
+  parser_ok: boolean;
+  parsed_flights_count: number;
+  parsed_entries_preview: Array<Pick<ScheduleEntry, 'date' | 'flightNumber' | 'departure' | 'arrival' | 'departureTime' | 'arrivalTime'>>;
+  db_insert_ok: boolean;
+  inserted_rows_count: number;
+  final_error: string | null;
+  email_encontrado: boolean;
+  pdf_baixado: boolean;
+  pdf_parseado: boolean;
+  voos_salvos: boolean;
+  dashboard_atualizado: boolean;
+  parser_failure_log_path: string | null;
 };
 
-type ImportScheduleResult = {
+export type ImportScheduleResult = {
   importedCount: number;
   parsedCount: number;
   airline: string;
   reason?: string;
   parserError?: string;
-  debug: ImportDebugLog;
+  diagnostic: ImportDiagnostic;
 };
 
 type ImportRouteOptions = {
@@ -64,16 +80,16 @@ type ImportRouteOptions = {
 type PdfCandidate = {
   messageId: string;
   attachmentId: string;
+  attachmentName: string;
   pdfBytes: Uint8Array;
 };
 
-type PdfFetchResult = {
-  text: string;
-  foundSubject: boolean;
-  foundSender: boolean;
-  foundPdf: boolean;
-  parserError?: string;
-  debug: ImportDebugLog;
+type GmailSearchResult = {
+  candidate: PdfCandidate | null;
+  emailsFound: number;
+  matchedEmailSubjects: string[];
+  attachmentsFound: GmailAttachmentFound[];
+  attachmentDownloadOk: boolean;
 };
 
 const GMAIL_SCOPE_ERROR = 'GMAIL_SCOPE_MISSING';
