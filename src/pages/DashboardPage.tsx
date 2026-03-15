@@ -50,7 +50,7 @@ export default function DashboardPage() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [loadSchedule]);
 
   // Check for flight delays and create notifications
   useEffect(() => {
