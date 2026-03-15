@@ -42,7 +42,7 @@ export default function SchedulePage() {
 
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-  const activeMonth = filteredSchedule.length > 0 ? selectedMonth : effectiveMonth;
+  const activeMonth = selectedMonth;
 
   return (
     <AppLayout>
