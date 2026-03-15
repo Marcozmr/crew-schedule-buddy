@@ -287,6 +287,31 @@ export default function DashboardPage() {
         {gmailSyncing && (
           <p className="text-sm text-primary mt-2">Importando automaticamente sua escala do Gmail...</p>
         )}
+
+        <div className="mt-4 bg-card border border-border rounded-xl p-4 shadow-card space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm font-medium text-foreground">Diagnóstico ponta a ponta (Gmail → PDF → parser → banco → dashboard)</p>
+            <Button onClick={() => void handleManualImport()} disabled={manualImporting} className="gradient-sky text-primary-foreground">
+              {manualImporting ? 'Executando...' : 'Executar importação agora'}
+            </Button>
+          </div>
+
+          {manualImportDiagnostic && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                <div className="rounded-md bg-muted p-2">email encontrado: <strong>{manualImportDiagnostic.email_encontrado ? 'sim' : 'não'}</strong></div>
+                <div className="rounded-md bg-muted p-2">pdf baixado: <strong>{manualImportDiagnostic.pdf_baixado ? 'sim' : 'não'}</strong></div>
+                <div className="rounded-md bg-muted p-2">pdf parseado: <strong>{manualImportDiagnostic.pdf_parseado ? 'sim' : 'não'}</strong></div>
+                <div className="rounded-md bg-muted p-2">voos salvos: <strong>{manualImportDiagnostic.voos_salvos ? 'sim' : 'não'}</strong></div>
+                <div className="rounded-md bg-muted p-2">dashboard atualizado: <strong>{manualImportDiagnostic.dashboard_atualizado ? 'sim' : 'não'}</strong></div>
+              </div>
+
+              <pre className="rounded-md bg-background border border-border p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words">
+                {JSON.stringify(manualImportDiagnostic, null, 2)}
+              </pre>
+            </>
+          )}
+        </div>
       </div>
 
       {/* RBAC 117 Compliance Card */}
