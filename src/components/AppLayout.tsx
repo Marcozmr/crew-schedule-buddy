@@ -10,6 +10,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/schedule', label: 'Escala', icon: Calendar },
   { path: '/search', label: 'Buscar Voos', icon: Search },
+  { path: '/iflight-import', label: 'PDF IFlight', icon: FileText },
   { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/profile', label: 'Meu Perfil', icon: User },
 ];
