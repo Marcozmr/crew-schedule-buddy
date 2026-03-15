@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
             <div className="w-16 h-16 rounded-2xl gradient-sky flex items-center justify-center mb-4 shadow-elevated">
               <Plane className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">CrewScale</h1>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">Escalax</h1>
           </div>
 
           {success ? (
@@ -132,7 +132,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <p className="text-center mt-6 text-white/30 text-xs">
-          © {new Date().getFullYear()} CrewScale — Desenvolvido por Marcos Vinicius
+          © {new Date().getFullYear()} Escalax — Desenvolvido por Marcos Vinicius
         </p>
       </motion.div>
     </div>
