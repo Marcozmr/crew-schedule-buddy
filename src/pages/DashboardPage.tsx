@@ -65,9 +65,15 @@ export default function DashboardPage() {
 
     syncAttemptRef.current = true;
 
-    const providerToken = (session as { provider_token?: string | null }).provider_token;
+    const tokenFromSession = (session as { provider_token?: string | null }).provider_token;
+    if (tokenFromSession) {
+      sessionStorage.setItem('google_provider_token', tokenFromSession);
+    }
+
+    const providerToken = tokenFromSession ?? sessionStorage.getItem('google_provider_token');
     if (!providerToken) {
       sessionStorage.setItem(syncKey, 'missing_provider_token');
+      toast.info('Para importar o CrewRosterReport, faça logout e login novamente para renovar o acesso ao Gmail.');
       return;
     }
 
@@ -75,7 +81,10 @@ export default function DashboardPage() {
       setGmailSyncing(true);
 
       try {
-        const result = await importScheduleFromGmail(user.id, providerToken);
+        const result = await importScheduleFromGmail(user.id, providerToken, {
+          subject: 'IFlight',
+          filenameBase: 'CrewRosterReport',
+        });
 
         if (result.importedCount > 0) {
           await loadSchedule();
