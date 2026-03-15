@@ -62,9 +62,12 @@ export default function UploadPage() {
 
     setResult({ count: entries.length, airline });
     setTextInput('');
-    toast.success(`✅ ${entries.length} voos importados! Acesse o Dashboard.`);
+    toast.success(`✅ ${entries.length} voos importados! Redirecionando...`);
     setProcessing(false);
-  }, [user, refreshProfile]);
+
+    // Redirect to dashboard after short delay
+    setTimeout(() => navigate('/dashboard'), 1500);
+  }, [user, refreshProfile, navigate]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
