@@ -17,6 +17,7 @@ interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
+  providerToken: string | null;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -28,36 +29,56 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 
-const getProviderTokenFromSession = (session: Session | null) => {
-  const token = (session as { provider_token?: string | null } | null)?.provider_token;
-  return token ?? null;
-};
-
-const getProviderTokenFromUrl = () => {
-  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
-  const hashParams = new URLSearchParams(hash);
-  const queryParams = new URLSearchParams(window.location.search);
-  return hashParams.get('provider_token') ?? queryParams.get('provider_token');
-};
-
-const persistProviderToken = (session: Session | null) => {
-  const sessionToken = getProviderTokenFromSession(session);
+/**
+ * Capture provider_token from every possible source:
+ * 1. session.provider_token (set by Supabase on OAuth callback)
+ * 2. URL hash #provider_token=...  (implicit grant flow)
+ * 3. URL query ?provider_token=... (some redirect modes)
+ */
+function captureAndPersistProviderToken(session: Session | null): string | null {
+  // Source 1: session object
+  const sessionToken = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
   if (sessionToken) {
     localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, sessionToken);
-    return;
+    console.log('[auth] provider_token captured from session ✓');
+    return sessionToken;
   }
 
-  const urlToken = getProviderTokenFromUrl();
-  if (urlToken) {
-    localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, urlToken);
+  // Source 2: URL hash
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const hashParams = new URLSearchParams(hash);
+  const hashToken = hashParams.get('provider_token');
+  if (hashToken) {
+    localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, hashToken);
+    console.log('[auth] provider_token captured from URL hash ✓');
+    return hashToken;
   }
-};
+
+  // Source 3: URL query params
+  const queryToken = new URLSearchParams(window.location.search).get('provider_token');
+  if (queryToken) {
+    localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, queryToken);
+    console.log('[auth] provider_token captured from URL query ✓');
+    return queryToken;
+  }
+
+  // Source 4: localStorage (previously saved)
+  const storedToken = localStorage.getItem(PROVIDER_TOKEN_STORAGE_KEY);
+  if (storedToken) {
+    console.log('[auth] provider_token loaded from localStorage');
+    return storedToken;
+  }
+
+  console.warn('[auth] NO provider_token found anywhere');
+  return null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [providerToken, setProviderToken] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
@@ -70,8 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
-      persistProviderToken(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[auth] onAuthStateChange:', event, 'has session:', Boolean(session));
+      const token = captureAndPersistProviderToken(session);
+      setProviderToken(token);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -83,7 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      persistProviderToken(session);
+      const token = captureAndPersistProviderToken(session);
+      setProviderToken(token);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
@@ -95,7 +119,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     const normalizedEmail = normalizeEmail(email);
-
     const { error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
@@ -104,7 +127,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: window.location.origin,
       },
     });
-
     if (error) throw error;
   };
 
@@ -115,7 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    localStorage.removeItem(PROVIDER_TOKEN_STORAGE_KEY);
     await supabase.auth.signOut();
+    setProviderToken(null);
     setProfile(null);
   };
 
@@ -124,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, signUp, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, providerToken, signUp, signIn, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

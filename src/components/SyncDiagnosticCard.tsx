@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { importScheduleFromGmail, isGmailScopeError, type ImportDiagnostic } from '@/lib/gmail-import';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, AlertTriangle, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -39,6 +39,10 @@ type SyncSnapshot = {
   latest_import_error: string | null;
   last_sync_at: string;
   schedule_entries_preview: ScheduleRowPreview[];
+  // new diagnostic fields
+  access_token_present: boolean;
+  provider_token_present: boolean;
+  provider_token_source: string;
 };
 
 interface SyncDiagnosticCardProps {
@@ -53,43 +57,25 @@ function StatusDot({ ok }: { ok: boolean | null }) {
     : <XCircle className="w-4 h-4 text-destructive" />;
 }
 
-function emptyDiagnostic(authenticated: boolean): ImportDiagnostic {
-  return {
-    authenticated,
-    gmail_scope_ok: false,
-    emails_found: 0,
-    matched_email_subjects: [],
-    attachments_found: [],
-    selected_attachment_name: null,
-    attachment_download_ok: false,
-    pdf_saved_ok: false,
-    parser_ok: false,
-    parsed_flights_count: 0,
-    parsed_entries_preview: [],
-    db_insert_ok: false,
-    inserted_rows_count: 0,
-    final_error: null,
-    email_encontrado: false,
-    pdf_baixado: false,
-    pdf_parseado: false,
-    voos_salvos: false,
-    dashboard_atualizado: false,
-    parser_failure_log_path: null,
-  };
-}
-
 export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnosticCardProps) {
-  const { user, session, profile } = useAuth();
+  const { user, session, profile, providerToken, signOut } = useAuth();
   const [status, setStatus] = useState<SyncStatus>('idle');
   const [result, setResult] = useState<ImportDiagnostic | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
   const [snapshot, setSnapshot] = useState<SyncSnapshot | null>(null);
 
-  const hasToken = Boolean(
-    (session as { provider_token?: string | null } | null)?.provider_token ??
-    localStorage.getItem(PROVIDER_TOKEN_KEY)
-  );
+  const sessionProviderToken = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
+  const effectiveToken = providerToken ?? sessionProviderToken ?? localStorage.getItem(PROVIDER_TOKEN_KEY);
+  const hasToken = Boolean(effectiveToken);
+
+  const tokenSource = useMemo(() => {
+    if (sessionProviderToken) return 'session';
+    if (providerToken && providerToken === localStorage.getItem(PROVIDER_TOKEN_KEY)) return 'localStorage';
+    if (providerToken) return 'auth-context';
+    if (localStorage.getItem(PROVIDER_TOKEN_KEY)) return 'localStorage';
+    return 'none';
+  }, [sessionProviderToken, providerToken]);
 
   const snapshotStorageKey = useMemo(
     () => (user ? `${LAST_SYNC_KEY_PREFIX}${user.id}` : null),
@@ -136,6 +122,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
     };
   }, []);
 
+  // Load previous snapshot
   useEffect(() => {
     if (!snapshotStorageKey) return;
     const raw = localStorage.getItem(snapshotStorageKey);
@@ -147,11 +134,11 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
     }
   }, [snapshotStorageKey]);
 
+  // Bootstrap snapshot on first render
   useEffect(() => {
     if (!user || snapshot) return;
-
-    const bootstrapSnapshot = async () => {
-      const scheduleSnapshot = await fetchUserScheduleSnapshot(user.id);
+    const bootstrap = async () => {
+      const sched = await fetchUserScheduleSnapshot(user.id);
       setSnapshot({
         user_id: user.id,
         email: profile?.email ?? user.email ?? '',
@@ -165,26 +152,58 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         parser_ok: false,
         parsed_flights_count: 0,
         inserted_rows_count: 0,
-        total_rows_in_schedule_entries_for_current_user: scheduleSnapshot.totalRows,
-        latest_imported_duty_date: scheduleSnapshot.latestDutyDate,
+        total_rows_in_schedule_entries_for_current_user: sched.totalRows,
+        latest_imported_duty_date: sched.latestDutyDate,
         latest_import_error: 'Nenhuma execução registrada ainda. Clique em Sincronizar agora.',
         last_sync_at: lastSyncTime ?? '',
-        schedule_entries_preview: scheduleSnapshot.schedulePreview,
+        schedule_entries_preview: sched.schedulePreview,
+        access_token_present: Boolean(session?.access_token),
+        provider_token_present: hasToken,
+        provider_token_source: tokenSource,
       });
     };
+    void bootstrap();
+  }, [user, profile, snapshot, fetchUserScheduleSnapshot, lastSyncTime, session, hasToken, tokenSource]);
 
-    void bootstrapSnapshot();
-  }, [user, profile, snapshot, fetchUserScheduleSnapshot, lastSyncTime]);
+  const buildSnapshot = useCallback(async (
+    userId: string,
+    diag: ImportDiagnostic | null,
+    error: string | null,
+  ): Promise<SyncSnapshot> => {
+    const sched = await fetchUserScheduleSnapshot(userId);
+    const nowIso = new Date().toISOString();
+    return {
+      user_id: userId,
+      email: profile?.email ?? user?.email ?? '',
+      gmail_scope_ok: diag?.gmail_scope_ok ?? false,
+      emails_found: diag?.emails_found ?? 0,
+      matched_email_subjects: diag?.matched_email_subjects ?? [],
+      attachments_found: (diag?.attachments_found ?? []).map((a) => ({
+        name: a.name, mimeType: a.mimeType, attachmentId: a.attachmentId,
+      })),
+      selected_attachment_name: diag?.selected_attachment_name ?? null,
+      attachment_download_ok: diag?.attachment_download_ok ?? false,
+      pdf_saved_ok: diag?.pdf_saved_ok ?? false,
+      parser_ok: diag?.parser_ok ?? false,
+      parsed_flights_count: diag?.parsed_flights_count ?? 0,
+      inserted_rows_count: diag?.inserted_rows_count ?? 0,
+      total_rows_in_schedule_entries_for_current_user: sched.totalRows,
+      latest_imported_duty_date: sched.latestDutyDate,
+      latest_import_error: error,
+      last_sync_at: nowIso,
+      schedule_entries_preview: sched.schedulePreview,
+      access_token_present: Boolean(session?.access_token),
+      provider_token_present: hasToken,
+      provider_token_source: tokenSource,
+    };
+  }, [fetchUserScheduleSnapshot, profile, user, session, hasToken, tokenSource]);
 
   const runSync = useCallback(async () => {
     if (!user) return;
 
-    const tokenFromSession = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
-    if (tokenFromSession) localStorage.setItem(PROVIDER_TOKEN_KEY, tokenFromSession);
-    const providerToken = tokenFromSession ?? localStorage.getItem(PROVIDER_TOKEN_KEY);
-
-    if (!providerToken) {
-      toast.error('Token do Google ausente. Faça logout e login novamente.');
+    if (!effectiveToken) {
+      toast.error('Token do Google ausente. Faça logout e login novamente para conceder acesso ao Gmail.');
+      setErrorMsg('provider_token ausente. Faça logout → login novamente.');
       return;
     }
 
@@ -192,98 +211,49 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
     setErrorMsg(null);
 
     try {
-      const res = await importScheduleFromGmail(user.id, providerToken, {
+      const res = await importScheduleFromGmail(user.id, effectiveToken, {
         searchQuery: 'has:attachment filename:pdf newer_than:180d',
         subjectContains: 'CrewRosterReport',
         senderContains: 'iFlight',
       });
 
-      const latestError = res.diagnostic.final_error ?? res.parserError ?? res.reason ?? null;
-      const scheduleSnapshot = await fetchUserScheduleSnapshot(user.id);
-      const nowIso = new Date().toISOString();
+      const latestError = res.diagnostic.final_error ?? res.parserError ?? null;
+      const snap = await buildSnapshot(user.id, res.diagnostic, latestError);
 
-      const nextSnapshot: SyncSnapshot = {
-        user_id: user.id,
-        email: profile?.email ?? user.email ?? '',
-        gmail_scope_ok: res.diagnostic.gmail_scope_ok,
-        emails_found: res.diagnostic.emails_found,
-        matched_email_subjects: res.diagnostic.matched_email_subjects,
-        attachments_found: res.diagnostic.attachments_found.map((item) => ({
-          name: item.name,
-          mimeType: item.mimeType,
-          attachmentId: item.attachmentId,
-        })),
-        selected_attachment_name: res.diagnostic.selected_attachment_name,
-        attachment_download_ok: res.diagnostic.attachment_download_ok,
-        pdf_saved_ok: res.diagnostic.pdf_saved_ok,
-        parser_ok: res.diagnostic.parser_ok,
-        parsed_flights_count: res.diagnostic.parsed_flights_count,
-        inserted_rows_count: res.diagnostic.inserted_rows_count,
-        total_rows_in_schedule_entries_for_current_user: scheduleSnapshot.totalRows,
-        latest_imported_duty_date: scheduleSnapshot.latestDutyDate,
-        latest_import_error: latestError,
-        last_sync_at: nowIso,
-        schedule_entries_preview: scheduleSnapshot.schedulePreview,
-      };
-
-      if (snapshotStorageKey) {
-        localStorage.setItem(snapshotStorageKey, JSON.stringify(nextSnapshot));
-      }
-
-      setSnapshot(nextSnapshot);
+      if (snapshotStorageKey) localStorage.setItem(snapshotStorageKey, JSON.stringify(snap));
+      setSnapshot(snap);
       setResult(res.diagnostic);
 
       if (res.importedCount > 0) {
         setStatus('success');
-        toast.success(`${res.importedCount} voo(s) importado(s) com sucesso!`);
+        toast.success(`${res.importedCount} voo(s) importado(s)!`);
       } else if (res.parserError || res.diagnostic.final_error) {
         setStatus('error');
-        setErrorMsg(res.parserError ?? res.diagnostic.final_error ?? 'Falha na importação.');
-        toast.error(res.parserError ?? res.diagnostic.final_error ?? 'Falha na importação.');
+        setErrorMsg(res.parserError ?? res.diagnostic.final_error ?? 'Falha.');
       } else {
         setStatus('success');
-        toast.info(res.reason ?? 'Nenhum voo novo encontrado.');
+        toast.info(res.reason ?? 'Sem voos novos.');
       }
 
       onSyncComplete?.();
     } catch (error) {
       setStatus('error');
-      const diagnosticFallback = emptyDiagnostic(Boolean(user));
       const exactError = isGmailScopeError(error)
-        ? 'Permissão Gmail ausente. Refaça login com Google.'
-        : error instanceof Error
-          ? error.message
-          : 'Falha na importação.';
+        ? 'Permissão Gmail ausente (401/403). Faça logout e login novamente com Google concedendo acesso ao Gmail.'
+        : error instanceof Error ? error.message : 'Falha.';
       setErrorMsg(exactError);
       toast.error(exactError);
 
-      const scheduleSnapshot = await fetchUserScheduleSnapshot(user.id);
-      const nowIso = new Date().toISOString();
-      const nextSnapshot: SyncSnapshot = {
-        user_id: user.id,
-        email: profile?.email ?? user.email ?? '',
-        gmail_scope_ok: false,
-        emails_found: 0,
-        matched_email_subjects: [],
-        attachments_found: [],
-        selected_attachment_name: null,
-        attachment_download_ok: false,
-        pdf_saved_ok: false,
-        parser_ok: false,
-        parsed_flights_count: 0,
-        inserted_rows_count: 0,
-        total_rows_in_schedule_entries_for_current_user: scheduleSnapshot.totalRows,
-        latest_imported_duty_date: scheduleSnapshot.latestDutyDate,
-        latest_import_error: exactError,
-        last_sync_at: nowIso,
-        schedule_entries_preview: scheduleSnapshot.schedulePreview,
-      };
-
-      if (snapshotStorageKey) localStorage.setItem(snapshotStorageKey, JSON.stringify(nextSnapshot));
-      setSnapshot(nextSnapshot);
-      setResult(diagnosticFallback);
+      const snap = await buildSnapshot(user.id, null, exactError);
+      if (snapshotStorageKey) localStorage.setItem(snapshotStorageKey, JSON.stringify(snap));
+      setSnapshot(snap);
     }
-  }, [user, session, profile, onSyncComplete, fetchUserScheduleSnapshot, snapshotStorageKey]);
+  }, [user, effectiveToken, onSyncComplete, buildSnapshot, snapshotStorageKey]);
+
+  const handleReauth = useCallback(async () => {
+    await signOut();
+    toast.info('Sessão encerrada. Entre novamente com Google para conceder acesso ao Gmail.');
+  }, [signOut]);
 
   return (
     <motion.div
@@ -296,40 +266,77 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
           {hasToken ? <Wifi className="w-5 h-5 text-success" /> : <WifiOff className="w-5 h-5 text-destructive" />}
           <h3 className="font-semibold text-foreground">Sincronização Gmail</h3>
         </div>
-        <Button
-          onClick={() => void runSync()}
-          disabled={status === 'syncing'}
-          size="sm"
-          className="gradient-sky text-primary-foreground"
-        >
-          <RefreshCw className={`w-4 h-4 mr-1.5 ${status === 'syncing' ? 'animate-spin' : ''}`} />
-          {status === 'syncing' ? 'Sincronizando...' : 'Sincronizar agora'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => void runSync()}
+            disabled={status === 'syncing'}
+            size="sm"
+            className="gradient-sky text-primary-foreground"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${status === 'syncing' ? 'animate-spin' : ''}`} />
+            {status === 'syncing' ? 'Sincronizando...' : 'Sincronizar agora'}
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs mb-4">
+      {/* No provider token warning */}
+      {!hasToken && user && (
+        <div className="mb-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 space-y-2">
+          <p className="text-sm text-yellow-600 font-medium">
+            ⚠️ Seu login foi feito sem permissão Gmail. Entre novamente e conceda acesso ao Gmail para importar sua escala.
+          </p>
+          <Button onClick={() => void handleReauth()} size="sm" variant="outline" className="text-yellow-700 border-yellow-500/50">
+            <LogOut className="w-4 h-4 mr-1.5" />
+            Sair e reconectar com Gmail
+          </Button>
+        </div>
+      )}
+
+      {/* Status pipeline */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs mb-3">
         <div className="flex items-center gap-2 bg-muted rounded-lg p-2.5">
-          <StatusDot ok={result ? hasToken : null} />
+          <StatusDot ok={snapshot ? hasToken : null} />
           <span className="text-muted-foreground">Gmail conectado</span>
         </div>
         <div className="flex items-center gap-2 bg-muted rounded-lg p-2.5">
-          <StatusDot ok={result ? result.email_encontrado : null} />
-          <span className="text-muted-foreground">Email encontrado</span>
+          <StatusDot ok={snapshot ? snapshot.gmail_scope_ok : null} />
+          <span className="text-muted-foreground">gmail_scope_ok</span>
         </div>
         <div className="flex items-center gap-2 bg-muted rounded-lg p-2.5">
-          <StatusDot ok={result ? result.pdf_baixado : null} />
+          <StatusDot ok={snapshot ? snapshot.pdf_saved_ok : null} />
           <span className="text-muted-foreground">PDF baixado</span>
         </div>
         <div className="flex items-center gap-2 bg-muted rounded-lg p-2.5">
-          <StatusDot ok={result ? result.pdf_parseado : null} />
+          <StatusDot ok={snapshot ? snapshot.parser_ok : null} />
           <span className="text-muted-foreground">Parser OK</span>
         </div>
         <div className="flex items-center gap-2 bg-muted rounded-lg p-2.5">
-          <StatusDot ok={result ? result.voos_salvos : null} />
+          <StatusDot ok={snapshot ? snapshot.inserted_rows_count > 0 : null} />
           <span className="text-muted-foreground">Voos salvos</span>
         </div>
       </div>
 
+      {/* Token diagnostics */}
+      <div className="grid grid-cols-3 gap-2 text-[11px] mb-3">
+        <div className="bg-muted rounded-lg p-2">
+          <span className="text-muted-foreground">access_token:</span>{' '}
+          <strong className={session?.access_token ? 'text-success' : 'text-destructive'}>
+            {session?.access_token ? 'presente' : 'ausente'}
+          </strong>
+        </div>
+        <div className="bg-muted rounded-lg p-2">
+          <span className="text-muted-foreground">provider_token:</span>{' '}
+          <strong className={hasToken ? 'text-success' : 'text-destructive'}>
+            {hasToken ? 'presente' : 'ausente'}
+          </strong>
+        </div>
+        <div className="bg-muted rounded-lg p-2">
+          <span className="text-muted-foreground">source:</span>{' '}
+          <strong className="text-foreground">{tokenSource}</strong>
+        </div>
+      </div>
+
+      {/* Error display */}
       {errorMsg && (
         <div className="mb-3 flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -337,14 +344,18 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         </div>
       )}
 
+      {/* Full snapshot display */}
       {snapshot && (
         <div className="space-y-3">
           <div className="rounded-lg border border-border bg-background p-3">
             <p className="text-xs font-semibold text-foreground mb-2">Última execução (valores reais)</p>
-            <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify({
+            <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{JSON.stringify({
               user_id: snapshot.user_id,
               email: snapshot.email,
               gmail_scope_ok: snapshot.gmail_scope_ok,
+              access_token_present: snapshot.access_token_present,
+              provider_token_present: snapshot.provider_token_present,
+              provider_token_source: snapshot.provider_token_source,
               emails_found: snapshot.emails_found,
               matched_email_subjects: snapshot.matched_email_subjects,
               attachments_found: snapshot.attachments_found,
@@ -361,23 +372,25 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
             }, null, 2)}</pre>
           </div>
 
-          <div className="rounded-lg border border-border bg-background p-3">
-            <p className="text-xs font-semibold text-foreground mb-2">5 registros reais de schedule_entries</p>
-            <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify(snapshot.schedule_entries_preview, null, 2)}</pre>
-          </div>
+          {snapshot.schedule_entries_preview.length > 0 && (
+            <div className="rounded-lg border border-border bg-background p-3">
+              <p className="text-xs font-semibold text-foreground mb-2">5 registros reais de schedule_entries</p>
+              <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify(snapshot.schedule_entries_preview, null, 2)}</pre>
+            </div>
+          )}
         </div>
       )}
 
       {(lastSyncTime || snapshot?.last_sync_at) && (
         <p className="mt-3 text-[10px] text-muted-foreground">
-          Última sincronização: {snapshot?.last_sync_at ?? lastSyncTime}
+          Última sync: {snapshot?.last_sync_at ?? lastSyncTime}
         </p>
       )}
 
       {result && (
         <div className="mt-3">
           <button onClick={() => setShowJson(!showJson)} className="text-xs text-primary hover:underline">
-            {showJson ? 'Ocultar diagnóstico técnico' : 'Ver diagnóstico técnico'}
+            {showJson ? 'Ocultar diagnóstico técnico' : 'Ver diagnóstico técnico completo'}
           </button>
           {showJson && (
             <pre className="mt-2 rounded-md bg-background border border-border p-3 text-[10px] overflow-x-auto whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
