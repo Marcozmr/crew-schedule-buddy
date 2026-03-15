@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
