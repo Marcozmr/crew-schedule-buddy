@@ -424,7 +424,65 @@ function parseScheduleFromPdfText(text: string): ScheduleEntry[] {
   return entries;
 }
 
-async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8Array): Promise<void> {
+type SavePdfResult = {
+  ok: boolean;
+  warning: string | null;
+};
+
+function createInitialDiagnostic(authenticated: boolean): ImportDiagnostic {
+  return {
+    authenticated,
+    gmail_scope_ok: false,
+    emails_found: 0,
+    matched_email_subjects: [],
+    attachments_found: [],
+    selected_attachment_name: null,
+    attachment_download_ok: false,
+    pdf_saved_ok: false,
+    parser_ok: false,
+    parsed_flights_count: 0,
+    parsed_entries_preview: [],
+    db_insert_ok: false,
+    inserted_rows_count: 0,
+    final_error: null,
+    email_encontrado: false,
+    pdf_baixado: false,
+    pdf_parseado: false,
+    voos_salvos: false,
+    dashboard_atualizado: false,
+    parser_failure_log_path: null,
+  };
+}
+
+function finalizeDiagnostic(diagnostic: ImportDiagnostic): ImportDiagnostic {
+  return {
+    ...diagnostic,
+    email_encontrado: diagnostic.email_encontrado || diagnostic.matched_email_subjects.length > 0,
+    pdf_baixado: diagnostic.attachment_download_ok,
+    pdf_parseado: diagnostic.parser_ok && diagnostic.parsed_flights_count > 0,
+    voos_salvos: diagnostic.inserted_rows_count > 0,
+  };
+}
+
+function buildImportResult(
+  importedCount: number,
+  parsedCount: number,
+  airline: string,
+  diagnostic: ImportDiagnostic,
+  reason?: string,
+  parserError?: string
+): ImportScheduleResult {
+  return {
+    importedCount,
+    parsedCount,
+    airline,
+    reason,
+    parserError,
+    diagnostic: finalizeDiagnostic(diagnostic),
+  };
+}
+
+async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8Array): Promise<SavePdfResult> {
   const storagePath = `${userId}/${STORAGE_FILENAME}`;
   const bytes = Uint8Array.from(pdfBytes);
   const pdfBlob = new Blob([bytes.buffer], { type: 'application/pdf' });
@@ -437,71 +495,43 @@ async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8
     });
 
   if (uploadError) {
-    throw new Error('Encontrei o PDF no Gmail, mas não consegui salvar o arquivo no app.');
+    return {
+      ok: false,
+      warning: 'Encontrei o PDF no Gmail, mas não consegui salvar o arquivo bruto no storage.',
+    };
   }
 
-  const { error: metadataError } = await supabase.from('imported_rosters').upsert(
-    [
-      {
-        user_id: userId,
-        file_name: STORAGE_FILENAME,
-        source_message_id: messageId,
-        storage_path: storagePath,
-      },
-    ],
-    { onConflict: 'user_id,source_message_id' }
-  );
+  const { error: metadataError } = await supabase.from('imported_rosters').insert([
+    {
+      user_id: userId,
+      file_name: STORAGE_FILENAME,
+      source_message_id: messageId,
+      storage_path: storagePath,
+    },
+  ]);
 
-  if (metadataError) {
-    throw new Error('PDF salvo no storage, mas não consegui registrar esse arquivo no app.');
-  }
+  return {
+    ok: true,
+    warning: metadataError ? 'PDF salvo no storage, mas não consegui registrar metadados na tabela imported_rosters.' : null,
+  };
 }
 
-async function fetchCrewRosterPdf(
+async function saveParserFailureLog(
   userId: string,
-  providerToken: string,
-  searchQuery: string,
-  subjectContains: string,
-  senderContains: string
-): Promise<PdfFetchResult> {
-  const { candidate, foundSubject, foundSender, foundPdf, debug } = await findPdfInGmail(
-    providerToken,
-    searchQuery,
-    subjectContains,
-    senderContains
-  );
+  messageId: string,
+  extractedText: string,
+  parserError: string
+): Promise<string | null> {
+  const parserLogPath = `${userId}/parser-failures/${messageId}-${Date.now()}.txt`;
+  const payload = `parser_error: ${parserError}\n\nextracted_text:\n${extractedText}`;
+  const blob = new Blob([payload], { type: 'text/plain;charset=utf-8' });
 
-  if (!candidate) {
-    return {
-      text: '',
-      foundSubject,
-      foundSender,
-      foundPdf,
-      debug,
-    };
-  }
+  const { error } = await supabase.storage
+    .from('crew-rosters')
+    .upload(parserLogPath, blob, { upsert: true, contentType: 'text/plain' });
 
-  await savePdfIntoApp(userId, candidate.messageId, candidate.pdfBytes);
-
-  try {
-    const text = await extractTextFromPdf(candidate.pdfBytes);
-    return {
-      text,
-      foundSubject,
-      foundSender,
-      foundPdf,
-      debug,
-    };
-  } catch (error) {
-    return {
-      text: '',
-      foundSubject,
-      foundSender,
-      foundPdf,
-      parserError: error instanceof Error ? error.message : 'Erro desconhecido ao processar o parser do PDF.',
-      debug,
-    };
-  }
+  if (error) return null;
+  return parserLogPath;
 }
 
 export async function importScheduleFromGmail(
@@ -509,101 +539,107 @@ export async function importScheduleFromGmail(
   providerToken: string,
   options?: ImportRouteOptions
 ): Promise<ImportScheduleResult> {
+  const diagnostic = createInitialDiagnostic(Boolean(userId));
   const searchQuery = options?.searchQuery ?? DEFAULT_SEARCH_QUERY;
   const subjectContains = options?.subjectContains ?? DEFAULT_SUBJECT_CONTAINS;
   const senderContains = options?.senderContains ?? DEFAULT_SENDER_CONTAINS;
 
-  const { text, foundSubject, foundSender, foundPdf, parserError, debug } = await fetchCrewRosterPdf(
-    userId,
-    providerToken,
-    searchQuery,
-    subjectContains,
-    senderContains
-  );
-
-  if (!foundSubject) {
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: `Foram encontrados ${debug.emailCount} e-mails com PDF recentes, mas nenhum com assunto contendo "${subjectContains}".`,
-      debug,
-    };
+  if (!userId) {
+    diagnostic.final_error = 'Usuário não autenticado.';
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
-  if (!foundSender) {
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: `Encontrei assunto "${subjectContains}", mas o remetente não contém "${senderContains}".`,
-      debug,
-    };
+  if (!providerToken) {
+    diagnostic.final_error = 'Token do Google ausente para leitura do Gmail.';
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
-  if (!foundPdf) {
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: 'Encontrei e-mail compatível, mas sem anexo PDF válido para download.',
-      debug,
-    };
+  let searchResult: GmailSearchResult;
+  try {
+    searchResult = await findPdfInGmail(providerToken, searchQuery, subjectContains, senderContains);
+    diagnostic.gmail_scope_ok = true;
+  } catch (error) {
+    diagnostic.gmail_scope_ok = !isGmailScopeError(error);
+    diagnostic.final_error = isGmailScopeError(error)
+      ? 'Permissão Gmail ausente ou expirada (gmail.readonly).'
+      : error instanceof Error
+        ? error.message
+        : 'Falha inesperada ao buscar e-mails no Gmail.';
+
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
-  if (parserError) {
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: `Falha no parser: ${parserError}`,
-      parserError,
-      debug,
-    };
+  diagnostic.emails_found = searchResult.emailsFound;
+  diagnostic.matched_email_subjects = searchResult.matchedEmailSubjects;
+  diagnostic.attachments_found = searchResult.attachmentsFound;
+  diagnostic.attachment_download_ok = searchResult.attachmentDownloadOk;
+  diagnostic.selected_attachment_name = searchResult.candidate?.attachmentName ?? null;
+  diagnostic.email_encontrado = searchResult.matchedEmailSubjects.length > 0;
+
+  if (!searchResult.candidate) {
+    diagnostic.final_error = 'Nenhum e-mail com assunto/remetente esperado e PDF baixável foi encontrado.';
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
-  if (!text) {
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: 'PDF baixado e salvo, mas sem texto utilizável para processar a escala.',
-      debug,
-    };
+  const savePdfResult = await savePdfIntoApp(userId, searchResult.candidate.messageId, searchResult.candidate.pdfBytes);
+  diagnostic.pdf_saved_ok = savePdfResult.ok;
+
+  if (!savePdfResult.ok) {
+    diagnostic.final_error = savePdfResult.warning;
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error ?? undefined);
+  }
+
+  let extractedText = '';
+  try {
+    extractedText = await extractTextFromPdf(searchResult.candidate.pdfBytes);
+  } catch (error) {
+    const parserError = error instanceof Error ? error.message : 'Falha ao extrair texto do PDF.';
+    diagnostic.parser_ok = false;
+    diagnostic.final_error = parserError;
+    diagnostic.parser_failure_log_path = await saveParserFailureLog(userId, searchResult.candidate.messageId, extractedText, parserError);
+
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, `Falha no parser: ${parserError}`, parserError);
   }
 
   let parsedEntries: ScheduleEntry[] = [];
   try {
-    parsedEntries = parseScheduleFromPdfText(text);
+    parsedEntries = parseScheduleFromPdfText(extractedText);
+    diagnostic.parser_ok = true;
   } catch (error) {
-    const exactParserError = error instanceof Error ? error.message : 'Erro desconhecido no parser de escala.';
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: `Falha no parser: ${exactParserError}`,
-      parserError: exactParserError,
-      debug,
-    };
+    const parserError = error instanceof Error ? error.message : 'Erro desconhecido no parser de escala.';
+    diagnostic.parser_ok = false;
+    diagnostic.final_error = parserError;
+    diagnostic.parser_failure_log_path = await saveParserFailureLog(userId, searchResult.candidate.messageId, extractedText, parserError);
+
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, `Falha no parser: ${parserError}`, parserError);
   }
 
-  const parsedCount = parsedEntries.length;
-  if (parsedCount === 0) {
-    return {
-      importedCount: 0,
-      parsedCount: 0,
-      airline: 'Não identificada',
-      reason: 'Parser executado, mas nenhum voo foi identificado no conteúdo do PDF.',
-      debug,
-    };
+  diagnostic.parsed_flights_count = parsedEntries.length;
+  diagnostic.parsed_entries_preview = parsedEntries.slice(0, 5).map((entry) => ({
+    date: entry.date,
+    flightNumber: entry.flightNumber,
+    departure: entry.departure,
+    arrival: entry.arrival,
+    departureTime: entry.departureTime,
+    arrivalTime: entry.arrivalTime,
+  }));
+
+  if (parsedEntries.length === 0) {
+    diagnostic.final_error = 'Parser executado, mas nenhum voo foi identificado no conteúdo do PDF.';
+    return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
-  const airline = detectAirline(text);
+  const airline = detectAirline(extractedText);
 
-  const { data: existingRows } = await supabase
+  const { data: existingRows, error: existingRowsError } = await supabase
     .from('schedule_entries')
     .select('date, flight_number')
     .eq('user_id', userId);
+
+  if (existingRowsError) {
+    diagnostic.final_error = 'Não foi possível ler os voos atuais no banco para deduplicação.';
+    return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
+  }
 
   const existingKeys = new Set((existingRows ?? []).map((row) => `${row.date}|${row.flight_number}`));
 
@@ -626,20 +662,22 @@ export async function importScheduleFromGmail(
   if (rows.length > 0) {
     const { error } = await supabase.from('schedule_entries').insert(rows);
     if (error) {
-      throw new Error('Não foi possível salvar a escala importada no banco de dados.');
+      diagnostic.db_insert_ok = false;
+      diagnostic.final_error = 'Não foi possível salvar os voos na tabela schedule_entries.';
+      return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
     }
   }
+
+  diagnostic.db_insert_ok = true;
+  diagnostic.inserted_rows_count = rows.length;
+  diagnostic.final_error = savePdfResult.warning;
 
   if (airline !== 'Não identificada') {
     await supabase.from('profiles').update({ airline }).eq('user_id', userId);
   }
 
-  return {
-    importedCount: rows.length,
-    parsedCount,
-    airline,
-    debug,
-  };
+  const reason = rows.length === 0 ? 'Importação processada, mas sem voos novos para inserir.' : savePdfResult.warning ?? undefined;
+  return buildImportResult(rows.length, parsedEntries.length, airline, diagnostic, reason);
 }
 
 export function isGmailScopeError(error: unknown): boolean {
