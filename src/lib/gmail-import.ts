@@ -457,42 +457,48 @@ async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8
 async function fetchCrewRosterPdf(
   userId: string,
   providerToken: string,
-  subject: string,
-  filenameBase: string
+  searchQuery: string,
+  subjectContains: string,
+  senderContains: string
 ): Promise<PdfFetchResult> {
-  const { candidate, foundSubject, foundFile } = await findPdfInGmail(providerToken, subject, filenameBase);
+  const { candidate, foundSubject, foundSender, foundPdf, debug } = await findPdfInGmail(
+    providerToken,
+    searchQuery,
+    subjectContains,
+    senderContains
+  );
 
   if (!candidate) {
     return {
       text: '',
-      parsedCount: 0,
       foundSubject,
-      foundFile,
+      foundSender,
+      foundPdf,
+      debug,
     };
   }
 
   await savePdfIntoApp(userId, candidate.messageId, candidate.pdfBytes);
 
-  let text = '';
   try {
-    text = await extractTextFromPdf(candidate.pdfBytes);
-  } catch {
+    const text = await extractTextFromPdf(candidate.pdfBytes);
+    return {
+      text,
+      foundSubject,
+      foundSender,
+      foundPdf,
+      debug,
+    };
+  } catch (error) {
     return {
       text: '',
-      parsedCount: 0,
       foundSubject,
-      foundFile,
+      foundSender,
+      foundPdf,
+      parserError: error instanceof Error ? error.message : 'Erro desconhecido ao processar o parser do PDF.',
+      debug,
     };
   }
-
-  const parsedCount = parseScheduleFromPdfText(text).length;
-
-  return {
-    text,
-    parsedCount,
-    foundSubject,
-    foundFile,
-  };
 }
 
 export async function importScheduleFromGmail(
@@ -500,14 +506,16 @@ export async function importScheduleFromGmail(
   providerToken: string,
   options?: ImportRouteOptions
 ): Promise<ImportScheduleResult> {
-  const subject = options?.subject ?? DEFAULT_SUBJECT;
-  const filenameBase = options?.filenameBase ?? DEFAULT_FILENAME_BASE;
+  const searchQuery = options?.searchQuery ?? DEFAULT_SEARCH_QUERY;
+  const subjectContains = options?.subjectContains ?? DEFAULT_SUBJECT_CONTAINS;
+  const senderContains = options?.senderContains ?? DEFAULT_SENDER_CONTAINS;
 
-  const { text, parsedCount, foundSubject, foundFile } = await fetchCrewRosterPdf(
+  const { text, foundSubject, foundSender, foundPdf, parserError, debug } = await fetchCrewRosterPdf(
     userId,
     providerToken,
-    subject,
-    filenameBase
+    searchQuery,
+    subjectContains,
+    senderContains
   );
 
   if (!foundSubject) {
@@ -515,29 +523,78 @@ export async function importScheduleFromGmail(
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `Não encontrei e-mails com título "${subject}".`,
+      reason: `Foram encontrados ${debug.emailCount} e-mails com PDF recentes, mas nenhum com assunto contendo "${subjectContains}".`,
+      debug,
     };
   }
 
-  if (!foundFile) {
+  if (!foundSender) {
     return {
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `Encontrei o e-mail "${subject}", mas sem PDF "${filenameBase}".`,
+      reason: `Encontrei assunto "${subjectContains}", mas o remetente não contém "${senderContains}".`,
+      debug,
     };
   }
 
-  if (!text || parsedCount === 0) {
+  if (!foundPdf) {
     return {
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `O PDF "${filenameBase}" foi salvo no app, mas não consegui extrair voos dele.`,
+      reason: 'Encontrei e-mail compatível, mas sem anexo PDF válido para download.',
+      debug,
     };
   }
 
-  const parsedEntries = parseScheduleFromPdfText(text);
+  if (parserError) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: `Falha no parser: ${parserError}`,
+      parserError,
+      debug,
+    };
+  }
+
+  if (!text) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: 'PDF baixado e salvo, mas sem texto utilizável para processar a escala.',
+      debug,
+    };
+  }
+
+  let parsedEntries: ScheduleEntry[] = [];
+  try {
+    parsedEntries = parseScheduleFromPdfText(text);
+  } catch (error) {
+    const exactParserError = error instanceof Error ? error.message : 'Erro desconhecido no parser de escala.';
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: `Falha no parser: ${exactParserError}`,
+      parserError: exactParserError,
+      debug,
+    };
+  }
+
+  const parsedCount = parsedEntries.length;
+  if (parsedCount === 0) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: 'Parser executado, mas nenhum voo foi identificado no conteúdo do PDF.',
+      debug,
+    };
+  }
+
   const airline = detectAirline(text);
 
   const { data: existingRows } = await supabase
@@ -578,6 +635,7 @@ export async function importScheduleFromGmail(
     importedCount: rows.length,
     parsedCount,
     airline,
+    debug,
   };
 }
 
