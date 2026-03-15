@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plane } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -8,10 +8,73 @@ import { lovable } from '@/integrations/lovable/index';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 
+const GOOGLE_AUTO_LOGIN_PARAM = 'google_auth_start';
+
+const isInIframe = () => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  const startGoogleOAuth = useCallback(async () => {
+    const { error } = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: window.location.origin,
+      extraParams: {
+        prompt: 'consent',
+        access_type: 'offline',
+        include_granted_scopes: 'true',
+        scopes: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
+      },
+    });
+
+    if (error) {
+      const message = (error as Error).message;
+      toast.error('Erro ao conectar com Google: ' + message);
+    }
+  }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setGoogleLoading(true);
+
+    try {
+      if (isInIframe()) {
+        const targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set(GOOGLE_AUTO_LOGIN_PARAM, '1');
+
+        let redirectedToTop = false;
+        try {
+          if (window.top) {
+            window.top.location.href = targetUrl.toString();
+            redirectedToTop = true;
+          }
+        } catch {
+          redirectedToTop = false;
+        }
+
+        if (!redirectedToTop) {
+          const opened = window.open(targetUrl.toString(), '_blank', 'noopener,noreferrer');
+          if (!opened) {
+            toast.error('Permita pop-ups no navegador para continuar o login Google.');
+          }
+        }
+
+        return;
+      }
+
+      await startGoogleOAuth();
+    } catch {
+      toast.error('Erro ao conectar com Google');
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [startGoogleOAuth]);
 
   useEffect(() => {
     if (session) {
@@ -19,41 +82,23 @@ export default function LoginPage() {
     }
   }, [session, navigate]);
 
+  useEffect(() => {
+    if (session || isInIframe()) return;
+
+    const url = new URL(window.location.href);
+    const shouldAutoStart = url.searchParams.get(GOOGLE_AUTO_LOGIN_PARAM) === '1';
+
+    if (!shouldAutoStart) return;
+
+    url.searchParams.delete(GOOGLE_AUTO_LOGIN_PARAM);
+    const updatedSearch = url.searchParams.toString();
+    const nextUrl = `${url.pathname}${updatedSearch ? `?${updatedSearch}` : ''}${url.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+
+    void handleGoogleSignIn();
+  }, [session, handleGoogleSignIn]);
+
   if (session) return null;
-
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      if (window.self !== window.top) {
-        const opened = window.open(window.location.href, '_blank', 'noopener,noreferrer');
-        if (opened) {
-          toast.info('Abrimos uma nova aba para concluir o login Google sem bloqueio.');
-        } else {
-          toast.error('Permita pop-ups no navegador para continuar o login Google.');
-        }
-        return;
-      }
-
-      const { error } = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
-        extraParams: {
-          prompt: 'consent',
-          access_type: 'offline',
-          include_granted_scopes: 'true',
-          scopes: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
-        },
-      });
-
-      if (error) {
-        const message = (error as Error).message;
-        toast.error('Erro ao conectar com Google: ' + message);
-      }
-    } catch {
-      toast.error('Erro ao conectar com Google');
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden">
