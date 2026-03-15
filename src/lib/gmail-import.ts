@@ -633,7 +633,7 @@ export async function importScheduleFromGmail(
 
   const { data: existingRows, error: existingRowsError } = await supabase
     .from('schedule_entries')
-    .select('date, flight_number')
+    .select('date, flight_number, departure_time, arrival_time')
     .eq('user_id', userId);
 
   if (existingRowsError) {
@@ -641,7 +641,9 @@ export async function importScheduleFromGmail(
     return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
   }
 
-  const existingKeys = new Set((existingRows ?? []).map((row) => `${row.date}|${row.flight_number}`));
+  const existingKeys = new Set(
+    (existingRows ?? []).map((row) => `${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`)
+  );
 
   const rows = parsedEntries
     .map((entry) => ({
@@ -657,7 +659,7 @@ export async function importScheduleFromGmail(
       report_time: entry.reportTime || null,
       duty_hours: entry.dutyHours || null,
     }))
-    .filter((row) => !existingKeys.has(`${row.date}|${row.flight_number}`));
+    .filter((row) => !existingKeys.has(`${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`));
 
   if (rows.length > 0) {
     const { error } = await supabase.from('schedule_entries').insert(rows);

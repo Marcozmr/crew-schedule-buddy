@@ -50,8 +50,8 @@ export default function SchedulePage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Minha Escala</h1>
           <p className="text-muted-foreground text-sm">
-            {displaySchedule.length} voos em {months[activeMonth]}
-            {schedule.length > 0 && ` • ${schedule.length} total importados`}
+            {displaySchedule.length} voos importados no total
+            {schedule.length > 0 && ` • ${filteredSchedule.length} em ${months[activeMonth]}`}
           </p>
         </div>
         <div className="flex bg-muted rounded-lg p-1">
