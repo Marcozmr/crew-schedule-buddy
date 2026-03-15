@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      imported_rosters: {
+        Row: {
+          created_at: string
+          file_name: string
+          id: string
+          source_message_id: string
+          storage_path: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name?: string
+          id?: string
+          source_message_id: string
+          storage_path: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          id?: string
+          source_message_id?: string
+          storage_path?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
