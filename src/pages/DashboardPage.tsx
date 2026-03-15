@@ -1,12 +1,14 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
 import { searchByFlightNumber } from '@/lib/aviation-api';
+import { importScheduleFromGmail, isGmailScopeError } from '@/lib/gmail-import';
 import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface ScheduleEntry {
   id: string;
@@ -23,17 +25,19 @@ interface ScheduleEntry {
 }
 
 export default function DashboardPage() {
-  const { profile, user } = useAuth();
+  const { profile, user, session, refreshProfile } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [gmailSyncing, setGmailSyncing] = useState(false);
+  const syncAttemptRef = useRef(false);
 
-  const loadSchedule = async () => {
+  const loadSchedule = useCallback(async () => {
     const { data } = await supabase.from('schedule_entries').select('*').order('date', { ascending: true });
     if (data) setSchedule(data as ScheduleEntry[]);
-  };
+  }, []);
 
   useEffect(() => {
     loadSchedule();
-  }, []);
+  }, [loadSchedule]);
 
   useEffect(() => {
     const handleFocus = () => loadSchedule();
@@ -46,7 +50,54 @@ export default function DashboardPage() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [loadSchedule]);
+
+  useEffect(() => {
+    if (!user || !session || syncAttemptRef.current) return;
+
+    const tokenFingerprint = session.access_token.slice(0, 24);
+    const syncKey = `gmail_auto_sync_${user.id}_${tokenFingerprint}`;
+
+    if (sessionStorage.getItem(syncKey)) {
+      syncAttemptRef.current = true;
+      return;
+    }
+
+    syncAttemptRef.current = true;
+
+    const providerToken = (session as { provider_token?: string | null }).provider_token;
+    if (!providerToken) {
+      sessionStorage.setItem(syncKey, 'missing_provider_token');
+      return;
+    }
+
+    const syncGmailSchedule = async () => {
+      setGmailSyncing(true);
+
+      try {
+        const result = await importScheduleFromGmail(user.id, providerToken);
+
+        if (result.importedCount > 0) {
+          await loadSchedule();
+          await refreshProfile();
+          toast.success(`Escala importada do Gmail: ${result.importedCount} voo(s) novo(s).`);
+        } else if (result.reason) {
+          toast.info(result.reason);
+        }
+      } catch (error) {
+        if (isGmailScopeError(error)) {
+          toast.error('Permissão do Gmail não concedida. Refaça o login Google para autorizar leitura de e-mails.');
+        } else {
+          toast.error('Não foi possível importar a escala automaticamente do Gmail.');
+        }
+      } finally {
+        sessionStorage.setItem(syncKey, 'done');
+        setGmailSyncing(false);
+      }
+    };
+
+    void syncGmailSchedule();
+  }, [user, session, refreshProfile, loadSchedule]);
 
   // Check for flight delays and create notifications
   useEffect(() => {
@@ -167,6 +218,9 @@ export default function DashboardPage() {
           Olá, {profile?.name || 'Tripulante'} ✈️
         </motion.h1>
         <p className="text-muted-foreground mt-1">{profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual</p>
+        {gmailSyncing && (
+          <p className="text-sm text-primary mt-2">Importando automaticamente sua escala do Gmail...</p>
+        )}
       </div>
 
       {/* RBAC 117 Compliance Card */}
