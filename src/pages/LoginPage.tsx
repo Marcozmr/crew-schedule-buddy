@@ -4,7 +4,7 @@ import { Plane } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { lovable } from '@/integrations/lovable/index';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 
@@ -41,7 +41,7 @@ const goToStandaloneApp = () => {
       return;
     }
   } catch {
-    // continue with fallback methods
+    // continue with fallback
   }
 
   const anchor = document.createElement('a');
@@ -56,27 +56,34 @@ const goToStandaloneApp = () => {
   window.location.href = standaloneUrl;
 };
 
+/**
+ * We use supabase.auth.signInWithOAuth directly (instead of the Lovable wrapper)
+ * because we NEED the `scopes` parameter to request gmail.readonly from Google.
+ * The Lovable managed wrapper doesn't expose `scopes` — only `extraParams` —
+ * and Google's provider_token won't include Gmail access without it.
+ */
+async function startGoogleOAuthWithGmailScope() {
+  const redirectTo = getRedirectOrigin();
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+      scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+      queryParams: {
+        prompt: 'consent',
+        access_type: 'offline',
+      },
+    },
+  });
+
+  return { error };
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
-
-  const startGoogleOAuth = useCallback(async () => {
-    const { error } = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: getRedirectOrigin(),
-      extraParams: {
-        prompt: 'consent',
-        access_type: 'offline',
-        include_granted_scopes: 'true',
-        scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
-      },
-    });
-
-    if (error) {
-      const message = (error as Error).message;
-      toast.error('Erro ao conectar com Google: ' + message);
-    }
-  }, []);
 
   const handleGoogleSignIn = useCallback(async () => {
     setGoogleLoading(true);
@@ -87,13 +94,16 @@ export default function LoginPage() {
         return;
       }
 
-      await startGoogleOAuth();
+      const { error } = await startGoogleOAuthWithGmailScope();
+      if (error) {
+        toast.error('Erro ao conectar com Google: ' + error.message);
+      }
     } catch {
       toast.error('Erro ao conectar com Google');
     } finally {
       setGoogleLoading(false);
     }
-  }, [startGoogleOAuth]);
+  }, []);
 
   useEffect(() => {
     if (session) {
@@ -114,8 +124,8 @@ export default function LoginPage() {
     const nextUrl = `${url.pathname}${updatedSearch ? `?${updatedSearch}` : ''}${url.hash}`;
     window.history.replaceState({}, '', nextUrl);
 
-    void startGoogleOAuth();
-  }, [session, startGoogleOAuth]);
+    void startGoogleOAuthWithGmailScope();
+  }, [session]);
 
   if (session) return null;
 
