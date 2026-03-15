@@ -70,8 +70,7 @@ async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
     const pageText = content.items
-      .filter((item): item is { str: string } & Record<string, unknown> => 'str' in item)
-      .map((item) => item.str)
+      .map((item) => ('str' in item ? (item as { str: string }).str : ''))
       .join(' ');
     textParts.push(pageText);
   }
