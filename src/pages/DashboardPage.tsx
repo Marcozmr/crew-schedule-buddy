@@ -24,12 +24,25 @@ export default function DashboardPage() {
   const { profile } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
 
+  const loadSchedule = async () => {
+    const { data } = await supabase.from('schedule_entries').select('*').order('date', { ascending: true });
+    if (data) setSchedule(data as ScheduleEntry[]);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from('schedule_entries').select('*').order('date', { ascending: true });
-      if (data) setSchedule(data as ScheduleEntry[]);
+    loadSchedule();
+  }, []);
+
+  // Refetch when page gains focus (e.g. after navigating back from upload)
+  useEffect(() => {
+    const handleFocus = () => loadSchedule();
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') loadSchedule();
+    });
+    return () => {
+      window.removeEventListener('focus', handleFocus);
     };
-    load();
   }, []);
 
   const stats = useMemo(() => {

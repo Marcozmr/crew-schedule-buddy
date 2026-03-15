@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { Upload, FileText, CheckCircle, AlertCircle, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export default function UploadPage() {
+  const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
   const [textInput, setTextInput] = useState('');
   const [fileName, setFileName] = useState('');
@@ -60,9 +62,12 @@ export default function UploadPage() {
 
     setResult({ count: entries.length, airline });
     setTextInput('');
-    toast.success(`✅ ${entries.length} voos importados! Acesse o Dashboard.`);
+    toast.success(`✅ ${entries.length} voos importados! Redirecionando...`);
     setProcessing(false);
-  }, [user, refreshProfile]);
+
+    // Redirect to dashboard after short delay
+    setTimeout(() => navigate('/dashboard'), 1500);
+  }, [user, refreshProfile, navigate]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
