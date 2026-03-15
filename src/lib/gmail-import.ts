@@ -1,12 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
 import { detectAirline, parseMockSchedule } from '@/lib/store';
 import * as pdfjsLib from 'pdfjs-dist';
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 type GmailListResponse = {
   messages?: Array<{ id: string }>;
+  nextPageToken?: string;
+};
+
+type GmailHeader = {
+  name?: string;
+  value?: string;
 };
 
 type GmailMessageResponse = {
@@ -17,6 +20,7 @@ type GmailMessageResponse = {
 type GmailPayload = {
   mimeType?: string;
   filename?: string;
+  headers?: GmailHeader[];
   body?: {
     data?: string;
     attachmentId?: string;
@@ -31,40 +35,34 @@ type ImportScheduleResult = {
   reason?: string;
 };
 
-type AttachmentMatch = {
-  attachmentId: string;
-  filename: string;
+type ImportRouteOptions = {
+  subject?: string;
+  filenameBase?: string;
+};
+
+type PdfCandidate = {
+  messageId: string;
+  pdfBytes: Uint8Array;
 };
 
 type PdfFetchResult = {
   text: string;
   parsedCount: number;
-  foundPdf: boolean;
+  foundSubject: boolean;
+  foundFile: boolean;
 };
 
 const GMAIL_SCOPE_ERROR = 'GMAIL_SCOPE_MISSING';
-const TARGET_FILENAME = 'CrewRosterReport.pdf';
-const TARGET_FILENAME_NORMALIZED = normalizeFilename(TARGET_FILENAME);
+const DEFAULT_SUBJECT = 'IFlight';
+const DEFAULT_FILENAME_BASE = 'CrewRosterReport';
+const STORAGE_FILENAME = 'CrewRosterReport.pdf';
 
-function normalizeFilename(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '').replace(/["']/g, '');
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
 }
 
-async function gmailFetch<T>(providerToken: string, url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${providerToken}` },
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(GMAIL_SCOPE_ERROR);
-  }
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Erro Gmail (${response.status}): ${text}`);
-  }
-
-  return (await response.json()) as T;
+function normalizeFileName(value: string): string {
+  return value.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9]/g, '');
 }
 
 function decodeBase64UrlToBytes(input: string): Uint8Array {
@@ -80,72 +78,188 @@ function decodeBase64UrlToBytes(input: string): Uint8Array {
   return bytes;
 }
 
-async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
-  const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
-  const textParts: string[] = [];
-
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ('str' in item ? (item as { str: string }).str : ''))
-      .join(' ')
-      .trim();
-
-    if (pageText) {
-      textParts.push(pageText);
-    }
-  }
-
-  return textParts.join('\n');
+function getHeaderValue(headers: GmailHeader[] | undefined, headerName: string): string {
+  if (!headers?.length) return '';
+  const lowerName = headerName.toLowerCase();
+  const match = headers.find((header) => normalizeText(header.name ?? '') === lowerName);
+  return match?.value ?? '';
 }
 
-function findCrewRosterAttachment(payload?: GmailPayload): AttachmentMatch | null {
+async function gmailFetch<T>(providerToken: string, url: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${providerToken}`,
+    },
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(GMAIL_SCOPE_ERROR);
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Erro Gmail (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function listCandidateMessageIds(providerToken: string, subject: string, filenameBase: string): Promise<string[]> {
+  const queries = [
+    `subject:"${subject}" has:attachment filename:${filenameBase}`,
+    `subject:"${subject}" has:attachment`,
+    `has:attachment filename:${filenameBase}`,
+  ];
+
+  const messageIds = new Set<string>();
+
+  for (const query of queries) {
+    let nextPageToken: string | undefined;
+    let pages = 0;
+
+    do {
+      const queryParams = new URLSearchParams({
+        maxResults: '50',
+        q: query,
+      });
+
+      if (nextPageToken) {
+        queryParams.set('pageToken', nextPageToken);
+      }
+
+      const list = await gmailFetch<GmailListResponse>(
+        providerToken,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?${queryParams.toString()}`
+      );
+
+      (list.messages ?? []).forEach((message) => messageIds.add(message.id));
+      nextPageToken = list.nextPageToken;
+      pages += 1;
+    } while (nextPageToken && pages < 3 && messageIds.size < 120);
+
+    if (messageIds.size > 0) break;
+  }
+
+  return Array.from(messageIds);
+}
+
+function findPdfPart(payload: GmailPayload | undefined, filenameBase: string): GmailPayload | null {
   if (!payload) return null;
 
+  const mimeType = normalizeText(payload.mimeType ?? '');
   const filename = payload.filename ?? '';
-  const attachmentId = payload.body?.attachmentId;
-  if (attachmentId && normalizeFilename(filename) === TARGET_FILENAME_NORMALIZED) {
-    return { attachmentId, filename: payload.filename ?? TARGET_FILENAME };
+  const normalizedFilename = normalizeFileName(filename);
+  const normalizedBase = normalizeFileName(filenameBase);
+
+  const isPdf = mimeType.includes('pdf') || filename.toLowerCase().endsWith('.pdf');
+  const hasData = Boolean(payload.body?.attachmentId || payload.body?.data);
+  const matchesFile = normalizedFilename.includes(normalizedBase);
+
+  if (isPdf && hasData && matchesFile) {
+    return payload;
   }
 
   if (!payload.parts?.length) return null;
 
   for (const part of payload.parts) {
-    const found = findCrewRosterAttachment(part);
-    if (found) return found;
+    const nested = findPdfPart(part, filenameBase);
+    if (nested) return nested;
   }
 
   return null;
 }
 
-async function listCandidateMessageIds(providerToken: string): Promise<string[]> {
-  const queries = [
-    `has:attachment filename:"${TARGET_FILENAME}"`,
-    `has:attachment ${TARGET_FILENAME}`,
-    'has:attachment newer_than:3650d',
-  ];
-
-  const idSet = new Set<string>();
-
-  for (const query of queries) {
-    const list = await gmailFetch<GmailListResponse>(
-      providerToken,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=30&q=${encodeURIComponent(query)}`
-    );
-
-    (list.messages ?? []).forEach((message) => idSet.add(message.id));
-
-    if (idSet.size >= 60) break;
+async function loadPdfBytesFromPart(
+  providerToken: string,
+  messageId: string,
+  part: GmailPayload
+): Promise<Uint8Array | null> {
+  if (part.body?.data) {
+    return decodeBase64UrlToBytes(part.body.data);
   }
 
-  return Array.from(idSet);
+  if (!part.body?.attachmentId) {
+    return null;
+  }
+
+  const attachment = await gmailFetch<{ data?: string }>(
+    providerToken,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${part.body.attachmentId}`
+  );
+
+  if (!attachment.data) return null;
+  return decodeBase64UrlToBytes(attachment.data);
 }
 
-async function savePdfIntoApp(userId: string, sourceMessageId: string, pdfBytes: Uint8Array): Promise<void> {
-  const storagePath = `${userId}/${TARGET_FILENAME}`;
-  const safeBytes = Uint8Array.from(pdfBytes);
-  const pdfBlob = new Blob([safeBytes.buffer], { type: 'application/pdf' });
+async function findPdfInGmail(
+  providerToken: string,
+  subject: string,
+  filenameBase: string
+): Promise<{ candidate: PdfCandidate | null; foundSubject: boolean; foundFile: boolean }> {
+  const messageIds = await listCandidateMessageIds(providerToken, subject, filenameBase);
+
+  let foundSubject = false;
+  let foundFile = false;
+
+  for (const messageId of messageIds) {
+    const message = await gmailFetch<GmailMessageResponse>(
+      providerToken,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
+    );
+
+    const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
+    const subjectMatches = normalizeText(subjectHeader).includes(normalizeText(subject));
+    if (!subjectMatches) continue;
+
+    foundSubject = true;
+
+    const pdfPart = findPdfPart(message.payload, filenameBase);
+    if (!pdfPart) continue;
+
+    foundFile = true;
+
+    const pdfBytes = await loadPdfBytesFromPart(providerToken, message.id, pdfPart);
+    if (!pdfBytes) continue;
+
+    return {
+      candidate: {
+        messageId: message.id,
+        pdfBytes,
+      },
+      foundSubject,
+      foundFile,
+    };
+  }
+
+  return { candidate: null, foundSubject, foundFile };
+}
+
+async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
+  const doc = await pdfjsLib.getDocument({ data: pdfBytes, disableWorker: true }).promise;
+  const textChunks: string[] = [];
+
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+
+    const pageText = content.items
+      .map((item) => ('str' in item ? (item as { str: string }).str : ''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (pageText) {
+      textChunks.push(pageText);
+    }
+  }
+
+  return textChunks.join('\n');
+}
+
+async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8Array): Promise<void> {
+  const storagePath = `${userId}/${STORAGE_FILENAME}`;
+  const bytes = Uint8Array.from(pdfBytes);
+  const pdfBlob = new Blob([bytes.buffer], { type: 'application/pdf' });
 
   const { error: uploadError } = await supabase.storage
     .from('crew-rosters')
@@ -155,15 +269,19 @@ async function savePdfIntoApp(userId: string, sourceMessageId: string, pdfBytes:
     });
 
   if (uploadError) {
-    throw new Error('PDF encontrado, mas não foi possível salvar o arquivo dentro do app.');
+    throw new Error('Encontrei o PDF no Gmail, mas não consegui salvar o arquivo no app.');
   }
 
-  const { error: metadataError } = await supabase.from('imported_rosters').upsert(
+  const importedRostersTable = supabase.from('imported_rosters' as never) as {
+    upsert: (values: unknown, options: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
+  };
+
+  const { error: metadataError } = await importedRostersTable.upsert(
     [
       {
         user_id: userId,
-        file_name: TARGET_FILENAME,
-        source_message_id: sourceMessageId,
+        file_name: STORAGE_FILENAME,
+        source_message_id: messageId,
         storage_path: storagePath,
       },
     ],
@@ -171,68 +289,81 @@ async function savePdfIntoApp(userId: string, sourceMessageId: string, pdfBytes:
   );
 
   if (metadataError) {
-    throw new Error('PDF salvo no app, mas não foi possível registrar os metadados do arquivo.');
+    throw new Error('PDF salvo no storage, mas não consegui registrar esse arquivo no app.');
   }
 }
 
-async function fetchCrewRosterPdf(userId: string, providerToken: string): Promise<PdfFetchResult> {
-  const candidateMessageIds = await listCandidateMessageIds(providerToken);
-  let foundPdf = false;
-  let bestText = '';
-  let bestCount = 0;
+async function fetchCrewRosterPdf(
+  userId: string,
+  providerToken: string,
+  subject: string,
+  filenameBase: string
+): Promise<PdfFetchResult> {
+  const { candidate, foundSubject, foundFile } = await findPdfInGmail(providerToken, subject, filenameBase);
 
-  for (const messageId of candidateMessageIds) {
-    const message = await gmailFetch<GmailMessageResponse>(
-      providerToken,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
-    );
-
-    const attachment = findCrewRosterAttachment(message.payload);
-    if (!attachment) continue;
-
-    foundPdf = true;
-
-    const attachmentData = await gmailFetch<{ data?: string }>(
-      providerToken,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachment.attachmentId}`
-    );
-
-    if (!attachmentData.data) continue;
-
-    const pdfBytes = decodeBase64UrlToBytes(attachmentData.data);
-    await savePdfIntoApp(userId, messageId, pdfBytes);
-
-    let extractedText = '';
-    try {
-      extractedText = await extractTextFromPdf(pdfBytes);
-    } catch {
-      continue;
-    }
-
-    const parsed = parseMockSchedule(extractedText);
-    if (parsed.length > bestCount) {
-      bestCount = parsed.length;
-      bestText = extractedText;
-    }
-
-    if (bestCount > 0) break;
+  if (!candidate) {
+    return {
+      text: '',
+      parsedCount: 0,
+      foundSubject,
+      foundFile,
+    };
   }
 
-  return { text: bestText, parsedCount: bestCount, foundPdf };
+  await savePdfIntoApp(userId, candidate.messageId, candidate.pdfBytes);
+
+  let text = '';
+  try {
+    text = await extractTextFromPdf(candidate.pdfBytes);
+  } catch {
+    return {
+      text: '',
+      parsedCount: 0,
+      foundSubject,
+      foundFile,
+    };
+  }
+
+  const parsedCount = parseMockSchedule(text).length;
+
+  return {
+    text,
+    parsedCount,
+    foundSubject,
+    foundFile,
+  };
 }
 
 export async function importScheduleFromGmail(
   userId: string,
-  providerToken: string
+  providerToken: string,
+  options?: ImportRouteOptions
 ): Promise<ImportScheduleResult> {
-  const { text, parsedCount, foundPdf } = await fetchCrewRosterPdf(userId, providerToken);
+  const subject = options?.subject ?? DEFAULT_SUBJECT;
+  const filenameBase = options?.filenameBase ?? DEFAULT_FILENAME_BASE;
 
-  if (!foundPdf) {
+  const { text, parsedCount, foundSubject, foundFile } = await fetchCrewRosterPdf(
+    userId,
+    providerToken,
+    subject,
+    filenameBase
+  );
+
+  if (!foundSubject) {
     return {
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `Não encontrei o arquivo ${TARGET_FILENAME} no Gmail.`,
+      reason: `Não encontrei e-mails com título "${subject}".`,
+    };
+  }
+
+  if (!foundFile) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: `Encontrei o e-mail "${subject}", mas sem PDF "${filenameBase}".`,
     };
   }
 
@@ -241,7 +372,7 @@ export async function importScheduleFromGmail(
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `Encontrei e salvei o ${TARGET_FILENAME} no app, mas não consegui extrair voos dele.`,
+      reason: `O PDF "${filenameBase}" foi salvo no app, mas não consegui extrair voos dele.`,
     };
   }
 
