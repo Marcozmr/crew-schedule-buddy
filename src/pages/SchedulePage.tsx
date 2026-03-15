@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { Calendar, List, Plane, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/lib/auth-context';
 
 interface ScheduleEntry {
   id: string;
@@ -21,6 +22,7 @@ interface ScheduleEntry {
 type ViewMode = 'list' | 'calendar';
 
 export default function SchedulePage() {
+  const { user } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [view, setView] = useState<ViewMode>('list');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -28,11 +30,22 @@ export default function SchedulePage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('schedule_entries').select('*').order('date');
+      if (!user) {
+        setSchedule([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('schedule_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date');
+
       if (data) setSchedule(data as ScheduleEntry[]);
     };
-    load();
-  }, []);
+
+    void load();
+  }, [user]);
 
   const filteredSchedule = useMemo(() => {
     return schedule.filter(e => {
