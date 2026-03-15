@@ -144,7 +144,8 @@ async function listCandidateMessageIds(providerToken: string): Promise<string[]>
 
 async function savePdfIntoApp(userId: string, sourceMessageId: string, pdfBytes: Uint8Array): Promise<void> {
   const storagePath = `${userId}/${TARGET_FILENAME}`;
-  const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const safeBytes = Uint8Array.from(pdfBytes);
+  const pdfBlob = new Blob([safeBytes.buffer], { type: 'application/pdf' });
 
   const { error: uploadError } = await supabase.storage
     .from('crew-rosters')
@@ -157,19 +158,7 @@ async function savePdfIntoApp(userId: string, sourceMessageId: string, pdfBytes:
     throw new Error('PDF encontrado, mas não foi possível salvar o arquivo dentro do app.');
   }
 
-  const importedRostersTable = supabase.from('imported_rosters' as never) as {
-    upsert: (
-      values: Array<{
-        user_id: string;
-        file_name: string;
-        source_message_id: string;
-        storage_path: string;
-      }>,
-      options: { onConflict: string }
-    ) => Promise<{ error: { message: string } | null }>;
-  };
-
-  const { error: metadataError } = await importedRostersTable.upsert(
+  const { error: metadataError } = await supabase.from('imported_rosters').upsert(
     [
       {
         user_id: userId,
