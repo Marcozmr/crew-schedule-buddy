@@ -32,33 +32,54 @@ type GmailPayload = {
   parts?: GmailPayload[];
 };
 
+type GmailAttachmentLog = {
+  messageId: string;
+  filename: string;
+  attachmentId: string;
+};
+
+type ImportDebugLog = {
+  emailCount: number;
+  subjects: string[];
+  pdfAttachments: GmailAttachmentLog[];
+  selectedAttachmentId: string | null;
+  downloadSucceeded: boolean;
+};
+
 type ImportScheduleResult = {
   importedCount: number;
   parsedCount: number;
   airline: string;
   reason?: string;
+  parserError?: string;
+  debug: ImportDebugLog;
 };
 
 type ImportRouteOptions = {
-  subject?: string;
-  filenameBase?: string;
+  searchQuery?: string;
+  subjectContains?: string;
+  senderContains?: string;
 };
 
 type PdfCandidate = {
   messageId: string;
+  attachmentId: string;
   pdfBytes: Uint8Array;
 };
 
 type PdfFetchResult = {
   text: string;
-  parsedCount: number;
   foundSubject: boolean;
-  foundFile: boolean;
+  foundSender: boolean;
+  foundPdf: boolean;
+  parserError?: string;
+  debug: ImportDebugLog;
 };
 
 const GMAIL_SCOPE_ERROR = 'GMAIL_SCOPE_MISSING';
-const DEFAULT_SUBJECT = 'IFlight';
-const DEFAULT_FILENAME_BASE = 'CrewRosterReport';
+const DEFAULT_SEARCH_QUERY = 'has:attachment filename:pdf newer_than:180d';
+const DEFAULT_SUBJECT_CONTAINS = 'CrewRosterReport';
+const DEFAULT_SENDER_CONTAINS = 'iFlight';
 const STORAGE_FILENAME = 'CrewRosterReport.pdf';
 
 function normalizeText(value: string): string {
