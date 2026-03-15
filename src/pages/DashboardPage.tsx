@@ -56,7 +56,7 @@ export default function DashboardPage() {
     if (!user || !session || syncAttemptRef.current) return;
 
     const tokenFingerprint = session.access_token.slice(0, 24);
-    const syncKey = `gmail_auto_sync_${user.id}_${tokenFingerprint}`;
+    const syncKey = `gmail_auto_sync_pdf_v3_${user.id}_${tokenFingerprint}`;
 
     if (sessionStorage.getItem(syncKey)) {
       syncAttemptRef.current = true;
