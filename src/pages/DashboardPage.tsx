@@ -62,8 +62,8 @@ export default function DashboardPage() {
 
       for (const entry of todayEntries) {
         try {
-          const res = await fetch(`http://api.aviationstack.com/v1/flights?access_key=f886e6766dfc56f06bfc42da6e7ceb78&flight_iata=${entry.flight_number}`);
-          const data = await res.json();
+          const flights = await searchByFlightNumber(entry.flight_number);
+          const flight = flights[0];
           const flight = data?.data?.[0];
 
           if (flight?.departure?.delay && flight.departure.delay > 15) {
