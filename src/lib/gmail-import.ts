@@ -86,9 +86,6 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function normalizeFileName(value: string): string {
-  return value.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9]/g, '');
-}
 
 function decodeBase64UrlToBytes(input: string): Uint8Array {
   const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
