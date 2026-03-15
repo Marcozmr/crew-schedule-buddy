@@ -80,8 +80,9 @@ export default function DashboardPage() {
 
       try {
         const result = await importScheduleFromGmail(user.id, providerToken, {
-          subject: 'IFlight',
-          filenameBase: 'CrewRosterReport',
+          searchQuery: 'has:attachment filename:pdf newer_than:180d',
+          subjectContains: 'CrewRosterReport',
+          senderContains: 'iFlight',
         });
 
         if (result.importedCount > 0) {
