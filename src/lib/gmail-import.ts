@@ -198,6 +198,7 @@ function getPartFilename(part: GmailPayload): string {
 type PdfPartCandidate = {
   part: GmailPayload;
   filename: string;
+  mimeType: string;
   attachmentId: string;
 };
 
@@ -213,6 +214,7 @@ function collectPdfParts(payload: GmailPayload | undefined, results: PdfPartCand
     results.push({
       part: payload,
       filename: filename || '(sem nome)',
+      mimeType: payload.mimeType || 'application/pdf',
       attachmentId: payload.body?.attachmentId ?? 'inline-data',
     });
   }
@@ -251,23 +253,13 @@ async function findPdfInGmail(
   searchQuery: string,
   subjectContains: string,
   senderContains: string
-): Promise<{ candidate: PdfCandidate | null; foundSubject: boolean; foundSender: boolean; foundPdf: boolean; debug: ImportDebugLog }> {
+): Promise<GmailSearchResult> {
   const messageIds = await listCandidateMessageIds(providerToken, searchQuery);
   const normalizedSubject = normalizeText(subjectContains);
   const normalizedSender = normalizeText(senderContains);
 
-  const subjects = new Set<string>();
-  const debug: ImportDebugLog = {
-    emailCount: messageIds.length,
-    subjects: [],
-    pdfAttachments: [],
-    selectedAttachmentId: null,
-    downloadSucceeded: false,
-  };
-
-  let foundSubject = false;
-  let foundSender = false;
-  let foundPdf = false;
+  const matchedSubjects = new Set<string>();
+  const attachmentsFound: GmailAttachmentFound[] = [];
 
   for (const messageId of messageIds) {
     const message = await gmailFetch<GmailMessageResponse>(
@@ -276,63 +268,58 @@ async function findPdfInGmail(
     );
 
     const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
-    if (subjectHeader) {
-      subjects.add(subjectHeader);
-      debug.subjects = Array.from(subjects).slice(0, 30);
-    }
-
     if (!normalizeText(subjectHeader).includes(normalizedSubject)) {
       continue;
     }
-
-    foundSubject = true;
 
     const fromHeader = getHeaderValue(message.payload?.headers, 'From');
     if (!normalizeText(fromHeader).includes(normalizedSender)) {
       continue;
     }
 
-    foundSender = true;
+    matchedSubjects.add(subjectHeader || '(sem assunto)');
 
     const pdfParts = collectPdfParts(message.payload);
     if (pdfParts.length === 0) {
       continue;
     }
 
-    foundPdf = true;
-
     for (const pdfPart of pdfParts) {
-      debug.pdfAttachments.push({
+      attachmentsFound.push({
         messageId: message.id,
-        filename: pdfPart.filename,
+        name: pdfPart.filename,
+        mimeType: pdfPart.mimeType,
         attachmentId: pdfPart.attachmentId,
       });
     }
 
     const selectedPart = pdfParts[0];
-    debug.selectedAttachmentId = selectedPart.attachmentId;
-
     const pdfBytes = await loadPdfBytesFromPart(providerToken, message.id, selectedPart.part);
     if (!pdfBytes) {
       continue;
     }
 
-    debug.downloadSucceeded = true;
-
     return {
       candidate: {
         messageId: message.id,
         attachmentId: selectedPart.attachmentId,
+        attachmentName: selectedPart.filename,
         pdfBytes,
       },
-      foundSubject,
-      foundSender,
-      foundPdf,
-      debug,
+      emailsFound: messageIds.length,
+      matchedEmailSubjects: Array.from(matchedSubjects),
+      attachmentsFound,
+      attachmentDownloadOk: true,
     };
   }
 
-  return { candidate: null, foundSubject, foundSender, foundPdf, debug };
+  return {
+    candidate: null,
+    emailsFound: messageIds.length,
+    matchedEmailSubjects: Array.from(matchedSubjects),
+    attachmentsFound,
+    attachmentDownloadOk: false,
+  };
 }
 
 async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
