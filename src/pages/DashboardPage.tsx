@@ -1,12 +1,14 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
 import { searchByFlightNumber } from '@/lib/aviation-api';
+import { importScheduleFromGmail, isGmailScopeError } from '@/lib/gmail-import';
 import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface ScheduleEntry {
   id: string;
