@@ -36,6 +36,12 @@ export default function LoginPage() {
 
       const { error } = await lovable.auth.signInWithOAuth('google', {
         redirect_uri: window.location.origin,
+        extraParams: {
+          prompt: 'consent',
+          access_type: 'offline',
+          include_granted_scopes: 'true',
+          scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
+        },
       });
 
       if (error) {
