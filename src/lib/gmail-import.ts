@@ -238,7 +238,7 @@ async function findPdfInGmail(
 }
 
 async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
-  const doc = await pdfjsLib.getDocument({ data: pdfBytes, disableWorker: true }).promise;
+  const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
   const textChunks: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
