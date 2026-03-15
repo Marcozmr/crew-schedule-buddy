@@ -25,17 +25,19 @@ interface ScheduleEntry {
 }
 
 export default function DashboardPage() {
-  const { profile, user } = useAuth();
+  const { profile, user, session, refreshProfile } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [gmailSyncing, setGmailSyncing] = useState(false);
+  const syncAttemptRef = useRef(false);
 
-  const loadSchedule = async () => {
+  const loadSchedule = useCallback(async () => {
     const { data } = await supabase.from('schedule_entries').select('*').order('date', { ascending: true });
     if (data) setSchedule(data as ScheduleEntry[]);
-  };
+  }, []);
 
   useEffect(() => {
     loadSchedule();
-  }, []);
+  }, [loadSchedule]);
 
   useEffect(() => {
     const handleFocus = () => loadSchedule();
