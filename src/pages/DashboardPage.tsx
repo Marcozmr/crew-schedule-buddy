@@ -52,6 +52,53 @@ export default function DashboardPage() {
     };
   }, [loadSchedule]);
 
+  useEffect(() => {
+    if (!user || !session || syncAttemptRef.current) return;
+
+    const tokenFingerprint = session.access_token.slice(0, 24);
+    const syncKey = `gmail_auto_sync_${user.id}_${tokenFingerprint}`;
+
+    if (sessionStorage.getItem(syncKey)) {
+      syncAttemptRef.current = true;
+      return;
+    }
+
+    syncAttemptRef.current = true;
+
+    const providerToken = (session as { provider_token?: string | null }).provider_token;
+    if (!providerToken) {
+      sessionStorage.setItem(syncKey, 'missing_provider_token');
+      return;
+    }
+
+    const syncGmailSchedule = async () => {
+      setGmailSyncing(true);
+
+      try {
+        const result = await importScheduleFromGmail(user.id, providerToken);
+
+        if (result.importedCount > 0) {
+          await loadSchedule();
+          await refreshProfile();
+          toast.success(`Escala importada do Gmail: ${result.importedCount} voo(s) novo(s).`);
+        } else if (result.reason) {
+          toast.info(result.reason);
+        }
+      } catch (error) {
+        if (isGmailScopeError(error)) {
+          toast.error('Permissão do Gmail não concedida. Refaça o login Google para autorizar leitura de e-mails.');
+        } else {
+          toast.error('Não foi possível importar a escala automaticamente do Gmail.');
+        }
+      } finally {
+        sessionStorage.setItem(syncKey, 'done');
+        setGmailSyncing(false);
+      }
+    };
+
+    void syncGmailSchedule();
+  }, [user, session, refreshProfile, loadSchedule]);
+
   // Check for flight delays and create notifications
   useEffect(() => {
     if (!user || schedule.length === 0) return;
