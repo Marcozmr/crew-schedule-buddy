@@ -56,26 +56,24 @@ export default function DashboardPage() {
     if (!user || !session || syncAttemptRef.current) return;
 
     const tokenFingerprint = session.access_token.slice(0, 24);
-    const syncKey = `gmail_auto_sync_pdf_v3_${user.id}_${tokenFingerprint}`;
+    const syncKey = `gmail_auto_sync_pdf_v4_${user.id}_${tokenFingerprint}`;
 
     if (sessionStorage.getItem(syncKey)) {
       syncAttemptRef.current = true;
       return;
     }
 
-    syncAttemptRef.current = true;
-
     const tokenFromSession = (session as { provider_token?: string | null }).provider_token;
     if (tokenFromSession) {
-      sessionStorage.setItem('google_provider_token', tokenFromSession);
+      localStorage.setItem('google_provider_token', tokenFromSession);
     }
 
-    const providerToken = tokenFromSession ?? sessionStorage.getItem('google_provider_token');
+    const providerToken = tokenFromSession ?? localStorage.getItem('google_provider_token');
     if (!providerToken) {
-      sessionStorage.setItem(syncKey, 'missing_provider_token');
-      toast.info('Para importar o CrewRosterReport, faça logout e login novamente para renovar o acesso ao Gmail.');
       return;
     }
+
+    syncAttemptRef.current = true;
 
     const syncGmailSchedule = async () => {
       setGmailSyncing(true);
