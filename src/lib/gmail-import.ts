@@ -275,11 +275,7 @@ async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8
     throw new Error('Encontrei o PDF no Gmail, mas não consegui salvar o arquivo no app.');
   }
 
-  const importedRostersTable = supabase.from('imported_rosters' as never) as {
-    upsert: (values: unknown, options: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
-  };
-
-  const { error: metadataError } = await importedRostersTable.upsert(
+  const { error: metadataError } = await supabase.from('imported_rosters').upsert(
     [
       {
         user_id: userId,
