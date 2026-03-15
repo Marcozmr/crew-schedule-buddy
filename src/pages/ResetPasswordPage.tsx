@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
             <div className="w-16 h-16 rounded-2xl gradient-sky flex items-center justify-center mb-4 shadow-elevated">
               <Plane className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">Escalax</h1>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">EscalaX</h1>
           </div>
 
           {success ? (
