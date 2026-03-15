@@ -3,7 +3,8 @@ import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
-import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp } from 'lucide-react';
+import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
+import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface ScheduleEntry {
@@ -21,7 +22,7 @@ interface ScheduleEntry {
 }
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
 
   const loadSchedule = async () => {
@@ -33,17 +34,85 @@ export default function DashboardPage() {
     loadSchedule();
   }, []);
 
-  // Refetch when page gains focus (e.g. after navigating back from upload)
   useEffect(() => {
     const handleFocus = () => loadSchedule();
     window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', () => {
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible') loadSchedule();
-    });
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
+
+  // Check for flight delays and create notifications
+  useEffect(() => {
+    if (!user || schedule.length === 0) return;
+
+    const checkDelays = async () => {
+      const now = new Date();
+      const todayEntries = schedule.filter(e => {
+        const parts = e.date.split(/[\/\-]/);
+        const entryDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        return entryDate.toDateString() === now.toDateString();
+      });
+
+      for (const entry of todayEntries) {
+        try {
+          const res = await fetch(`http://api.aviationstack.com/v1/flights?access_key=f886e6766dfc56f06bfc42da6e7ceb78&flight_iata=${entry.flight_number}`);
+          const data = await res.json();
+          const flight = data?.data?.[0];
+
+          if (flight?.departure?.delay && flight.departure.delay > 15) {
+            // Check if notification already exists
+            const { data: existing } = await supabase
+              .from('notifications')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('title', `Atraso: ${entry.flight_number}`)
+              .gte('created_at', new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString())
+              .maybeSingle();
+
+            if (!existing) {
+              await supabase.from('notifications').insert({
+                user_id: user.id,
+                title: `Atraso: ${entry.flight_number}`,
+                message: `Voo ${entry.flight_number} (${entry.departure}→${entry.arrival}) com atraso de ${flight.departure.delay} minutos na partida.`,
+                type: 'warning',
+              });
+            }
+          }
+
+          if (flight?.flight_status === 'cancelled') {
+            const { data: existing } = await supabase
+              .from('notifications')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('title', `Cancelado: ${entry.flight_number}`)
+              .gte('created_at', new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString())
+              .maybeSingle();
+
+            if (!existing) {
+              await supabase.from('notifications').insert({
+                user_id: user.id,
+                title: `Cancelado: ${entry.flight_number}`,
+                message: `Voo ${entry.flight_number} (${entry.departure}→${entry.arrival}) foi CANCELADO.`,
+                type: 'danger',
+              });
+            }
+          }
+        } catch {
+          // silently fail - API might be unavailable
+        }
+      }
+    };
+
+    checkDelays();
+    const interval = setInterval(checkDelays, 15 * 60 * 1000); // Check every 15 min
+    return () => clearInterval(interval);
+  }, [user, schedule]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -75,7 +144,21 @@ export default function DashboardPage() {
     return { totalFlights: monthEntries.length, totalHours: Math.round(totalHours * 10) / 10, daysOff, flightDays, nextFlight, maxHours: 85 };
   }, [schedule]);
 
+  // RBAC 117 Compliance check
+  const compliance = useMemo<ComplianceResult>(() => {
+    return checkCompliance(schedule);
+  }, [schedule]);
+
   const hoursPercentage = Math.min((stats.totalHours / stats.maxHours) * 100, 100);
+
+  const complianceIcon = compliance.status === 'regular' ? ShieldCheck :
+    compliance.status === 'atencao' ? ShieldAlert : ShieldX;
+
+  const complianceColor = compliance.status === 'regular' ? 'text-success' :
+    compliance.status === 'atencao' ? 'text-yellow-500' : 'text-destructive';
+
+  const complianceBg = compliance.status === 'regular' ? 'bg-success/10 border-success/30' :
+    compliance.status === 'atencao' ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-destructive/10 border-destructive/30';
 
   return (
     <AppLayout>
@@ -85,6 +168,80 @@ export default function DashboardPage() {
         </motion.h1>
         <p className="text-muted-foreground mt-1">{profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual</p>
       </div>
+
+      {/* RBAC 117 Compliance Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`rounded-xl p-6 shadow-card mb-8 border ${complianceBg}`}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            {(() => {
+              const Icon = complianceIcon;
+              return <Icon className={`w-7 h-7 ${complianceColor}`} />;
+            })()}
+            <div>
+              <h2 className="font-bold text-foreground text-lg">RBAC 117 — {compliance.label}</h2>
+              <p className="text-xs text-muted-foreground">Regulamentação de Fadiga • Apêndice B</p>
+            </div>
+          </div>
+          <span className={`text-sm font-bold px-3 py-1 rounded-full ${complianceBg} ${complianceColor}`}>
+            {compliance.label}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="bg-background/50 rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Horas/Mês</p>
+            <p className="text-lg font-bold text-foreground">{compliance.accumulatedHoursMonth.toFixed(1)}h</p>
+            <p className="text-[10px] text-muted-foreground">máx 85h</p>
+          </div>
+          <div className="bg-background/50 rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Horas/7 dias</p>
+            <p className="text-lg font-bold text-foreground">{compliance.accumulatedHours7Days.toFixed(1)}h</p>
+            <p className="text-[10px] text-muted-foreground">máx 44h</p>
+          </div>
+          <div className="bg-background/50 rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1"><Moon className="w-3 h-3" />Madrugadas</p>
+            <p className="text-lg font-bold text-foreground">{compliance.nightOpsCount}</p>
+            <p className="text-[10px] text-muted-foreground">máx 4/168h</p>
+          </div>
+          <div className="bg-background/50 rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Folgas</p>
+            <p className="text-lg font-bold text-foreground">{compliance.daysOffCount}</p>
+            <p className="text-[10px] text-muted-foreground">mín 8/mês</p>
+          </div>
+        </div>
+
+        {compliance.alerts.length > 0 && (
+          <div className="space-y-2">
+            {compliance.alerts.map((alert, i) => (
+              <div key={i} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
+                alert.type === 'danger' ? 'bg-destructive/10 text-destructive' :
+                alert.type === 'warning' ? 'bg-yellow-500/10 text-yellow-600' :
+                'bg-primary/10 text-primary'
+              }`}>
+                {alert.type === 'danger' ? <ShieldX className="w-4 h-4 mt-0.5 shrink-0" /> :
+                  alert.type === 'warning' ? <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> :
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+                <div>
+                  <p className="font-medium">{alert.title}</p>
+                  <p className="text-xs opacity-80">{alert.description}</p>
+                  <p className="text-[10px] opacity-50 mt-0.5">{alert.reference}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {compliance.alerts.length === 0 && schedule.length > 0 && (
+          <p className="text-sm text-success flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" />
+            Sua escala está dentro dos limites da RBAC 117
+          </p>
+        )}
+      </motion.div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard title="Voos no mês" value={stats.totalFlights} icon={Plane} variant="primary" />
@@ -102,12 +259,12 @@ export default function DashboardPage() {
           <span className="text-sm font-mono text-muted-foreground">{stats.totalHours}h / {stats.maxHours}h</span>
         </div>
         <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
-          <motion.div initial={{ width: 0 }} animate={{ width: `${hoursPercentage}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={`h-full rounded-full ${hoursPercentage > 90 ? 'bg-destructive' : 'gradient-sky'}`} />
+          <motion.div initial={{ width: 0 }} animate={{ width: `${hoursPercentage}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={`h-full rounded-full ${hoursPercentage > 90 ? 'bg-destructive' : hoursPercentage > 75 ? 'bg-yellow-500' : 'gradient-sky'}`} />
         </div>
         {hoursPercentage > 80 && (
           <div className="flex items-center gap-2 mt-3 text-destructive text-sm">
             <AlertCircle className="w-4 h-4" />
-            <span>Atenção: próximo do limite de horas mensais</span>
+            <span>Atenção: próximo do limite de horas mensais (RBAC 117)</span>
           </div>
         )}
       </motion.div>
