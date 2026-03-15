@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { detectAirline, parseMockSchedule } from '@/lib/store';
+import type { ScheduleEntry } from '@/lib/types';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
