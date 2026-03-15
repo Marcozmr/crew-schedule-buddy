@@ -147,6 +147,35 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
     }
   }, [snapshotStorageKey]);
 
+  useEffect(() => {
+    if (!user || snapshot) return;
+
+    const bootstrapSnapshot = async () => {
+      const scheduleSnapshot = await fetchUserScheduleSnapshot(user.id);
+      setSnapshot({
+        user_id: user.id,
+        email: profile?.email ?? user.email ?? '',
+        gmail_scope_ok: false,
+        emails_found: 0,
+        matched_email_subjects: [],
+        attachments_found: [],
+        selected_attachment_name: null,
+        attachment_download_ok: false,
+        pdf_saved_ok: false,
+        parser_ok: false,
+        parsed_flights_count: 0,
+        inserted_rows_count: 0,
+        total_rows_in_schedule_entries_for_current_user: scheduleSnapshot.totalRows,
+        latest_imported_duty_date: scheduleSnapshot.latestDutyDate,
+        latest_import_error: 'Nenhuma execução registrada ainda. Clique em Sincronizar agora.',
+        last_sync_at: lastSyncTime ?? '',
+        schedule_entries_preview: scheduleSnapshot.schedulePreview,
+      });
+    };
+
+    void bootstrapSnapshot();
+  }, [user, profile, snapshot, fetchUserScheduleSnapshot, lastSyncTime]);
+
   const runSync = useCallback(async () => {
     if (!user) return;
 
