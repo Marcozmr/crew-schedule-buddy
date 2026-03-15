@@ -62,9 +62,8 @@ export default function DashboardPage() {
 
       for (const entry of todayEntries) {
         try {
-          const flights = await searchByFlightNumber(entry.flight_number);
-          const flight = flights[0];
-          const flight = data?.data?.[0];
+          const flightsData = await searchByFlightNumber(entry.flight_number);
+          const flight = flightsData[0];
 
           if (flight?.departure?.delay && flight.departure.delay > 15) {
             // Check if notification already exists
