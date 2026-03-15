@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { Upload, FileText, CheckCircle, AlertCircle, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
