@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -10,6 +10,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/schedule', label: 'Escala', icon: Calendar },
   { path: '/search', label: 'Buscar Voos', icon: Search },
+  { path: '/iflight-import', label: 'PDF IFlight', icon: FileText },
   { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/profile', label: 'Meu Perfil', icon: User },
 ];
