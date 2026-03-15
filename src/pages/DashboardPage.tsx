@@ -1,171 +1,27 @@
-import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { useMemo, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
-import { Button } from '@/components/ui/button';
+import { SyncDiagnosticCard } from '@/components/SyncDiagnosticCard';
 import { useAuth } from '@/lib/auth-context';
+import { useScheduleData } from '@/hooks/useScheduleData';
+import { useAutoSync } from '@/hooks/useAutoSync';
 import { supabase } from '@/integrations/supabase/client';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
 import { searchByFlightNumber } from '@/lib/aviation-api';
-import { importScheduleFromGmail, isGmailScopeError, type ImportDiagnostic } from '@/lib/gmail-import';
-import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Timer } from 'lucide-react';
+import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { toast } from 'sonner';
-
-interface ScheduleEntry {
-  id: string;
-  date: string;
-  flight_number: string;
-  departure: string;
-  arrival: string;
-  departure_time: string;
-  arrival_time: string;
-  status: string;
-  airline: string | null;
-  report_time: string | null;
-  duty_hours: number | null;
-}
 
 export default function DashboardPage() {
-  const { profile, user, session, refreshProfile } = useAuth();
-  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
-  const [gmailSyncing, setGmailSyncing] = useState(false);
-  const [manualImporting, setManualImporting] = useState(false);
-  const [manualImportDiagnostic, setManualImportDiagnostic] = useState<ImportDiagnostic | null>(null);
-  const syncAttemptRef = useRef(false);
+  const { profile, user } = useAuth();
+  const { schedule, reload } = useScheduleData();
 
-  const loadSchedule = useCallback(async () => {
-    if (!user) {
-      setSchedule([]);
-      return;
-    }
+  const handleSyncComplete = useCallback(() => {
+    void reload();
+  }, [reload]);
 
-    const { data } = await supabase
-      .from('schedule_entries')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('date', { ascending: true });
+  const { syncing, lastSyncTime } = useAutoSync(handleSyncComplete);
 
-    if (data) setSchedule(data as ScheduleEntry[]);
-  }, [user]);
-
-  useEffect(() => {
-    void loadSchedule();
-  }, [loadSchedule]);
-
-  useEffect(() => {
-    const handleFocus = () => void loadSchedule();
-    window.addEventListener('focus', handleFocus);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') void loadSchedule();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [loadSchedule]);
-
-  useEffect(() => {
-    if (!user || !session || syncAttemptRef.current) return;
-
-    const tokenFingerprint = session.access_token.slice(0, 24);
-    const syncKey = `gmail_auto_sync_pdf_v5_${user.id}_${tokenFingerprint}`;
-
-    if (sessionStorage.getItem(syncKey)) {
-      syncAttemptRef.current = true;
-      return;
-    }
-
-    const tokenFromSession = (session as { provider_token?: string | null }).provider_token;
-    if (tokenFromSession) {
-      localStorage.setItem('google_provider_token', tokenFromSession);
-    }
-
-    const providerToken = tokenFromSession ?? localStorage.getItem('google_provider_token');
-    if (!providerToken) return;
-
-    syncAttemptRef.current = true;
-
-    const syncGmailSchedule = async () => {
-      setGmailSyncing(true);
-
-      try {
-        const result = await importScheduleFromGmail(user.id, providerToken, {
-          searchQuery: 'has:attachment filename:pdf newer_than:180d',
-          subjectContains: 'CrewRosterReport',
-          senderContains: 'iFlight',
-        });
-
-        if (result.importedCount > 0) {
-          await loadSchedule();
-          await refreshProfile();
-          toast.success(`Escala importada do Gmail: ${result.importedCount} voo(s) novo(s).`);
-        } else if (result.reason) {
-          toast.info(result.reason);
-        }
-      } catch (error) {
-        if (isGmailScopeError(error)) {
-          toast.error('Permissão do Gmail não concedida. Refaça o login Google para autorizar leitura de e-mails.');
-        } else {
-          toast.error('Não foi possível importar a escala automaticamente do Gmail.');
-        }
-      } finally {
-        sessionStorage.setItem(syncKey, 'done');
-        setGmailSyncing(false);
-      }
-    };
-
-    void syncGmailSchedule();
-  }, [user, session, refreshProfile, loadSchedule]);
-
-  const handleManualImport = useCallback(async () => {
-    if (!user || !session) return;
-
-    const tokenFromSession = (session as { provider_token?: string | null }).provider_token;
-    if (tokenFromSession) {
-      localStorage.setItem('google_provider_token', tokenFromSession);
-    }
-
-    const providerToken = tokenFromSession ?? localStorage.getItem('google_provider_token');
-    if (!providerToken) {
-      toast.error('Token do Google ausente. Faça login novamente com Google.');
-      return;
-    }
-
-    setManualImporting(true);
-
-    try {
-      const result = await importScheduleFromGmail(user.id, providerToken, {
-        searchQuery: 'has:attachment filename:pdf newer_than:180d',
-        subjectContains: 'CrewRosterReport',
-        senderContains: 'iFlight',
-      });
-
-      await loadSchedule();
-      await refreshProfile();
-
-      setManualImportDiagnostic({
-        ...result.diagnostic,
-        dashboard_atualizado: true,
-      });
-
-      if (result.importedCount > 0) {
-        toast.success(`Importação manual concluída: ${result.importedCount} voo(s) novo(s).`);
-      } else {
-        toast.info(result.reason ?? 'Importação executada sem novos voos.');
-      }
-    } catch (error) {
-      if (isGmailScopeError(error)) {
-        toast.error('Permissão do Gmail não concedida. Refaça o login Google para autorizar leitura de e-mails.');
-      } else {
-        toast.error(error instanceof Error ? error.message : 'Falha na importação manual.');
-      }
-    } finally {
-      setManualImporting(false);
-    }
-  }, [loadSchedule, refreshProfile, session, user]);
-
-  // Check for flight delays and create notifications
+  // Check for flight delays
   useEffect(() => {
     if (!user || schedule.length === 0) return;
 
@@ -183,7 +39,6 @@ export default function DashboardPage() {
           const flight = flightsData[0];
 
           if (flight?.departure?.delay && flight.departure.delay > 15) {
-            // Check if notification already exists
             const { data: existing } = await supabase
               .from('notifications')
               .select('id')
@@ -196,7 +51,7 @@ export default function DashboardPage() {
               await supabase.from('notifications').insert({
                 user_id: user.id,
                 title: `Atraso: ${entry.flight_number}`,
-                message: `Voo ${entry.flight_number} (${entry.departure}→${entry.arrival}) com atraso de ${flight.departure.delay} minutos na partida.`,
+                message: `Voo ${entry.flight_number} (${entry.departure}→${entry.arrival}) com atraso de ${flight.departure.delay} minutos.`,
                 type: 'warning',
               });
             }
@@ -221,13 +76,13 @@ export default function DashboardPage() {
             }
           }
         } catch {
-          // silently fail - API might be unavailable
+          // silently fail
         }
       }
     };
 
     checkDelays();
-    const interval = setInterval(checkDelays, 15 * 60 * 1000); // Check every 15 min
+    const interval = setInterval(checkDelays, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [user, schedule]);
 
@@ -261,79 +116,64 @@ export default function DashboardPage() {
     return { totalFlights: monthEntries.length, totalHours: Math.round(totalHours * 10) / 10, daysOff, flightDays, nextFlight, maxHours: 85 };
   }, [schedule]);
 
-  // RBAC 117 Compliance check
-  const compliance = useMemo<ComplianceResult>(() => {
-    return checkCompliance(schedule);
-  }, [schedule]);
+  const compliance = useMemo<ComplianceResult>(() => checkCompliance(schedule), [schedule]);
 
   const hoursPercentage = Math.min((stats.totalHours / stats.maxHours) * 100, 100);
 
-  const complianceIcon = compliance.status === 'regular' ? ShieldCheck :
-    compliance.status === 'atencao' ? ShieldAlert : ShieldX;
-
-  const complianceColor = compliance.status === 'regular' ? 'text-success' :
-    compliance.status === 'atencao' ? 'text-yellow-500' : 'text-destructive';
-
-  const complianceBg = compliance.status === 'regular' ? 'bg-success/10 border-success/30' :
-    compliance.status === 'atencao' ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-destructive/10 border-destructive/30';
+  const complianceIcon = compliance.status === 'regular' ? ShieldCheck : compliance.status === 'atencao' ? ShieldAlert : ShieldX;
+  const complianceColor = compliance.status === 'regular' ? 'text-success' : compliance.status === 'atencao' ? 'text-yellow-500' : 'text-destructive';
+  const complianceBg = compliance.status === 'regular' ? 'bg-success/10 border-success/30' : compliance.status === 'atencao' ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-destructive/10 border-destructive/30';
 
   return (
     <AppLayout>
-      <div className="mb-8">
+      <div className="mb-6">
         <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold text-foreground">
           Olá, {profile?.name || 'Tripulante'} ✈️
         </motion.h1>
-        <p className="text-muted-foreground mt-1">{profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual</p>
-        {gmailSyncing && (
-          <p className="text-sm text-primary mt-2">Importando automaticamente sua escala do Gmail...</p>
-        )}
+        <p className="text-muted-foreground mt-1">
+          {profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual
+          {syncing && <span className="text-primary ml-2">• Sincronizando...</span>}
+        </p>
+      </div>
 
-        <div className="mt-4 bg-card border border-border rounded-xl p-4 shadow-card space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p className="text-sm font-medium text-foreground">Diagnóstico ponta a ponta (Gmail → PDF → parser → banco → dashboard)</p>
-            <Button onClick={() => void handleManualImport()} disabled={manualImporting} className="gradient-sky text-primary-foreground">
-              {manualImporting ? 'Executando...' : 'Executar importação agora'}
-            </Button>
-          </div>
+      {/* Diagnostic Card */}
+      <div className="mb-6">
+        <SyncDiagnosticCard onSyncComplete={handleSyncComplete} lastSyncTime={lastSyncTime} />
+      </div>
 
-          {manualImportDiagnostic && (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                <div className="rounded-md bg-muted p-2">email encontrado: <strong>{manualImportDiagnostic.email_encontrado ? 'sim' : 'não'}</strong></div>
-                <div className="rounded-md bg-muted p-2">pdf baixado: <strong>{manualImportDiagnostic.pdf_baixado ? 'sim' : 'não'}</strong></div>
-                <div className="rounded-md bg-muted p-2">pdf parseado: <strong>{manualImportDiagnostic.pdf_parseado ? 'sim' : 'não'}</strong></div>
-                <div className="rounded-md bg-muted p-2">voos salvos: <strong>{manualImportDiagnostic.voos_salvos ? 'sim' : 'não'}</strong></div>
-                <div className="rounded-md bg-muted p-2">dashboard atualizado: <strong>{manualImportDiagnostic.dashboard_atualizado ? 'sim' : 'não'}</strong></div>
-              </div>
-
-              <pre className="rounded-md bg-background border border-border p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words">
-                {JSON.stringify(manualImportDiagnostic, null, 2)}
-              </pre>
-            </>
-          )}
+      {/* Import summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-card text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total importados</p>
+          <p className="text-2xl font-bold text-foreground">{schedule.length}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 shadow-card text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Voos este mês</p>
+          <p className="text-2xl font-bold text-primary">{stats.totalFlights}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 shadow-card text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Última sync</p>
+          <p className="text-sm font-medium text-foreground truncate">{lastSyncTime ?? '—'}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 shadow-card text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Status</p>
+          <p className={`text-sm font-bold ${schedule.length > 0 ? 'text-success' : 'text-muted-foreground'}`}>
+            {schedule.length > 0 ? 'Escala ativa' : 'Sem escala'}
+          </p>
         </div>
       </div>
 
       {/* RBAC 117 Compliance Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={`rounded-xl p-6 shadow-card mb-8 border ${complianceBg}`}
-      >
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`rounded-xl p-6 shadow-card mb-6 border ${complianceBg}`}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            {(() => {
-              const Icon = complianceIcon;
-              return <Icon className={`w-7 h-7 ${complianceColor}`} />;
-            })()}
+            {(() => { const Icon = complianceIcon; return <Icon className={`w-7 h-7 ${complianceColor}`} />; })()}
             <div>
               <h2 className="font-bold text-foreground text-lg">RBAC 117 — {compliance.label}</h2>
               <p className="text-xs text-muted-foreground">Regulamentação de Fadiga • Apêndice B</p>
             </div>
           </div>
-          <span className={`text-sm font-bold px-3 py-1 rounded-full ${complianceBg} ${complianceColor}`}>
-            {compliance.label}
-          </span>
+          <span className={`text-sm font-bold px-3 py-1 rounded-full ${complianceBg} ${complianceColor}`}>{compliance.label}</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
@@ -362,14 +202,8 @@ export default function DashboardPage() {
         {compliance.alerts.length > 0 && (
           <div className="space-y-2">
             {compliance.alerts.map((alert, i) => (
-              <div key={i} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
-                alert.type === 'danger' ? 'bg-destructive/10 text-destructive' :
-                alert.type === 'warning' ? 'bg-yellow-500/10 text-yellow-600' :
-                'bg-primary/10 text-primary'
-              }`}>
-                {alert.type === 'danger' ? <ShieldX className="w-4 h-4 mt-0.5 shrink-0" /> :
-                  alert.type === 'warning' ? <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> :
-                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+              <div key={i} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${alert.type === 'danger' ? 'bg-destructive/10 text-destructive' : alert.type === 'warning' ? 'bg-yellow-500/10 text-yellow-600' : 'bg-primary/10 text-primary'}`}>
+                {alert.type === 'danger' ? <ShieldX className="w-4 h-4 mt-0.5 shrink-0" /> : alert.type === 'warning' ? <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
                 <div>
                   <p className="font-medium">{alert.title}</p>
                   <p className="text-xs opacity-80">{alert.description}</p>
@@ -388,14 +222,15 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Voos no mês" value={stats.totalFlights} icon={Plane} variant="primary" />
         <StatCard title="Horas voadas" value={`${stats.totalHours}h`} subtitle={`de ${stats.maxHours}h permitidas`} icon={Clock} />
         <StatCard title="Dias de folga" value={stats.daysOff} icon={Coffee} variant="accent" />
         <StatCard title="Dias de voo" value={stats.flightDays} icon={CalendarDays} />
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card rounded-xl p-6 shadow-card mb-8">
+      {/* Hours bar */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card rounded-xl p-6 shadow-card mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
@@ -414,8 +249,9 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
+      {/* Next flight */}
       {stats.nextFlight && (
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl p-6 shadow-card mb-8">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl p-6 shadow-card mb-6">
           <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
             <Plane className="w-5 h-5 text-primary" />
             Próximo Voo
@@ -430,6 +266,7 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
+      {/* Recent flights */}
       {schedule.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-card rounded-xl p-6 shadow-card">
           <h2 className="font-semibold text-foreground mb-4">Últimos voos da escala</h2>
@@ -459,7 +296,7 @@ export default function DashboardPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl p-12 shadow-card text-center">
           <Plane className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-foreground mb-2">Nenhuma escala importada</h3>
-          <p className="text-sm text-muted-foreground">Importe sua escala na aba "Importar" para ver seus dados aqui.</p>
+          <p className="text-sm text-muted-foreground">Clique em "Sincronizar agora" acima para importar sua escala do Gmail.</p>
         </motion.div>
       )}
     </AppLayout>
