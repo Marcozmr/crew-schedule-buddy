@@ -1,5 +1,9 @@
 import { supabase } from '@/integrations/supabase/client';
 import { detectAirline, parseMockSchedule } from '@/lib/store';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 type GmailListResponse = {
   messages?: Array<{ id: string }>;
@@ -7,7 +11,6 @@ type GmailListResponse = {
 
 type GmailMessageResponse = {
   id: string;
-  snippet?: string;
   payload?: GmailPayload;
 };
 
@@ -29,40 +32,11 @@ type ImportScheduleResult = {
 };
 
 const GMAIL_SCOPE_ERROR = 'GMAIL_SCOPE_MISSING';
-
-function decodeBase64Url(input?: string): string {
-  if (!input) return '';
-
-  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '==='.slice((normalized.length + 3) % 4);
-
-  try {
-    return decodeURIComponent(
-      Array.prototype.map
-        .call(atob(padded), (char: string) => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
-        .join('')
-    );
-  } catch {
-    return atob(padded);
-  }
-}
-
-function stripHtmlTags(input: string): string {
-  return input
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const TARGET_FILENAME = 'CrewRosterReport.pdf';
 
 async function gmailFetch<T>(providerToken: string, url: string): Promise<T> {
   const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${providerToken}`,
-    },
+    headers: { Authorization: `Bearer ${providerToken}` },
   });
 
   if (response.status === 401 || response.status === 403) {
@@ -77,99 +51,99 @@ async function gmailFetch<T>(providerToken: string, url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function fetchAttachmentText(
-  providerToken: string,
-  messageId: string,
-  attachmentId: string,
-  mimeType: string,
-  filename: string
-): Promise<string> {
-  const isTextAttachment =
-    mimeType.startsWith('text/') ||
-    ['application/csv', 'application/vnd.ms-excel'].includes(mimeType) ||
-    /\.(txt|csv)$/i.test(filename);
+function decodeBase64UrlToBytes(input: string): Uint8Array {
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '==='.slice((normalized.length + 3) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
 
-  if (!isTextAttachment) return '';
+async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
+  const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+  const textParts: string[] = [];
 
-  const attachment = await gmailFetch<{ data?: string }>(
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item) => ('str' in item ? (item as { str: string }).str : ''))
+      .join(' ');
+    textParts.push(pageText);
+  }
+
+  return textParts.join('\n');
+}
+
+function findAttachmentInPayload(
+  payload: GmailPayload | undefined,
+  targetFilename: string
+): { attachmentId: string } | null {
+  if (!payload) return null;
+
+  if (
+    payload.filename?.toLowerCase() === targetFilename.toLowerCase() &&
+    payload.body?.attachmentId
+  ) {
+    return { attachmentId: payload.body.attachmentId };
+  }
+
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      const found = findAttachmentInPayload(part, targetFilename);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+async function fetchCrewRosterPdf(providerToken: string): Promise<{ text: string; parsedCount: number }> {
+  const query = `newer_than:180d has:attachment filename:${TARGET_FILENAME}`;
+
+  const list = await gmailFetch<GmailListResponse>(
     providerToken,
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(query)}`
   );
 
-  return decodeBase64Url(attachment.data);
-}
+  const messageIds = list.messages?.map((m) => m.id) ?? [];
 
-async function extractPayloadText(
-  providerToken: string,
-  messageId: string,
-  payload?: GmailPayload
-): Promise<string[]> {
-  if (!payload) return [];
-
-  const texts: string[] = [];
-  const mimeType = payload.mimeType ?? '';
-  const filename = payload.filename ?? '';
-  const bodyData = payload.body?.data;
-  const attachmentId = payload.body?.attachmentId;
-
-  if (bodyData) {
-    const decoded = decodeBase64Url(bodyData);
-    if (decoded) {
-      texts.push(mimeType.includes('html') ? stripHtmlTags(decoded) : decoded);
-    }
+  if (messageIds.length === 0) {
+    return { text: '', parsedCount: 0 };
   }
-
-  if (attachmentId) {
-    const attachmentText = await fetchAttachmentText(providerToken, messageId, attachmentId, mimeType, filename);
-    if (attachmentText) {
-      texts.push(mimeType.includes('html') ? stripHtmlTags(attachmentText) : attachmentText);
-    }
-  }
-
-  if (payload.parts?.length) {
-    for (const part of payload.parts) {
-      const nested = await extractPayloadText(providerToken, messageId, part);
-      texts.push(...nested);
-    }
-  }
-
-  return texts;
-}
-
-async function fetchBestScheduleText(providerToken: string): Promise<{ text: string; parsedCount: number }> {
-  const queries = [
-    'newer_than:180d (subject:escala OR subject:roster OR subject:pairing OR "escala de voo" OR "tripulante")',
-    'newer_than:180d has:attachment (escala OR roster OR pairing)',
-  ];
 
   let bestText = '';
   let bestCount = 0;
 
-  for (const query of queries) {
-    const list = await gmailFetch<GmailListResponse>(
+  for (const messageId of messageIds) {
+    const message = await gmailFetch<GmailMessageResponse>(
       providerToken,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${encodeURIComponent(query)}`
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
     );
 
-    const messageIds = list.messages?.map((message) => message.id) ?? [];
+    const attachmentInfo = findAttachmentInPayload(message.payload, TARGET_FILENAME);
+    if (!attachmentInfo) continue;
 
-    for (const messageId of messageIds) {
-      const message = await gmailFetch<GmailMessageResponse>(
-        providerToken,
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
-      );
+    const attachment = await gmailFetch<{ data?: string }>(
+      providerToken,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentInfo.attachmentId}`
+    );
 
-      const parts = await extractPayloadText(providerToken, message.id, message.payload);
-      const combinedText = [message.snippet ?? '', ...parts].join('\n').trim();
-      if (!combinedText) continue;
+    if (!attachment.data) continue;
 
-      const parsed = parseMockSchedule(combinedText);
-      if (parsed.length > bestCount) {
-        bestCount = parsed.length;
-        bestText = combinedText;
-      }
+    const pdfBytes = decodeBase64UrlToBytes(attachment.data);
+    const text = await extractTextFromPdf(pdfBytes);
+
+    const parsed = parseMockSchedule(text);
+    if (parsed.length > bestCount) {
+      bestCount = parsed.length;
+      bestText = text;
     }
 
+    // If we found entries, use the most recent email (first result)
     if (bestCount > 0) break;
   }
 
@@ -180,14 +154,14 @@ export async function importScheduleFromGmail(
   userId: string,
   providerToken: string
 ): Promise<ImportScheduleResult> {
-  const { text, parsedCount } = await fetchBestScheduleText(providerToken);
+  const { text, parsedCount } = await fetchCrewRosterPdf(providerToken);
 
   if (!text || parsedCount === 0) {
     return {
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: 'Nenhuma escala reconhecida nos e-mails recentes.',
+      reason: `Nenhum arquivo "${TARGET_FILENAME}" encontrado nos e-mails recentes ou não foi possível extrair dados de voo dele.`,
     };
   }
 
