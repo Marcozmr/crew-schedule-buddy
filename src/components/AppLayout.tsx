@@ -56,7 +56,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="w-10 h-10 rounded-lg gradient-sky flex items-center justify-center">
               <Plane className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-primary-foreground tracking-tight">Escalax</span>
+            <span className="text-xl font-bold text-primary-foreground tracking-tight">EscalaX</span>
           </Link>
           {profile && (
             <Link to="/profile" className="mb-6 px-4 py-3 rounded-lg bg-sidebar-accent/50 flex items-center gap-3 hover:bg-sidebar-accent transition-colors block">
@@ -113,7 +113,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="w-8 h-8 rounded-lg gradient-sky flex items-center justify-center">
             <Plane className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="text-lg font-bold text-primary-foreground">Escalax</span>
+          <span className="text-lg font-bold text-primary-foreground">EscalaX</span>
         </Link>
         <div className="flex items-center gap-2">
           <Link to="/notifications" className="relative p-1 text-primary-foreground">

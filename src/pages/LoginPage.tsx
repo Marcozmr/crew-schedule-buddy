@@ -21,7 +21,7 @@ const isInIframe = () => {
 
 const isPreviewHost = () => window.location.hostname.includes('id-preview--');
 
-const getStandaloneLoginUrl = () => {
+const buildStandaloneLoginUrl = () => {
   const targetUrl = new URL(`${PUBLISHED_APP_ORIGIN}/`);
   targetUrl.searchParams.set(GOOGLE_AUTO_LOGIN_PARAM, '1');
   return targetUrl.toString();
@@ -30,6 +30,30 @@ const getStandaloneLoginUrl = () => {
 const getRedirectOrigin = () => {
   if (isPreviewHost()) return PUBLISHED_APP_ORIGIN;
   return window.location.origin;
+};
+
+const goToStandaloneApp = () => {
+  const standaloneUrl = buildStandaloneLoginUrl();
+
+  try {
+    if (window.top && window.top !== window.self) {
+      window.top.location.href = standaloneUrl;
+      return;
+    }
+  } catch {
+    // continue with fallback methods
+  }
+
+  const anchor = document.createElement('a');
+  anchor.href = standaloneUrl;
+  anchor.target = '_top';
+  anchor.rel = 'noopener noreferrer';
+  anchor.style.display = 'none';
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+
+  window.location.href = standaloneUrl;
 };
 
 export default function LoginPage() {
@@ -44,7 +68,7 @@ export default function LoginPage() {
         prompt: 'consent',
         access_type: 'offline',
         include_granted_scopes: 'true',
-        scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
+        scopes: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
       },
     });
 
@@ -58,13 +82,8 @@ export default function LoginPage() {
     setGoogleLoading(true);
 
     try {
-      if (isInIframe()) {
-        const opened = window.open(getStandaloneLoginUrl(), '_blank', 'noopener,noreferrer');
-        if (!opened) {
-          toast.error('Permita pop-ups no navegador para continuar o login Google.');
-        } else {
-          toast.info('Continue o login na aba que foi aberta para concluir o acesso.');
-        }
+      if (isInIframe() || isPreviewHost()) {
+        goToStandaloneApp();
         return;
       }
 
@@ -120,7 +139,7 @@ export default function LoginPage() {
             <div className="w-16 h-16 rounded-2xl gradient-sky flex items-center justify-center mb-4 shadow-elevated">
               <Plane className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">Escalax</h1>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">EscalaX</h1>
             <p className="text-sm text-white/60 mt-1">Gerencie sua escala de voo com inteligência</p>
           </div>
 
@@ -148,7 +167,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center mt-6 text-white/30 text-xs">
-          © {new Date().getFullYear()} Escalax — Desenvolvido por Marcos Vinicius
+          © {new Date().getFullYear()} EscalaX — Desenvolvido por Marcos Vinicius
         </p>
       </motion.div>
     </div>
