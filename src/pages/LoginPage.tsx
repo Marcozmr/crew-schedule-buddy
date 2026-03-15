@@ -24,15 +24,29 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
+      if (window.self !== window.top) {
+        const opened = window.open(window.location.href, '_blank', 'noopener,noreferrer');
+        if (opened) {
+          toast.info('Abrimos uma nova aba para concluir o login Google sem bloqueio.');
+        } else {
+          toast.error('Permita pop-ups no navegador para continuar o login Google.');
+        }
+        return;
+      }
+
       const { error } = await lovable.auth.signInWithOAuth('google', {
         redirect_uri: window.location.origin,
         extraParams: {
-          prompt: 'select_account',
+          prompt: 'consent',
+          access_type: 'offline',
+          include_granted_scopes: 'true',
+          scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
         },
       });
 
       if (error) {
-        toast.error('Erro ao conectar com Google: ' + (error as Error).message);
+        const message = (error as Error).message;
+        toast.error('Erro ao conectar com Google: ' + message);
       }
     } catch {
       toast.error('Erro ao conectar com Google');
