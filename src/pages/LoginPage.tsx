@@ -28,25 +28,57 @@ export default function LoginPage() {
     }
   }, [session, navigate]);
 
-  if (session) return null;
+  const clearOAuthQueryParam = () => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('oauth')) return;
 
-  const handleGoogleSignIn = async () => {
+    url.searchParams.delete('oauth');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  const handleGoogleSignIn = async (isAutoStart = false) => {
+    if (!isAutoStart && window.self !== window.top) {
+      const newTabUrl = new URL(window.location.href);
+      newTabUrl.searchParams.set('oauth', 'google');
+      const opened = window.open(newTabUrl.toString(), '_blank', 'noopener,noreferrer');
+
+      if (opened) {
+        toast.info('Abrimos uma nova aba para continuar o login com Google corporativo.');
+      } else {
+        toast.error('Não foi possível abrir a nova aba. Permita pop-ups e tente novamente.');
+      }
+      return;
+    }
+
     setGoogleLoading(true);
     try {
       const { error } = await lovable.auth.signInWithOAuth('google', {
         redirect_uri: window.location.origin,
         extraParams: {
           prompt: 'select_account',
+          hd: '*',
         },
       });
+
       if (error) {
         toast.error('Erro ao conectar com Google: ' + (error as Error).message);
       }
-    } catch (err: any) {
+    } catch {
       toast.error('Erro ao conectar com Google');
+    } finally {
+      setGoogleLoading(false);
     }
-    setGoogleLoading(false);
   };
+
+  useEffect(() => {
+    if (session) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('oauth') !== 'google') return;
+
+    clearOAuthQueryParam();
+    void handleGoogleSignIn(true);
+  }, [session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,6 +142,8 @@ export default function LoginPage() {
 
     setLoading(false);
   };
+
+  if (session) return null;
 
   const titles: Record<Mode, string> = {
     login: 'Bem-vindo de volta',
