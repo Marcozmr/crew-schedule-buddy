@@ -10,6 +10,7 @@ import SchedulePage from "./pages/SchedulePage";
 import SearchPage from "./pages/SearchPage";
 import ProfilePage from "./pages/ProfilePage";
 import NotificationsPage from "./pages/NotificationsPage";
+import IFlightImportPage from "./pages/IFlightImportPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
