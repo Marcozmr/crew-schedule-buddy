@@ -1,51 +1,16 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
-import { supabase } from '@/integrations/supabase/client';
+import { useScheduleData } from '@/hooks/useScheduleData';
 import { Calendar, List, Plane, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/lib/auth-context';
-
-interface ScheduleEntry {
-  id: string;
-  date: string;
-  flight_number: string;
-  departure: string;
-  arrival: string;
-  departure_time: string;
-  arrival_time: string;
-  status: string;
-  airline: string | null;
-  report_time: string | null;
-  duty_hours: number | null;
-}
 
 type ViewMode = 'list' | 'calendar';
 
 export default function SchedulePage() {
-  const { user } = useAuth();
-  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const { schedule } = useScheduleData();
   const [view, setView] = useState<ViewMode>('list');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
-
-  useEffect(() => {
-    const load = async () => {
-      if (!user) {
-        setSchedule([]);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('schedule_entries')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date');
-
-      if (data) setSchedule(data as ScheduleEntry[]);
-    };
-
-    void load();
-  }, [user]);
 
   const filteredSchedule = useMemo(() => {
     return schedule.filter(e => {
@@ -55,29 +20,67 @@ export default function SchedulePage() {
     });
   }, [schedule, selectedMonth]);
 
+  // If current month has no flights, auto-select the month with most recent flights
+  const effectiveMonth = useMemo(() => {
+    if (filteredSchedule.length > 0) return selectedMonth;
+    if (schedule.length === 0) return selectedMonth;
+
+    const monthCounts = new Map<number, number>();
+    for (const e of schedule) {
+      const parts = e.date.split(/[\/\-]/);
+      if (parts.length >= 3) {
+        const m = parseInt(parts[1]) - 1;
+        monthCounts.set(m, (monthCounts.get(m) ?? 0) + 1);
+      }
+    }
+
+    let bestMonth = selectedMonth;
+    let bestCount = 0;
+    for (const [m, count] of monthCounts) {
+      if (count > bestCount) { bestMonth = m; bestCount = count; }
+    }
+    return bestMonth;
+  }, [schedule, filteredSchedule.length, selectedMonth]);
+
+  const displaySchedule = useMemo(() => {
+    if (filteredSchedule.length > 0) return filteredSchedule;
+    return schedule.filter(e => {
+      const parts = e.date.split(/[\/\-]/);
+      if (parts.length < 3) return false;
+      return parseInt(parts[1]) - 1 === effectiveMonth;
+    });
+  }, [filteredSchedule, schedule, effectiveMonth]);
+
   const calendarDays = useMemo(() => {
-    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-    const firstDay = new Date(selectedYear, selectedMonth, 1).getDay();
-    const days: { day: number; entries: ScheduleEntry[] }[] = [];
+    const yr = selectedYear;
+    const mo = filteredSchedule.length > 0 ? selectedMonth : effectiveMonth;
+    const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+    const firstDay = new Date(yr, mo, 1).getDay();
+    const days: { day: number; entries: typeof schedule }[] = [];
     for (let i = 0; i < firstDay; i++) days.push({ day: 0, entries: [] });
     for (let d = 1; d <= daysInMonth; d++) {
-      const entries = schedule.filter(e => {
+      const entries = displaySchedule.filter(e => {
         const parts = e.date.split(/[\/\-]/);
-        return parseInt(parts[0]) === d && parseInt(parts[1]) === selectedMonth + 1;
+        return parseInt(parts[0]) === d;
       });
       days.push({ day: d, entries });
     }
     return days;
-  }, [schedule, selectedMonth, selectedYear]);
+  }, [displaySchedule, selectedMonth, effectiveMonth, selectedYear, filteredSchedule.length]);
 
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+  const activeMonth = filteredSchedule.length > 0 ? selectedMonth : effectiveMonth;
 
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Minha Escala</h1>
-          <p className="text-muted-foreground text-sm">{filteredSchedule.length} voos em {months[selectedMonth]}</p>
+          <p className="text-muted-foreground text-sm">
+            {displaySchedule.length} voos em {months[activeMonth]}
+            {schedule.length > 0 && ` • ${schedule.length} total importados`}
+          </p>
         </div>
         <div className="flex bg-muted rounded-lg p-1">
           <button onClick={() => setView('list')} className={`p-2 rounded-md transition-all ${view === 'list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}>
@@ -99,13 +102,14 @@ export default function SchedulePage() {
 
       {view === 'list' ? (
         <div className="space-y-3">
-          {filteredSchedule.length === 0 && (
+          {displaySchedule.length === 0 && (
             <div className="bg-card rounded-xl p-12 text-center shadow-card">
               <Calendar className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground">Nenhum voo neste mês</p>
+              <p className="text-xs text-muted-foreground mt-1">Selecione outro mês ou sincronize sua escala no Dashboard.</p>
             </div>
           )}
-          {filteredSchedule.map((entry, i) => (
+          {displaySchedule.map((entry, i) => (
             <motion.div key={entry.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="bg-card rounded-xl p-4 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
