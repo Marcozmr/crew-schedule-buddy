@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export default function UploadPage() {
+  const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
   const [textInput, setTextInput] = useState('');
   const [fileName, setFileName] = useState('');
