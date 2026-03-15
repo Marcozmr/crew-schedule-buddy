@@ -1,25 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Plane } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
 import { lovable } from '@/integrations/lovable/index';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 
-type Mode = 'login' | 'register' | 'forgot';
-
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { signIn, signUp, session } = useAuth();
-  const [mode, setMode] = useState<Mode>('login');
-  const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [loading, setLoading] = useState(false);
+  const { session } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
@@ -28,35 +19,15 @@ export default function LoginPage() {
     }
   }, [session, navigate]);
 
-  const clearOAuthQueryParam = () => {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has('oauth')) return;
+  if (session) return null;
 
-    url.searchParams.delete('oauth');
-    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-  };
-
-  const handleGoogleSignIn = async (isAutoStart = false) => {
-    if (!isAutoStart && window.self !== window.top) {
-      const newTabUrl = new URL(window.location.href);
-      newTabUrl.searchParams.set('oauth', 'google');
-      const opened = window.open(newTabUrl.toString(), '_blank', 'noopener,noreferrer');
-
-      if (opened) {
-        toast.info('Abrimos uma nova aba para continuar o login com Google corporativo.');
-      } else {
-        toast.error('Não foi possível abrir a nova aba. Permita pop-ups e tente novamente.');
-      }
-      return;
-    }
-
+  const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
       const { error } = await lovable.auth.signInWithOAuth('google', {
         redirect_uri: window.location.origin,
         extraParams: {
           prompt: 'select_account',
-          hd: '*',
         },
       });
 
@@ -68,93 +39,6 @@ export default function LoginPage() {
     } finally {
       setGoogleLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (session) return;
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('oauth') !== 'google') return;
-
-    clearOAuthQueryParam();
-    void handleGoogleSignIn(true);
-  }, [session]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    const normalizedEmail = form.email.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      toast.error('Informe seu e-mail');
-      setLoading(false);
-      return;
-    }
-
-    if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
-      }
-
-      setLoading(false);
-      return;
-    }
-
-    if (!form.password) {
-      toast.error('Informe sua senha');
-      setLoading(false);
-      return;
-    }
-
-    if (mode === 'register' && !form.name.trim()) {
-      toast.error('Informe seu nome');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      if (mode === 'register') {
-        await signUp(normalizedEmail, form.password, form.name.trim());
-        toast.success('Conta criada com sucesso!');
-        navigate('/dashboard');
-      } else {
-        await signIn(normalizedEmail, form.password);
-        toast.success('Bem-vindo de volta!');
-        navigate('/dashboard');
-      }
-    } catch (error: any) {
-      const msg = error.message || '';
-      if (msg.includes('Invalid login')) {
-        toast.error('E-mail ou senha inválidos. Se necessário, use "Esqueceu a senha?" para recuperar.');
-      } else if (msg.includes('already registered')) {
-        toast.error('Este e-mail já está cadastrado. Faça login.');
-      } else {
-        toast.error(msg || 'Erro na autenticação');
-      }
-    }
-
-    setLoading(false);
-  };
-
-  if (session) return null;
-
-  const titles: Record<Mode, string> = {
-    login: 'Bem-vindo de volta',
-    register: 'Crie sua conta',
-    forgot: 'Recuperar senha',
-  };
-
-  const subtitles: Record<Mode, string> = {
-    login: 'Acesse sua escala de voo',
-    register: 'Comece a gerenciar sua escala',
-    forgot: 'Enviaremos um link para redefinir sua senha',
   };
 
   return (
@@ -181,126 +65,27 @@ export default function LoginPage() {
             <p className="text-sm text-white/60 mt-1">Gerencie sua escala de voo com inteligência</p>
           </div>
 
-          {mode === 'forgot' && (
-            <button onClick={() => setMode('login')} className="flex items-center gap-1 text-white/60 hover:text-white text-sm mb-4 transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Voltar ao login
-            </button>
-          )}
+          <h2 className="text-xl font-bold text-white mb-1">Bem-vindo</h2>
+          <p className="text-white/50 mb-8 text-sm">Acesse com sua conta Google corporativa</p>
 
-          <h2 className="text-xl font-bold text-white mb-1">{titles[mode]}</h2>
-          <p className="text-white/50 mb-6 text-sm">{subtitles[mode]}</p>
+          <Button
+            type="button"
+            onClick={() => void handleGoogleSignIn()}
+            disabled={googleLoading}
+            className="w-full h-14 bg-white hover:bg-white/90 text-gray-800 font-semibold text-base rounded-xl shadow-lg transition-all"
+          >
+            <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            {googleLoading ? 'Conectando...' : 'Entrar com Google'}
+          </Button>
 
-          {/* Google Sign-In Button */}
-          {mode !== 'forgot' && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleGoogleSignIn()}
-                disabled={googleLoading}
-                className="w-full h-12 mb-4 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white font-medium"
-              >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-                {googleLoading ? 'Conectando...' : 'Entrar com Google'}
-              </Button>
-
-              <div className="relative mb-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/20" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="px-3 text-white/40 bg-transparent backdrop-blur-sm">ou com e-mail</span>
-                </div>
-              </div>
-            </>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-white/80">Nome completo</Label>
-                <Input
-                  id="name"
-                  placeholder="Seu nome"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40"
-                />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-white/80">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="seu@email.com"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40"
-              />
-            </div>
-
-            {mode !== 'forgot' && (
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-white/80">Senha</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                    className="h-12 pr-10 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {mode === 'login' && (
-              <div className="text-right">
-                <button type="button" onClick={() => setMode('forgot')} className="text-xs text-white/50 hover:text-white transition-colors">
-                  Esqueceu a senha?
-                </button>
-              </div>
-            )}
-
-            <Button type="submit" className="w-full h-12 gradient-sky text-white font-semibold text-base" disabled={loading}>
-              {loading
-                ? 'Carregando...'
-                : mode === 'register'
-                ? 'Criar conta'
-                : mode === 'forgot'
-                ? 'Enviar link de recuperação'
-                : 'Entrar'}
-            </Button>
-          </form>
-
-          {mode !== 'forgot' && (
-            <p className="mt-6 text-center text-sm text-white/50">
-              {mode === 'register' ? 'Já tem conta?' : 'Não tem conta?'}{' '}
-              <button onClick={() => setMode(mode === 'register' ? 'login' : 'register')} className="text-white font-medium hover:underline">
-                {mode === 'register' ? 'Fazer login' : 'Criar conta'}
-              </button>
-            </p>
-          )}
+          <p className="mt-6 text-center text-xs text-white/40">
+            Use seu e-mail corporativo para acessar sua escala automaticamente
+          </p>
         </div>
 
         <p className="text-center mt-6 text-white/30 text-xs">
