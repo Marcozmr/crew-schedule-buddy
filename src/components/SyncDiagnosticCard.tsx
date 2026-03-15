@@ -97,10 +97,10 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
   );
 
   const fetchUserScheduleSnapshot = useCallback(async (userId: string) => {
-    const [{ data: countData }, { data: previewData }] = await Promise.all([
+    const [{ count }, { data: previewData }] = await Promise.all([
       supabase
         .from('schedule_entries')
-        .select('date', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('user_id', userId),
       supabase
         .from('schedule_entries')
@@ -110,7 +110,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         .limit(5),
     ]);
 
-    const totalRows = countData ?? 0;
+    const totalRows = count ?? 0;
 
     const { data: latestDateData } = await supabase
       .from('schedule_entries')
