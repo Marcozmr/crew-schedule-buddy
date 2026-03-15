@@ -4,6 +4,7 @@ import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
+import { searchByFlightNumber } from '@/lib/aviation-api';
 import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -61,9 +62,8 @@ export default function DashboardPage() {
 
       for (const entry of todayEntries) {
         try {
-          const res = await fetch(`http://api.aviationstack.com/v1/flights?access_key=f886e6766dfc56f06bfc42da6e7ceb78&flight_iata=${entry.flight_number}`);
-          const data = await res.json();
-          const flight = data?.data?.[0];
+          const flightsData = await searchByFlightNumber(entry.flight_number);
+          const flight = flightsData[0];
 
           if (flight?.departure?.delay && flight.departure.delay > 15) {
             // Check if notification already exists
