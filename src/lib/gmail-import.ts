@@ -456,7 +456,7 @@ export async function importScheduleFromGmail(
     };
   }
 
-  const parsedEntries = parseMockSchedule(text);
+  const parsedEntries = parseScheduleFromPdfText(text);
   const airline = detectAirline(text);
 
   const { data: existingRows } = await supabase
