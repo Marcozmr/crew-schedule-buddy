@@ -404,7 +404,7 @@ async function fetchCrewRosterPdf(
     };
   }
 
-  const parsedCount = parseMockSchedule(text).length;
+  const parsedCount = parseScheduleFromPdfText(text).length;
 
   return {
     text,
