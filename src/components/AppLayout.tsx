@@ -113,7 +113,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="w-8 h-8 rounded-lg gradient-sky flex items-center justify-center">
             <Plane className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="text-lg font-bold text-primary-foreground">CrewScale</span>
+          <span className="text-lg font-bold text-primary-foreground">Escalax</span>
         </Link>
         <div className="flex items-center gap-2">
           <Link to="/notifications" className="relative p-1 text-primary-foreground">
