@@ -218,6 +218,9 @@ export default function DashboardPage() {
           Olá, {profile?.name || 'Tripulante'} ✈️
         </motion.h1>
         <p className="text-muted-foreground mt-1">{profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual</p>
+        {gmailSyncing && (
+          <p className="text-sm text-primary mt-2">Importando automaticamente sua escala do Gmail...</p>
+        )}
       </div>
 
       {/* RBAC 117 Compliance Card */}
