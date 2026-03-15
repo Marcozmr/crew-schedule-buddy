@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 
 const GOOGLE_AUTO_LOGIN_PARAM = 'google_auth_start';
+const PUBLISHED_APP_ORIGIN = 'https://crew-schedule-buddy.lovable.app';
 
 const isInIframe = () => {
   try {
@@ -18,6 +19,19 @@ const isInIframe = () => {
   }
 };
 
+const isPreviewHost = () => window.location.hostname.includes('id-preview--');
+
+const getStandaloneLoginUrl = () => {
+  const targetUrl = new URL(`${PUBLISHED_APP_ORIGIN}/`);
+  targetUrl.searchParams.set(GOOGLE_AUTO_LOGIN_PARAM, '1');
+  return targetUrl.toString();
+};
+
+const getRedirectOrigin = () => {
+  if (isPreviewHost()) return PUBLISHED_APP_ORIGIN;
+  return window.location.origin;
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -25,12 +39,12 @@ export default function LoginPage() {
 
   const startGoogleOAuth = useCallback(async () => {
     const { error } = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
+      redirect_uri: getRedirectOrigin(),
       extraParams: {
         prompt: 'consent',
         access_type: 'offline',
         include_granted_scopes: 'true',
-        scopes: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
+        scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
       },
     });
 
@@ -45,26 +59,12 @@ export default function LoginPage() {
 
     try {
       if (isInIframe()) {
-        const targetUrl = new URL(window.location.href);
-        targetUrl.searchParams.set(GOOGLE_AUTO_LOGIN_PARAM, '1');
-
-        let redirectedToTop = false;
-        try {
-          if (window.top) {
-            window.top.location.href = targetUrl.toString();
-            redirectedToTop = true;
-          }
-        } catch {
-          redirectedToTop = false;
+        const opened = window.open(getStandaloneLoginUrl(), '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          toast.error('Permita pop-ups no navegador para continuar o login Google.');
+        } else {
+          toast.info('Continue o login na aba que foi aberta para concluir o acesso.');
         }
-
-        if (!redirectedToTop) {
-          const opened = window.open(targetUrl.toString(), '_blank', 'noopener,noreferrer');
-          if (!opened) {
-            toast.error('Permita pop-ups no navegador para continuar o login Google.');
-          }
-        }
-
         return;
       }
 
@@ -95,8 +95,8 @@ export default function LoginPage() {
     const nextUrl = `${url.pathname}${updatedSearch ? `?${updatedSearch}` : ''}${url.hash}`;
     window.history.replaceState({}, '', nextUrl);
 
-    void handleGoogleSignIn();
-  }, [session, handleGoogleSignIn]);
+    void startGoogleOAuth();
+  }, [session, startGoogleOAuth]);
 
   if (session) return null;
 
