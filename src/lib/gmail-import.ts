@@ -32,42 +32,60 @@ type GmailPayload = {
   parts?: GmailPayload[];
 };
 
+type GmailAttachmentLog = {
+  messageId: string;
+  filename: string;
+  attachmentId: string;
+};
+
+type ImportDebugLog = {
+  emailCount: number;
+  subjects: string[];
+  pdfAttachments: GmailAttachmentLog[];
+  selectedAttachmentId: string | null;
+  downloadSucceeded: boolean;
+};
+
 type ImportScheduleResult = {
   importedCount: number;
   parsedCount: number;
   airline: string;
   reason?: string;
+  parserError?: string;
+  debug: ImportDebugLog;
 };
 
 type ImportRouteOptions = {
-  subject?: string;
-  filenameBase?: string;
+  searchQuery?: string;
+  subjectContains?: string;
+  senderContains?: string;
 };
 
 type PdfCandidate = {
   messageId: string;
+  attachmentId: string;
   pdfBytes: Uint8Array;
 };
 
 type PdfFetchResult = {
   text: string;
-  parsedCount: number;
   foundSubject: boolean;
-  foundFile: boolean;
+  foundSender: boolean;
+  foundPdf: boolean;
+  parserError?: string;
+  debug: ImportDebugLog;
 };
 
 const GMAIL_SCOPE_ERROR = 'GMAIL_SCOPE_MISSING';
-const DEFAULT_SUBJECT = 'IFlight';
-const DEFAULT_FILENAME_BASE = 'CrewRosterReport';
+const DEFAULT_SEARCH_QUERY = 'has:attachment filename:pdf newer_than:180d';
+const DEFAULT_SUBJECT_CONTAINS = 'CrewRosterReport';
+const DEFAULT_SENDER_CONTAINS = 'iFlight';
 const STORAGE_FILENAME = 'CrewRosterReport.pdf';
 
 function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function normalizeFileName(value: string): string {
-  return value.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9]/g, '');
-}
 
 function decodeBase64UrlToBytes(input: string): Uint8Array {
   const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -136,11 +154,6 @@ async function listCandidateMessageIds(providerToken: string, query: string): Pr
   return Array.from(messageIds);
 }
 
-function ensurePdfFilenameBase(filenameBase: string): string {
-  const trimmed = filenameBase.trim();
-  return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`;
-}
-
 function extractFilenameFromHeaderValue(headerValue: string): string {
   const match = headerValue.match(/filename\*?=(?:UTF-8''|"|')?([^"';\n]+)/i);
   if (!match?.[1]) return '';
@@ -166,30 +179,33 @@ function getPartFilename(part: GmailPayload): string {
   return extractFilenameFromHeaderValue(contentType);
 }
 
-function findPdfPart(payload: GmailPayload | undefined, filenameBase: string): GmailPayload | null {
-  if (!payload) return null;
+type PdfPartCandidate = {
+  part: GmailPayload;
+  filename: string;
+  attachmentId: string;
+};
+
+function collectPdfParts(payload: GmailPayload | undefined, results: PdfPartCandidate[] = []): PdfPartCandidate[] {
+  if (!payload) return results;
 
   const mimeType = normalizeText(payload.mimeType ?? '');
   const filename = getPartFilename(payload);
-  const normalizedFilename = normalizeFileName(filename);
-  const normalizedBase = normalizeFileName(filenameBase);
-
   const hasData = Boolean(payload.body?.attachmentId || payload.body?.data);
   const isPdf = mimeType.includes('pdf') || filename.toLowerCase().endsWith('.pdf');
-  const matchesFile = normalizedBase ? normalizedFilename.includes(normalizedBase) : true;
 
-  if (hasData && ((isPdf && (matchesFile || !filename)) || (matchesFile && filename.toLowerCase().includes('.pdf')))) {
-    return payload;
+  if (hasData && isPdf) {
+    results.push({
+      part: payload,
+      filename: filename || '(sem nome)',
+      attachmentId: payload.body?.attachmentId ?? 'inline-data',
+    });
   }
 
-  if (!payload.parts?.length) return null;
-
-  for (const part of payload.parts) {
-    const nested = findPdfPart(part, filenameBase);
-    if (nested) return nested;
+  for (const part of payload.parts ?? []) {
+    collectPdfParts(part, results);
   }
 
-  return null;
+  return results;
 }
 
 async function loadPdfBytesFromPart(
@@ -216,63 +232,91 @@ async function loadPdfBytesFromPart(
 
 async function findPdfInGmail(
   providerToken: string,
-  subject: string,
-  filenameBase: string
-): Promise<{ candidate: PdfCandidate | null; foundSubject: boolean; foundFile: boolean }> {
-  const strictFilename = ensurePdfFilenameBase(filenameBase);
-  const normalizedSubject = normalizeText(subject);
+  searchQuery: string,
+  subjectContains: string,
+  senderContains: string
+): Promise<{ candidate: PdfCandidate | null; foundSubject: boolean; foundSender: boolean; foundPdf: boolean; debug: ImportDebugLog }> {
+  const messageIds = await listCandidateMessageIds(providerToken, searchQuery);
+  const normalizedSubject = normalizeText(subjectContains);
+  const normalizedSender = normalizeText(senderContains);
 
-  const searchPlans = [
-    { query: `subject:"${subject}" has:attachment filename:"${strictFilename}"`, enforceSubjectCheck: false },
-    { query: `subject:"${subject}" has:attachment filename:"${filenameBase}"`, enforceSubjectCheck: false },
-    { query: `subject:"${subject}" has:attachment`, enforceSubjectCheck: false },
-    { query: `has:attachment filename:"${strictFilename}"`, enforceSubjectCheck: true },
-  ];
+  const subjects = new Set<string>();
+  const debug: ImportDebugLog = {
+    emailCount: messageIds.length,
+    subjects: [],
+    pdfAttachments: [],
+    selectedAttachmentId: null,
+    downloadSucceeded: false,
+  };
 
   let foundSubject = false;
-  let foundFile = false;
+  let foundSender = false;
+  let foundPdf = false;
 
-  for (const plan of searchPlans) {
-    const messageIds = await listCandidateMessageIds(providerToken, plan.query);
-    if (messageIds.length === 0) continue;
+  for (const messageId of messageIds) {
+    const message = await gmailFetch<GmailMessageResponse>(
+      providerToken,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
+    );
 
-    if (!plan.enforceSubjectCheck) {
-      foundSubject = true;
+    const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
+    if (subjectHeader) {
+      subjects.add(subjectHeader);
+      debug.subjects = Array.from(subjects).slice(0, 30);
     }
 
-    for (const messageId of messageIds) {
-      const message = await gmailFetch<GmailMessageResponse>(
-        providerToken,
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
-      );
-
-      if (plan.enforceSubjectCheck) {
-        const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
-        const subjectMatches = normalizeText(subjectHeader).includes(normalizedSubject);
-        if (!subjectMatches) continue;
-        foundSubject = true;
-      }
-
-      const pdfPart = findPdfPart(message.payload, filenameBase);
-      if (!pdfPart) continue;
-
-      foundFile = true;
-
-      const pdfBytes = await loadPdfBytesFromPart(providerToken, message.id, pdfPart);
-      if (!pdfBytes) continue;
-
-      return {
-        candidate: {
-          messageId: message.id,
-          pdfBytes,
-        },
-        foundSubject,
-        foundFile,
-      };
+    if (!normalizeText(subjectHeader).includes(normalizedSubject)) {
+      continue;
     }
+
+    foundSubject = true;
+
+    const fromHeader = getHeaderValue(message.payload?.headers, 'From');
+    if (!normalizeText(fromHeader).includes(normalizedSender)) {
+      continue;
+    }
+
+    foundSender = true;
+
+    const pdfParts = collectPdfParts(message.payload);
+    if (pdfParts.length === 0) {
+      continue;
+    }
+
+    foundPdf = true;
+
+    for (const pdfPart of pdfParts) {
+      debug.pdfAttachments.push({
+        messageId: message.id,
+        filename: pdfPart.filename,
+        attachmentId: pdfPart.attachmentId,
+      });
+    }
+
+    const selectedPart = pdfParts[0];
+    debug.selectedAttachmentId = selectedPart.attachmentId;
+
+    const pdfBytes = await loadPdfBytesFromPart(providerToken, message.id, selectedPart.part);
+    if (!pdfBytes) {
+      continue;
+    }
+
+    debug.downloadSucceeded = true;
+
+    return {
+      candidate: {
+        messageId: message.id,
+        attachmentId: selectedPart.attachmentId,
+        pdfBytes,
+      },
+      foundSubject,
+      foundSender,
+      foundPdf,
+      debug,
+    };
   }
 
-  return { candidate: null, foundSubject, foundFile };
+  return { candidate: null, foundSubject, foundSender, foundPdf, debug };
 }
 
 async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
@@ -413,42 +457,48 @@ async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8
 async function fetchCrewRosterPdf(
   userId: string,
   providerToken: string,
-  subject: string,
-  filenameBase: string
+  searchQuery: string,
+  subjectContains: string,
+  senderContains: string
 ): Promise<PdfFetchResult> {
-  const { candidate, foundSubject, foundFile } = await findPdfInGmail(providerToken, subject, filenameBase);
+  const { candidate, foundSubject, foundSender, foundPdf, debug } = await findPdfInGmail(
+    providerToken,
+    searchQuery,
+    subjectContains,
+    senderContains
+  );
 
   if (!candidate) {
     return {
       text: '',
-      parsedCount: 0,
       foundSubject,
-      foundFile,
+      foundSender,
+      foundPdf,
+      debug,
     };
   }
 
   await savePdfIntoApp(userId, candidate.messageId, candidate.pdfBytes);
 
-  let text = '';
   try {
-    text = await extractTextFromPdf(candidate.pdfBytes);
-  } catch {
+    const text = await extractTextFromPdf(candidate.pdfBytes);
+    return {
+      text,
+      foundSubject,
+      foundSender,
+      foundPdf,
+      debug,
+    };
+  } catch (error) {
     return {
       text: '',
-      parsedCount: 0,
       foundSubject,
-      foundFile,
+      foundSender,
+      foundPdf,
+      parserError: error instanceof Error ? error.message : 'Erro desconhecido ao processar o parser do PDF.',
+      debug,
     };
   }
-
-  const parsedCount = parseScheduleFromPdfText(text).length;
-
-  return {
-    text,
-    parsedCount,
-    foundSubject,
-    foundFile,
-  };
 }
 
 export async function importScheduleFromGmail(
@@ -456,14 +506,16 @@ export async function importScheduleFromGmail(
   providerToken: string,
   options?: ImportRouteOptions
 ): Promise<ImportScheduleResult> {
-  const subject = options?.subject ?? DEFAULT_SUBJECT;
-  const filenameBase = options?.filenameBase ?? DEFAULT_FILENAME_BASE;
+  const searchQuery = options?.searchQuery ?? DEFAULT_SEARCH_QUERY;
+  const subjectContains = options?.subjectContains ?? DEFAULT_SUBJECT_CONTAINS;
+  const senderContains = options?.senderContains ?? DEFAULT_SENDER_CONTAINS;
 
-  const { text, parsedCount, foundSubject, foundFile } = await fetchCrewRosterPdf(
+  const { text, foundSubject, foundSender, foundPdf, parserError, debug } = await fetchCrewRosterPdf(
     userId,
     providerToken,
-    subject,
-    filenameBase
+    searchQuery,
+    subjectContains,
+    senderContains
   );
 
   if (!foundSubject) {
@@ -471,29 +523,78 @@ export async function importScheduleFromGmail(
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `Não encontrei e-mails com título "${subject}".`,
+      reason: `Foram encontrados ${debug.emailCount} e-mails com PDF recentes, mas nenhum com assunto contendo "${subjectContains}".`,
+      debug,
     };
   }
 
-  if (!foundFile) {
+  if (!foundSender) {
     return {
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `Encontrei o e-mail "${subject}", mas sem PDF "${filenameBase}".`,
+      reason: `Encontrei assunto "${subjectContains}", mas o remetente não contém "${senderContains}".`,
+      debug,
     };
   }
 
-  if (!text || parsedCount === 0) {
+  if (!foundPdf) {
     return {
       importedCount: 0,
       parsedCount: 0,
       airline: 'Não identificada',
-      reason: `O PDF "${filenameBase}" foi salvo no app, mas não consegui extrair voos dele.`,
+      reason: 'Encontrei e-mail compatível, mas sem anexo PDF válido para download.',
+      debug,
     };
   }
 
-  const parsedEntries = parseScheduleFromPdfText(text);
+  if (parserError) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: `Falha no parser: ${parserError}`,
+      parserError,
+      debug,
+    };
+  }
+
+  if (!text) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: 'PDF baixado e salvo, mas sem texto utilizável para processar a escala.',
+      debug,
+    };
+  }
+
+  let parsedEntries: ScheduleEntry[] = [];
+  try {
+    parsedEntries = parseScheduleFromPdfText(text);
+  } catch (error) {
+    const exactParserError = error instanceof Error ? error.message : 'Erro desconhecido no parser de escala.';
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: `Falha no parser: ${exactParserError}`,
+      parserError: exactParserError,
+      debug,
+    };
+  }
+
+  const parsedCount = parsedEntries.length;
+  if (parsedCount === 0) {
+    return {
+      importedCount: 0,
+      parsedCount: 0,
+      airline: 'Não identificada',
+      reason: 'Parser executado, mas nenhum voo foi identificado no conteúdo do PDF.',
+      debug,
+    };
+  }
+
   const airline = detectAirline(text);
 
   const { data: existingRows } = await supabase
@@ -534,6 +635,7 @@ export async function importScheduleFromGmail(
     importedCount: rows.length,
     parsedCount,
     airline,
+    debug,
   };
 }
 
