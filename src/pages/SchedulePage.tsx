@@ -20,53 +20,25 @@ export default function SchedulePage() {
     });
   }, [schedule, selectedMonth]);
 
-  // If current month has no flights, auto-select the month with most recent flights
-  const effectiveMonth = useMemo(() => {
-    if (filteredSchedule.length > 0) return selectedMonth;
-    if (schedule.length === 0) return selectedMonth;
-
-    const monthCounts = new Map<number, number>();
-    for (const e of schedule) {
-      const parts = e.date.split(/[\/\-]/);
-      if (parts.length >= 3) {
-        const m = parseInt(parts[1]) - 1;
-        monthCounts.set(m, (monthCounts.get(m) ?? 0) + 1);
-      }
-    }
-
-    let bestMonth = selectedMonth;
-    let bestCount = 0;
-    for (const [m, count] of monthCounts) {
-      if (count > bestCount) { bestMonth = m; bestCount = count; }
-    }
-    return bestMonth;
-  }, [schedule, filteredSchedule.length, selectedMonth]);
-
-  const displaySchedule = useMemo(() => {
-    if (filteredSchedule.length > 0) return filteredSchedule;
-    return schedule.filter(e => {
-      const parts = e.date.split(/[\/\-]/);
-      if (parts.length < 3) return false;
-      return parseInt(parts[1]) - 1 === effectiveMonth;
-    });
-  }, [filteredSchedule, schedule, effectiveMonth]);
+  // Lista sempre mostra todos os voos importados do usuário autenticado
+  const displaySchedule = useMemo(() => schedule, [schedule]);
 
   const calendarDays = useMemo(() => {
     const yr = selectedYear;
-    const mo = filteredSchedule.length > 0 ? selectedMonth : effectiveMonth;
+    const mo = selectedMonth;
     const daysInMonth = new Date(yr, mo + 1, 0).getDate();
     const firstDay = new Date(yr, mo, 1).getDay();
     const days: { day: number; entries: typeof schedule }[] = [];
     for (let i = 0; i < firstDay; i++) days.push({ day: 0, entries: [] });
     for (let d = 1; d <= daysInMonth; d++) {
-      const entries = displaySchedule.filter(e => {
+      const entries = filteredSchedule.filter(e => {
         const parts = e.date.split(/[\/\-]/);
         return parseInt(parts[0]) === d;
       });
       days.push({ day: d, entries });
     }
     return days;
-  }, [displaySchedule, selectedMonth, effectiveMonth, selectedYear, filteredSchedule.length]);
+  }, [filteredSchedule, selectedMonth, selectedYear]);
 
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
