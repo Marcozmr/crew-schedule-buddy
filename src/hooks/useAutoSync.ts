@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 const PROVIDER_TOKEN_KEY = 'google_provider_token';
 
 export function useAutoSync(onComplete?: () => void) {
-  const { user, session, refreshProfile } = useAuth();
+  const { user, session, providerToken, refreshProfile } = useAuth();
   const syncAttemptRef = useRef(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(
     localStorage.getItem('last_sync_time')
@@ -17,25 +17,25 @@ export function useAutoSync(onComplete?: () => void) {
     if (!user || !session || syncAttemptRef.current) return;
 
     const tokenFingerprint = session.access_token.slice(0, 24);
-    const syncKey = `gmail_auto_sync_v6_${user.id}_${tokenFingerprint}`;
+    const syncKey = `gmail_auto_sync_v7_${user.id}_${tokenFingerprint}`;
 
     if (sessionStorage.getItem(syncKey)) {
       syncAttemptRef.current = true;
       return;
     }
 
-    const tokenFromSession = (session as { provider_token?: string | null }).provider_token;
-    if (tokenFromSession) localStorage.setItem(PROVIDER_TOKEN_KEY, tokenFromSession);
-
-    const providerToken = tokenFromSession ?? localStorage.getItem(PROVIDER_TOKEN_KEY);
-    if (!providerToken) return;
+    const effectiveToken = providerToken ?? localStorage.getItem(PROVIDER_TOKEN_KEY);
+    if (!effectiveToken) {
+      console.warn('[auto-sync] No provider_token available, skipping auto-sync');
+      return;
+    }
 
     syncAttemptRef.current = true;
 
     const run = async () => {
       setSyncing(true);
       try {
-        const result = await importScheduleFromGmail(user.id, providerToken, {
+        const result = await importScheduleFromGmail(user.id, effectiveToken, {
           searchQuery: 'has:attachment filename:pdf newer_than:180d',
           subjectContains: 'CrewRosterReport',
           senderContains: 'iFlight',
@@ -52,7 +52,7 @@ export function useAutoSync(onComplete?: () => void) {
         onComplete?.();
       } catch (error) {
         if (isGmailScopeError(error)) {
-          toast.error('Permissão do Gmail não concedida. Refaça o login Google.');
+          toast.error('Permissão do Gmail não concedida. Faça logout e login novamente com Google.');
         }
       } finally {
         sessionStorage.setItem(syncKey, 'done');
@@ -61,7 +61,7 @@ export function useAutoSync(onComplete?: () => void) {
     };
 
     void run();
-  }, [user, session, refreshProfile, onComplete]);
+  }, [user, session, providerToken, refreshProfile, onComplete]);
 
   return { syncing, lastSyncTime };
 }
