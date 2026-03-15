@@ -157,11 +157,6 @@ async function listCandidateMessageIds(providerToken: string, query: string): Pr
   return Array.from(messageIds);
 }
 
-function ensurePdfFilenameBase(filenameBase: string): string {
-  const trimmed = filenameBase.trim();
-  return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`;
-}
-
 function extractFilenameFromHeaderValue(headerValue: string): string {
   const match = headerValue.match(/filename\*?=(?:UTF-8''|"|')?([^"';\n]+)/i);
   if (!match?.[1]) return '';
@@ -187,30 +182,33 @@ function getPartFilename(part: GmailPayload): string {
   return extractFilenameFromHeaderValue(contentType);
 }
 
-function findPdfPart(payload: GmailPayload | undefined, filenameBase: string): GmailPayload | null {
-  if (!payload) return null;
+type PdfPartCandidate = {
+  part: GmailPayload;
+  filename: string;
+  attachmentId: string;
+};
+
+function collectPdfParts(payload: GmailPayload | undefined, results: PdfPartCandidate[] = []): PdfPartCandidate[] {
+  if (!payload) return results;
 
   const mimeType = normalizeText(payload.mimeType ?? '');
   const filename = getPartFilename(payload);
-  const normalizedFilename = normalizeFileName(filename);
-  const normalizedBase = normalizeFileName(filenameBase);
-
   const hasData = Boolean(payload.body?.attachmentId || payload.body?.data);
   const isPdf = mimeType.includes('pdf') || filename.toLowerCase().endsWith('.pdf');
-  const matchesFile = normalizedBase ? normalizedFilename.includes(normalizedBase) : true;
 
-  if (hasData && ((isPdf && (matchesFile || !filename)) || (matchesFile && filename.toLowerCase().includes('.pdf')))) {
-    return payload;
+  if (hasData && isPdf) {
+    results.push({
+      part: payload,
+      filename: filename || '(sem nome)',
+      attachmentId: payload.body?.attachmentId ?? 'inline-data',
+    });
   }
 
-  if (!payload.parts?.length) return null;
-
-  for (const part of payload.parts) {
-    const nested = findPdfPart(part, filenameBase);
-    if (nested) return nested;
+  for (const part of payload.parts ?? []) {
+    collectPdfParts(part, results);
   }
 
-  return null;
+  return results;
 }
 
 async function loadPdfBytesFromPart(
@@ -237,63 +235,91 @@ async function loadPdfBytesFromPart(
 
 async function findPdfInGmail(
   providerToken: string,
-  subject: string,
-  filenameBase: string
-): Promise<{ candidate: PdfCandidate | null; foundSubject: boolean; foundFile: boolean }> {
-  const strictFilename = ensurePdfFilenameBase(filenameBase);
-  const normalizedSubject = normalizeText(subject);
+  searchQuery: string,
+  subjectContains: string,
+  senderContains: string
+): Promise<{ candidate: PdfCandidate | null; foundSubject: boolean; foundSender: boolean; foundPdf: boolean; debug: ImportDebugLog }> {
+  const messageIds = await listCandidateMessageIds(providerToken, searchQuery);
+  const normalizedSubject = normalizeText(subjectContains);
+  const normalizedSender = normalizeText(senderContains);
 
-  const searchPlans = [
-    { query: `subject:"${subject}" has:attachment filename:"${strictFilename}"`, enforceSubjectCheck: false },
-    { query: `subject:"${subject}" has:attachment filename:"${filenameBase}"`, enforceSubjectCheck: false },
-    { query: `subject:"${subject}" has:attachment`, enforceSubjectCheck: false },
-    { query: `has:attachment filename:"${strictFilename}"`, enforceSubjectCheck: true },
-  ];
+  const subjects = new Set<string>();
+  const debug: ImportDebugLog = {
+    emailCount: messageIds.length,
+    subjects: [],
+    pdfAttachments: [],
+    selectedAttachmentId: null,
+    downloadSucceeded: false,
+  };
 
   let foundSubject = false;
-  let foundFile = false;
+  let foundSender = false;
+  let foundPdf = false;
 
-  for (const plan of searchPlans) {
-    const messageIds = await listCandidateMessageIds(providerToken, plan.query);
-    if (messageIds.length === 0) continue;
+  for (const messageId of messageIds) {
+    const message = await gmailFetch<GmailMessageResponse>(
+      providerToken,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
+    );
 
-    if (!plan.enforceSubjectCheck) {
-      foundSubject = true;
+    const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
+    if (subjectHeader) {
+      subjects.add(subjectHeader);
+      debug.subjects = Array.from(subjects).slice(0, 30);
     }
 
-    for (const messageId of messageIds) {
-      const message = await gmailFetch<GmailMessageResponse>(
-        providerToken,
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
-      );
-
-      if (plan.enforceSubjectCheck) {
-        const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
-        const subjectMatches = normalizeText(subjectHeader).includes(normalizedSubject);
-        if (!subjectMatches) continue;
-        foundSubject = true;
-      }
-
-      const pdfPart = findPdfPart(message.payload, filenameBase);
-      if (!pdfPart) continue;
-
-      foundFile = true;
-
-      const pdfBytes = await loadPdfBytesFromPart(providerToken, message.id, pdfPart);
-      if (!pdfBytes) continue;
-
-      return {
-        candidate: {
-          messageId: message.id,
-          pdfBytes,
-        },
-        foundSubject,
-        foundFile,
-      };
+    if (!normalizeText(subjectHeader).includes(normalizedSubject)) {
+      continue;
     }
+
+    foundSubject = true;
+
+    const fromHeader = getHeaderValue(message.payload?.headers, 'From');
+    if (!normalizeText(fromHeader).includes(normalizedSender)) {
+      continue;
+    }
+
+    foundSender = true;
+
+    const pdfParts = collectPdfParts(message.payload);
+    if (pdfParts.length === 0) {
+      continue;
+    }
+
+    foundPdf = true;
+
+    for (const pdfPart of pdfParts) {
+      debug.pdfAttachments.push({
+        messageId: message.id,
+        filename: pdfPart.filename,
+        attachmentId: pdfPart.attachmentId,
+      });
+    }
+
+    const selectedPart = pdfParts[0];
+    debug.selectedAttachmentId = selectedPart.attachmentId;
+
+    const pdfBytes = await loadPdfBytesFromPart(providerToken, message.id, selectedPart.part);
+    if (!pdfBytes) {
+      continue;
+    }
+
+    debug.downloadSucceeded = true;
+
+    return {
+      candidate: {
+        messageId: message.id,
+        attachmentId: selectedPart.attachmentId,
+        pdfBytes,
+      },
+      foundSubject,
+      foundSender,
+      foundPdf,
+      debug,
+    };
   }
 
-  return { candidate: null, foundSubject, foundFile };
+  return { candidate: null, foundSubject, foundSender, foundPdf, debug };
 }
 
 async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
