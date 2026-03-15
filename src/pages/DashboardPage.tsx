@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
 import { searchByFlightNumber } from '@/lib/aviation-api';
-import { importScheduleFromGmail, isGmailScopeError } from '@/lib/gmail-import';
+import { importScheduleFromGmail, isGmailScopeError, type ImportDiagnostic } from '@/lib/gmail-import';
 import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -28,22 +28,34 @@ export default function DashboardPage() {
   const { profile, user, session, refreshProfile } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [gmailSyncing, setGmailSyncing] = useState(false);
+  const [manualImporting, setManualImporting] = useState(false);
+  const [manualImportDiagnostic, setManualImportDiagnostic] = useState<ImportDiagnostic | null>(null);
   const syncAttemptRef = useRef(false);
 
   const loadSchedule = useCallback(async () => {
-    const { data } = await supabase.from('schedule_entries').select('*').order('date', { ascending: true });
+    if (!user) {
+      setSchedule([]);
+      return;
+    }
+
+    const { data } = await supabase
+      .from('schedule_entries')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: true });
+
     if (data) setSchedule(data as ScheduleEntry[]);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    loadSchedule();
+    void loadSchedule();
   }, [loadSchedule]);
 
   useEffect(() => {
-    const handleFocus = () => loadSchedule();
+    const handleFocus = () => void loadSchedule();
     window.addEventListener('focus', handleFocus);
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') loadSchedule();
+      if (document.visibilityState === 'visible') void loadSchedule();
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
@@ -69,9 +81,7 @@ export default function DashboardPage() {
     }
 
     const providerToken = tokenFromSession ?? localStorage.getItem('google_provider_token');
-    if (!providerToken) {
-      return;
-    }
+    if (!providerToken) return;
 
     syncAttemptRef.current = true;
 
@@ -106,6 +116,53 @@ export default function DashboardPage() {
 
     void syncGmailSchedule();
   }, [user, session, refreshProfile, loadSchedule]);
+
+  const handleManualImport = useCallback(async () => {
+    if (!user || !session) return;
+
+    const tokenFromSession = (session as { provider_token?: string | null }).provider_token;
+    if (tokenFromSession) {
+      localStorage.setItem('google_provider_token', tokenFromSession);
+    }
+
+    const providerToken = tokenFromSession ?? localStorage.getItem('google_provider_token');
+    if (!providerToken) {
+      toast.error('Token do Google ausente. Faça login novamente com Google.');
+      return;
+    }
+
+    setManualImporting(true);
+
+    try {
+      const result = await importScheduleFromGmail(user.id, providerToken, {
+        searchQuery: 'has:attachment filename:pdf newer_than:180d',
+        subjectContains: 'CrewRosterReport',
+        senderContains: 'iFlight',
+      });
+
+      await loadSchedule();
+      await refreshProfile();
+
+      setManualImportDiagnostic({
+        ...result.diagnostic,
+        dashboard_atualizado: true,
+      });
+
+      if (result.importedCount > 0) {
+        toast.success(`Importação manual concluída: ${result.importedCount} voo(s) novo(s).`);
+      } else {
+        toast.info(result.reason ?? 'Importação executada sem novos voos.');
+      }
+    } catch (error) {
+      if (isGmailScopeError(error)) {
+        toast.error('Permissão do Gmail não concedida. Refaça o login Google para autorizar leitura de e-mails.');
+      } else {
+        toast.error(error instanceof Error ? error.message : 'Falha na importação manual.');
+      }
+    } finally {
+      setManualImporting(false);
+    }
+  }, [loadSchedule, refreshProfile, session, user]);
 
   // Check for flight delays and create notifications
   useEffect(() => {
