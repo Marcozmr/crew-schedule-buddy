@@ -1,6 +1,9 @@
 import { supabase } from '@/integrations/supabase/client';
 import { detectAirline, parseMockSchedule } from '@/lib/store';
 import * as pdfjsLib from 'pdfjs-dist';
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 type GmailListResponse = {
   messages?: Array<{ id: string }>;
