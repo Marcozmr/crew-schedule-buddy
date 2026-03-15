@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { detectAirline, parseMockSchedule } from '@/lib/store';
+import type { ScheduleEntry } from '@/lib/types';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -259,6 +260,86 @@ async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
   return textChunks.join('\n');
 }
 
+function toFourDigitYear(year: string): string {
+  if (year.length === 4) return year;
+  const numericYear = Number(year);
+  return String(numericYear >= 70 ? 1900 + numericYear : 2000 + numericYear);
+}
+
+function normalizeDate(rawDate: string): string {
+  const parts = rawDate.split(/[\/\-]/).map((part) => part.trim());
+  if (parts.length !== 3) return rawDate;
+
+  const day = parts[0].padStart(2, '0');
+  const month = parts[1].padStart(2, '0');
+  const year = toFourDigitYear(parts[2]);
+  return `${day}/${month}/${year}`;
+}
+
+function calculateReportTimeFromDeparture(departureTime: string): string {
+  const [h, m] = departureTime.split(':').map(Number);
+  const reportMinutes = h * 60 + m - 60;
+  const normalized = (reportMinutes + 1440) % 1440;
+  const rh = Math.floor(normalized / 60);
+  const rm = normalized % 60;
+  return `${String(rh).padStart(2, '0')}:${String(rm).padStart(2, '0')}`;
+}
+
+function calculateDutyHours(dep: string, arr: string): number {
+  const [dh, dm] = dep.split(':').map(Number);
+  const [ah, am] = arr.split(':').map(Number);
+  let diff = (ah * 60 + am) - (dh * 60 + dm);
+  if (diff < 0) diff += 1440;
+  return Math.round((diff / 60) * 10) / 10;
+}
+
+function parseScheduleFromPdfText(text: string): ScheduleEntry[] {
+  const parsedByDefault = parseMockSchedule(text);
+  if (parsedByDefault.length > 0) return parsedByDefault;
+
+  const sanitized = text.replace(/\r/g, '\n').replace(/[ \t]+/g, ' ');
+  const airline = detectAirline(sanitized);
+  const uniqueKeys = new Set<string>();
+  const entries: ScheduleEntry[] = [];
+
+  const patterns = [
+    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}).{0,30}?([A-Z]{2}\s?\d{3,4}).{0,24}?([A-Z]{3})\s*(?:[-–>]|\s)\s*([A-Z]{3}).{0,20}?(\d{1,2}:\d{2}).{0,10}?(\d{1,2}:\d{2})/g,
+    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}).{0,30}?([A-Z]{2}\s?\d{3,4}).{0,20}?(\d{1,2}:\d{2}).{0,10}?(\d{1,2}:\d{2})/g,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of sanitized.matchAll(pattern)) {
+      const date = normalizeDate(match[1]);
+      const flightNumber = match[2].replace(/\s/g, '').toUpperCase();
+
+      const departure = match.length >= 6 ? (match[3] ?? 'TBD') : 'TBD';
+      const arrival = match.length >= 6 ? (match[4] ?? 'TBD') : 'TBD';
+      const departureTime = match.length >= 6 ? (match[5] ?? '00:00') : (match[3] ?? '00:00');
+      const arrivalTime = match.length >= 6 ? (match[6] ?? '00:00') : (match[4] ?? '00:00');
+
+      const key = `${date}|${flightNumber}|${departureTime}|${arrivalTime}`;
+      if (uniqueKeys.has(key)) continue;
+      uniqueKeys.add(key);
+
+      entries.push({
+        id: crypto.randomUUID(),
+        date,
+        flightNumber,
+        departure,
+        arrival,
+        departureTime,
+        arrivalTime,
+        status: 'scheduled',
+        airline,
+        reportTime: calculateReportTimeFromDeparture(departureTime),
+        dutyHours: calculateDutyHours(departureTime, arrivalTime),
+      });
+    }
+  }
+
+  return entries;
+}
+
 async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8Array): Promise<void> {
   const storagePath = `${userId}/${STORAGE_FILENAME}`;
   const bytes = Uint8Array.from(pdfBytes);
@@ -323,7 +404,7 @@ async function fetchCrewRosterPdf(
     };
   }
 
-  const parsedCount = parseMockSchedule(text).length;
+  const parsedCount = parseScheduleFromPdfText(text).length;
 
   return {
     text,
@@ -375,7 +456,7 @@ export async function importScheduleFromGmail(
     };
   }
 
-  const parsedEntries = parseMockSchedule(text);
+  const parsedEntries = parseScheduleFromPdfText(text);
   const airline = detectAirline(text);
 
   const { data: existingRows } = await supabase

@@ -24,10 +24,10 @@ export default function IFlightImportPage() {
 
     const providerTokenFromSession = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
     if (providerTokenFromSession) {
-      sessionStorage.setItem(PROVIDER_TOKEN_KEY, providerTokenFromSession);
+      localStorage.setItem(PROVIDER_TOKEN_KEY, providerTokenFromSession);
     }
 
-    const providerToken = providerTokenFromSession ?? sessionStorage.getItem(PROVIDER_TOKEN_KEY);
+    const providerToken = providerTokenFromSession ?? localStorage.getItem(PROVIDER_TOKEN_KEY);
 
     if (!providerToken) {
       toast.error('Token do Google ausente. Faça logout e login novamente para autorizar o Gmail.');

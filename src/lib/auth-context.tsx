@@ -26,6 +26,32 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
+
+const getProviderTokenFromSession = (session: Session | null) => {
+  const token = (session as { provider_token?: string | null } | null)?.provider_token;
+  return token ?? null;
+};
+
+const getProviderTokenFromUrl = () => {
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const hashParams = new URLSearchParams(hash);
+  const queryParams = new URLSearchParams(window.location.search);
+  return hashParams.get('provider_token') ?? queryParams.get('provider_token');
+};
+
+const persistProviderToken = (session: Session | null) => {
+  const sessionToken = getProviderTokenFromSession(session);
+  if (sessionToken) {
+    localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, sessionToken);
+    return;
+  }
+
+  const urlToken = getProviderTokenFromUrl();
+  if (urlToken) {
+    localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, urlToken);
+  }
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -45,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
+      persistProviderToken(session);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -56,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      persistProviderToken(session);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
