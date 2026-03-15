@@ -177,7 +177,7 @@ export default function LoginPage() {
             <div className="w-16 h-16 rounded-2xl gradient-sky flex items-center justify-center mb-4 shadow-elevated">
               <Plane className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">CrewScale</h1>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">Escalax</h1>
             <p className="text-sm text-white/60 mt-1">Gerencie sua escala de voo com inteligência</p>
           </div>
 
