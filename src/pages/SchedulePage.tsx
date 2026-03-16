@@ -4,6 +4,7 @@ import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { Calendar, List, Plane, Clock, MapPin, Coffee } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { formatDateBR, formatTimeBR, parseDateBRT } from '@/lib/date-utils';
 
 type ViewMode = 'list' | 'calendar';
 
@@ -13,15 +14,8 @@ export default function SchedulePage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
 
-  const parseEntryDate = (dateStr: string) => {
-    if (dateStr.includes('-') && dateStr.indexOf('-') === 4) return new Date(dateStr + 'T00:00:00');
-    const parts = dateStr.split(/[\/\-]/);
-    if (parts.length < 3) return new Date();
-    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-  };
-
-  const getDay = (dateStr: string) => parseEntryDate(dateStr).getDate();
-  const getMonth = (dateStr: string) => parseEntryDate(dateStr).getMonth();
+  const getMonth = (dateStr: string) => parseDateBRT(dateStr).getMonth();
+  const getDay = (dateStr: string) => parseDateBRT(dateStr).getDate();
 
   useEffect(() => {
     if (schedule.length === 0) return;
@@ -29,16 +23,11 @@ export default function SchedulePage() {
     const hasCurrentMonth = schedule.some(e => getMonth(e.date) === currentMonth);
     if (hasCurrentMonth) { setSelectedMonth(currentMonth); return; }
     let latestMonth = -1;
-    for (const e of schedule) {
-      const m = getMonth(e.date);
-      if (m > latestMonth) latestMonth = m;
-    }
+    for (const e of schedule) { const m = getMonth(e.date); if (m > latestMonth) latestMonth = m; }
     if (latestMonth >= 0) setSelectedMonth(latestMonth);
   }, [schedule]);
 
-  const filteredSchedule = useMemo(() => {
-    return schedule.filter(e => getMonth(e.date) === selectedMonth);
-  }, [schedule, selectedMonth]);
+  const filteredSchedule = useMemo(() => schedule.filter(e => getMonth(e.date) === selectedMonth), [schedule, selectedMonth]);
 
   const calendarDays = useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -46,8 +35,7 @@ export default function SchedulePage() {
     const days: { day: number; entries: typeof schedule }[] = [];
     for (let i = 0; i < firstDay; i++) days.push({ day: 0, entries: [] });
     for (let d = 1; d <= daysInMonth; d++) {
-      const entries = filteredSchedule.filter(e => getDay(e.date) === d);
-      days.push({ day: d, entries });
+      days.push({ day: d, entries: filteredSchedule.filter(e => getDay(e.date) === d) });
     }
     return days;
   }, [filteredSchedule, selectedMonth, selectedYear]);
@@ -70,10 +58,7 @@ export default function SchedulePage() {
     <AppLayout>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Minha Escala</h1>
-          <p className="text-muted-foreground text-sm">
-            {schedule.length} registros • {filteredSchedule.length} em {months[selectedMonth]}
-          </p>
+          <p className="text-muted-foreground text-sm">{schedule.length} registros • {filteredSchedule.length} em {months[selectedMonth]}</p>
         </div>
         <div className="flex items-center gap-3">
           <PdfImportDialog onImportComplete={reload} />
@@ -118,19 +103,18 @@ export default function SchedulePage() {
                   </div>
                   {entry.is_flight && (entry.departure_airport || entry.departure) && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3" />
-                      {entry.departure_airport || entry.departure} → {entry.arrival_airport || entry.arrival}
+                      <MapPin className="w-3 h-3" />{entry.departure_airport || entry.departure} → {entry.arrival_airport || entry.arrival}
                     </p>
                   )}
                   {entry.hotel_name && <p className="text-xs text-muted-foreground mt-0.5">🏨 {entry.hotel_name}</p>}
                 </div>
               </div>
               <div className="flex items-center gap-4 text-sm">
-                <div><p className="text-xs text-muted-foreground">Data</p><p className="font-mono text-foreground">{entry.date}</p></div>
+                <div><p className="text-xs text-muted-foreground">Data</p><p className="font-mono text-foreground">{formatDateBR(entry.date)}</p></div>
                 {entry.is_flight && (
                   <>
-                    <div><p className="text-xs text-muted-foreground">Horário</p><p className="font-mono text-foreground">{entry.departure_time !== '00:00' ? entry.departure_time : '—'} - {entry.arrival_time !== '00:00' ? entry.arrival_time : '—'}</p></div>
-                    {entry.report_time && <div><p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />Aprst</p><p className="font-mono font-medium text-primary">{entry.report_time}</p></div>}
+                    <div><p className="text-xs text-muted-foreground">Horário</p><p className="font-mono text-foreground">{formatTimeBR(entry.departure_time)} - {formatTimeBR(entry.arrival_time)}</p></div>
+                    {entry.report_time && <div><p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />Aprst</p><p className="font-mono font-medium text-primary">{formatTimeBR(entry.report_time)}</p></div>}
                     {entry.duty_hours != null && <div><p className="text-xs text-muted-foreground">Duty</p><p className="font-mono text-foreground">{entry.duty_hours}h</p></div>}
                     {entry.flight_hours != null && <div><p className="text-xs text-muted-foreground">Voo</p><p className="font-mono text-foreground">{entry.flight_hours}h</p></div>}
                   </>
