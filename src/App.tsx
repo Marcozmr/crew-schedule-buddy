@@ -25,6 +25,9 @@ import DutyCalcPage from "./pages/DutyCalcPage";
 import WeatherPage from "./pages/WeatherPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
+import SupportPage from "./pages/SupportPage";
 
 const queryClient = new QueryClient();
 registerQueryClient(queryClient);
