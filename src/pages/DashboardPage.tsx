@@ -126,6 +126,11 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
+      {/* === SYNC DIAGNOSTIC CARD — ALWAYS FIRST === */}
+      <div className="mb-6">
+        <SyncDiagnosticCard onSyncComplete={handleSyncComplete} lastSyncTime={lastSyncTime} />
+      </div>
+
       <div className="mb-6">
         <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold text-foreground">
           Olá, {profile?.name || 'Tripulante'} ✈️
@@ -134,11 +139,6 @@ export default function DashboardPage() {
           {profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual
           {syncing && <span className="text-primary ml-2">• Sincronizando...</span>}
         </p>
-      </div>
-
-      {/* Diagnostic Card */}
-      <div className="mb-6">
-        <SyncDiagnosticCard onSyncComplete={handleSyncComplete} lastSyncTime={lastSyncTime} />
       </div>
 
       {/* Import summary stats */}
