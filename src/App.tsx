@@ -14,6 +14,15 @@ import SchedulePage from "./pages/SchedulePage";
 import SearchPage from "./pages/SearchPage";
 import ProfilePage from "./pages/ProfilePage";
 import NotificationsPage from "./pages/NotificationsPage";
+import RegulationPage from "./pages/RegulationPage";
+import DocumentsPage from "./pages/DocumentsPage";
+import SalaryPage from "./pages/SalaryPage";
+import PerDiemPage from "./pages/PerDiemPage";
+import FlightSwapPage from "./pages/FlightSwapPage";
+import RestCalcPage from "./pages/RestCalcPage";
+import DutyCalcPage from "./pages/DutyCalcPage";
+import WeatherPage from "./pages/WeatherPage";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +51,15 @@ const AppRoutes = () => (
     <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
     <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
     <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+    <Route path="/regulation" element={<ProtectedRoute><RegulationPage /></ProtectedRoute>} />
+    <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+    <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
+    <Route path="/perdiem" element={<ProtectedRoute><PerDiemPage /></ProtectedRoute>} />
+    <Route path="/flight-swap" element={<ProtectedRoute><FlightSwapPage /></ProtectedRoute>} />
+    <Route path="/rest-calc" element={<ProtectedRoute><RestCalcPage /></ProtectedRoute>} />
+    <Route path="/duty-calc" element={<ProtectedRoute><DutyCalcPage /></ProtectedRoute>} />
+    <Route path="/weather" element={<ProtectedRoute><WeatherPage /></ProtectedRoute>} />
+    <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
