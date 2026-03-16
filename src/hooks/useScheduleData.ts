@@ -14,6 +14,19 @@ export interface ScheduleEntry {
   airline: string | null;
   report_time: string | null;
   duty_hours: number | null;
+  activity_type: string;
+  is_flight: boolean;
+  pairing_code: string | null;
+  crew_role: string | null;
+  departure_airport: string | null;
+  arrival_airport: string | null;
+  debrief_time: string | null;
+  flight_hours: number | null;
+  aircraft_type: string | null;
+  hotel_name: string | null;
+  raw_line: string | null;
+  crosses_midnight: boolean;
+  overnight: boolean;
 }
 
 export function useScheduleData() {
@@ -22,39 +35,25 @@ export function useScheduleData() {
   const [loading, setLoading] = useState(true);
 
   const loadSchedule = useCallback(async () => {
-    if (!user) {
-      setSchedule([]);
-      setLoading(false);
-      return;
-    }
-
+    if (!user) { setSchedule([]); setLoading(false); return; }
     setLoading(true);
     const { data } = await supabase
       .from('schedule_entries')
       .select('*')
       .eq('user_id', user.id)
       .order('date', { ascending: true });
-
-    if (data) setSchedule(data as ScheduleEntry[]);
+    if (data) setSchedule(data as unknown as ScheduleEntry[]);
     setLoading(false);
   }, [user]);
 
-  useEffect(() => {
-    void loadSchedule();
-  }, [loadSchedule]);
+  useEffect(() => { void loadSchedule(); }, [loadSchedule]);
 
-  // Reload on focus/visibility
   useEffect(() => {
     const handleFocus = () => void loadSchedule();
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') void loadSchedule();
-    };
+    const handleVis = () => { if (document.visibilityState === 'visible') void loadSchedule(); };
     window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
+    document.addEventListener('visibilitychange', handleVis);
+    return () => { window.removeEventListener('focus', handleFocus); document.removeEventListener('visibilitychange', handleVis); };
   }, [loadSchedule]);
 
   return { schedule, loading, reload: loadSchedule };
