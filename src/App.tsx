@@ -30,21 +30,6 @@ const queryClient = new QueryClient();
 registerQueryClient(queryClient);
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading, profile } = useAuth();
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-  if (!session) return <Navigate to="/" replace />;
-  // Redirect to onboarding if not completed (but allow access to onboarding itself)
-  if (profile && !profile.onboarding_completed) {
-    return <Navigate to="/onboarding" replace />;
-  }
-  return <>{children}</>;
-}
-
-function OnboardingRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -61,7 +46,7 @@ const AppRoutes = () => (
     <Route path="/signup" element={<SignupPage />} />
     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
     <Route path="/reset-password" element={<ResetPasswordPage />} />
-    <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
+    <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
     <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
     <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
     <Route path="/download-roster" element={<ProtectedRoute><DownloadRosterPage /></ProtectedRoute>} />
