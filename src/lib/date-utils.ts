@@ -42,7 +42,8 @@ export function formatTimeBR(time: string | null | undefined): string {
 /** Format a full ISO datetime or timestamp to dd/MM/yyyy HH:mm BRT */
 export function formatDateTimeBR(isoOrTimestamp: string | number | Date | null | undefined): string {
   if (!isoOrTimestamp) return '—';
-  const d = new TZDate(typeof isoOrTimestamp === 'string' ? new Date(isoOrTimestamp) : isoOrTimestamp, BRAZIL_TZ);
+  const raw = typeof isoOrTimestamp === 'string' ? new Date(isoOrTimestamp).getTime() : typeof isoOrTimestamp === 'number' ? isoOrTimestamp : isoOrTimestamp.getTime();
+  const d = new TZDate(raw, BRAZIL_TZ);
   const day = d.getDate().toString().padStart(2, '0');
   const month = (d.getMonth() + 1).toString().padStart(2, '0');
   const year = d.getFullYear();
