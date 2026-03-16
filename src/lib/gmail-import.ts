@@ -554,6 +554,17 @@ export async function importScheduleFromGmail(
     return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
+  const { data: authData } = await supabase.auth.getUser();
+  const authenticatedUserId = authData.user?.id ?? null;
+  const effectiveUserId = authenticatedUserId ?? userId;
+
+  if (authenticatedUserId && authenticatedUserId !== userId) {
+    console.warn('[gmail-import] userId divergente detectado, usando auth.uid atual', {
+      passedUserId: userId,
+      authUserId: authenticatedUserId,
+    });
+  }
+
   let searchResult: GmailSearchResult;
   try {
     searchResult = await findPdfInGmail(providerToken, searchQuery, subjectContains, senderContains);
