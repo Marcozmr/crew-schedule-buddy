@@ -37,10 +37,27 @@ export function useScheduleData() {
   const loadSchedule = useCallback(async () => {
     if (!user) { setSchedule([]); setLoading(false); return; }
     setLoading(true);
+
+    // Find the active roster
+    const { data: activeRoster } = await supabase
+      .from('imported_rosters')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active' as any, true)
+      .limit(1)
+      .single();
+
+    if (!activeRoster) {
+      setSchedule([]);
+      setLoading(false);
+      return;
+    }
+
     const { data } = await supabase
       .from('schedule_entries')
       .select('*')
       .eq('user_id', user.id)
+      .eq('roster_id' as any, activeRoster.id)
       .order('date', { ascending: true });
     if (data) setSchedule(data as unknown as ScheduleEntry[]);
     setLoading(false);
