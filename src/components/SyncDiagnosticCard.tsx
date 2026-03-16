@@ -21,6 +21,12 @@ type ScheduleRowPreview = {
   arrival_airport: string;
 };
 
+type ScheduleCompareRow = {
+  user_id: string;
+  date: string;
+  flight_number: string;
+};
+
 type SyncSnapshot = {
   user_id: string;
   email: string;
@@ -39,6 +45,7 @@ type SyncSnapshot = {
   latest_import_error: string | null;
   last_sync_at: string;
   schedule_entries_preview: ScheduleRowPreview[];
+  schedule_entries_compare_preview: ScheduleCompareRow[];
   // new diagnostic fields
   access_token_present: boolean;
   provider_token_present: boolean;
