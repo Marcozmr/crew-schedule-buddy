@@ -46,6 +46,15 @@ export interface RosterEntry {
   sortDatetime: string;    // ISO string for sorting
 }
 
+export interface ImportDebugInfo {
+  currentUserId: string;
+  rosterId: string | null;
+  deactivatedRosterIds: string[];
+  activeRoster: { id: string; file_name: string | null; is_active: boolean; created_at: string } | null;
+  totalRowsActiveRoster: number;
+  totalRowsOldRosters: number;
+}
+
 export interface PdfImportResult {
   success: boolean;
   header: RosterHeader | null;
@@ -56,6 +65,7 @@ export interface PdfImportResult {
   extractedTextPreview: string;
   parsedEntriesPreview: RosterEntry[];
   savedRowsPreview: Record<string, unknown>[];
+  debug: ImportDebugInfo;
   error: string | null;
 }
 
