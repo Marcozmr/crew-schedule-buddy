@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { AppLayout } from '@/components/AppLayout';
+import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { Calendar, List, Plane, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -7,10 +8,34 @@ import { motion } from 'framer-motion';
 type ViewMode = 'list' | 'calendar';
 
 export default function SchedulePage() {
-  const { schedule } = useScheduleData();
+  const { schedule, reload } = useScheduleData();
   const [view, setView] = useState<ViewMode>('list');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
+
+  // Auto-select latest month with data if current month is empty
+  useEffect(() => {
+    if (schedule.length === 0) return;
+    const currentMonth = new Date().getMonth();
+    const hasCurrentMonth = schedule.some(e => {
+      const parts = e.date.split(/[\/\-]/);
+      return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
+    });
+    if (hasCurrentMonth) {
+      setSelectedMonth(currentMonth);
+      return;
+    }
+    // Find latest month with data
+    let latestMonth = -1;
+    for (const e of schedule) {
+      const parts = e.date.split(/[\/\-]/);
+      if (parts.length >= 3) {
+        const m = parseInt(parts[1]) - 1;
+        if (m > latestMonth) latestMonth = m;
+      }
+    }
+    if (latestMonth >= 0) setSelectedMonth(latestMonth);
+  }, [schedule]);
 
   const filteredSchedule = useMemo(() => {
     return schedule.filter(e => {
@@ -20,14 +45,9 @@ export default function SchedulePage() {
     });
   }, [schedule, selectedMonth]);
 
-  // Lista sempre mostra todos os voos importados do usuário autenticado
-  const displaySchedule = useMemo(() => schedule, [schedule]);
-
   const calendarDays = useMemo(() => {
-    const yr = selectedYear;
-    const mo = selectedMonth;
-    const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-    const firstDay = new Date(yr, mo, 1).getDay();
+    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+    const firstDay = new Date(selectedYear, selectedMonth, 1).getDay();
     const days: { day: number; entries: typeof schedule }[] = [];
     for (let i = 0; i < firstDay; i++) days.push({ day: 0, entries: [] });
     for (let d = 1; d <= daysInMonth; d++) {
@@ -42,59 +62,54 @@ export default function SchedulePage() {
 
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-  const activeMonth = selectedMonth;
-
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Minha Escala</h1>
           <p className="text-muted-foreground text-sm">
-            {displaySchedule.length} voos importados no total
-            {schedule.length > 0 && ` • ${filteredSchedule.length} em ${months[activeMonth]}`}
+            {schedule.length} voos importados • {filteredSchedule.length} em {months[selectedMonth]}
           </p>
         </div>
-        <div className="flex bg-muted rounded-lg p-1">
-          <button onClick={() => setView('list')} className={`p-2 rounded-md transition-all ${view === 'list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}>
-            <List className="w-4 h-4" />
-          </button>
-          <button onClick={() => setView('calendar')} className={`p-2 rounded-md transition-all ${view === 'calendar' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}>
-            <Calendar className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-3">
+          <PdfImportDialog onImportComplete={reload} />
+          <div className="flex bg-muted rounded-lg p-1">
+            <button onClick={() => setView('list')} className={`p-2 rounded-md transition-all ${view === 'list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}><List className="w-4 h-4" /></button>
+            <button onClick={() => setView('calendar')} className={`p-2 rounded-md transition-all ${view === 'calendar' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}><Calendar className="w-4 h-4" /></button>
+          </div>
         </div>
       </div>
 
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-        {months.map((m, i) => (
-          <button key={m} onClick={() => setSelectedMonth(i)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${i === selectedMonth ? 'gradient-sky text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted shadow-card'}`}>
-            {m}
-          </button>
-        ))}
+        {months.map((m, i) => {
+          const hasData = schedule.some(e => { const parts = e.date.split(/[\/\-]/); return parts.length >= 3 && parseInt(parts[1]) - 1 === i; });
+          return (
+            <button key={m} onClick={() => setSelectedMonth(i)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${i === selectedMonth ? 'gradient-sky text-primary-foreground' : hasData ? 'bg-card text-foreground hover:bg-muted shadow-card' : 'bg-card text-muted-foreground hover:bg-muted shadow-card'}`}>
+              {m}{hasData && i !== selectedMonth && <span className="ml-1 text-xs">•</span>}
+            </button>
+          );
+        })}
       </div>
 
       {view === 'list' ? (
         <div className="space-y-3">
-          {displaySchedule.length === 0 && (
+          {filteredSchedule.length === 0 && (
             <div className="bg-card rounded-xl p-12 text-center shadow-card">
               <Calendar className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">Nenhum voo neste mês</p>
-              <p className="text-xs text-muted-foreground mt-1">Selecione outro mês ou sincronize sua escala no Dashboard.</p>
+              <p className="text-muted-foreground">Nenhum voo em {months[selectedMonth]}</p>
+              <p className="text-xs text-muted-foreground mt-1">Selecione outro mês ou importe uma nova escala.</p>
             </div>
           )}
-          {displaySchedule.map((entry, i) => (
+          {filteredSchedule.map((entry, i) => (
             <motion.div key={entry.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="bg-card rounded-xl p-4 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Plane className="w-5 h-5 text-primary" />
-                </div>
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Plane className="w-5 h-5 text-primary" /></div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-foreground">{entry.flight_number}</span>
                     {entry.airline && <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{entry.airline}</span>}
                   </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3 h-3" />{entry.departure} → {entry.arrival}
-                  </p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{entry.departure} → {entry.arrival}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-sm">
@@ -120,9 +135,7 @@ export default function SchedulePage() {
                   <>
                     <span className={`font-medium ${item.entries.length > 0 ? 'text-primary' : 'text-muted-foreground'}`}>{item.day}</span>
                     {item.entries.map(e => (
-                      <div key={e.id} className="mt-1 bg-primary/10 rounded px-1 py-0.5 text-primary font-mono truncate" title={`${e.flight_number} ${e.departure}-${e.arrival}`}>
-                        {e.flight_number}
-                      </div>
+                      <div key={e.id} className="mt-1 bg-primary/10 rounded px-1 py-0.5 text-primary font-mono truncate" title={`${e.flight_number} ${e.departure}-${e.arrival}`}>{e.flight_number}</div>
                     ))}
                   </>
                 )}
