@@ -729,7 +729,7 @@ export async function importScheduleFromGmail(
   }
 
   const reason = insertedRowsCount === 0 ? 'Importação processada, mas sem voos novos para inserir.' : savePdfResult.warning ?? undefined;
-  return buildImportResult(rows.length, parsedEntries.length, airline, diagnostic, reason);
+  return buildImportResult(insertedRowsCount, parsedEntries.length, airline, diagnostic, reason);
 }
 
 export function isGmailScopeError(error: unknown): boolean {
