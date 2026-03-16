@@ -32,27 +32,78 @@ export default function UploadPage() {
 
     const airline = detectAirline(text);
 
-    // Insert into database
-    const rows = entries.map(e => ({
-      user_id: user.id,
-      date: e.date,
-      flight_number: e.flightNumber,
-      departure: e.departure,
-      arrival: e.arrival,
-      departure_time: e.departureTime,
-      arrival_time: e.arrivalTime,
-      status: e.status,
-      airline: e.airline,
-      report_time: e.reportTime || null,
-      duty_hours: e.dutyHours || null,
-    }));
+    // Deactivate previous rosters and create a new active roster for this import
+    await supabase
+      .from('imported_rosters')
+      .update({ is_active: false })
+      .eq('user_id', user.id)
+      .eq('is_active', true);
 
-    const { error } = await supabase.from('schedule_entries').insert(rows);
+    const createdAtMs = Date.now();
+    const sourceFilename = fileName || 'manual-text-input.txt';
+    const sourceMessageId = `manual-text-${createdAtMs}`;
+    const storagePath = `manual/${user.id}/${createdAtMs}-${sourceFilename}`;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any)
+      .insert({
+        user_id: user.id,
+        file_name: sourceFilename,
+        source_message_id: sourceMessageId,
+        storage_path: storagePath,
+        parser_version: 'manual-text-v1',
+        import_status: 'processing',
+        parsed_count: entries.length,
+        is_active: true,
+      })
+      .select('id')
+      .single();
+
+    if (rosterError || !rosterRow?.id) {
+      toast.error('Erro ao criar importação ativa');
+      setProcessing(false);
+      return;
+    }
+
+    const rows = entries.map((e) => {
+      const parts = e.date.split('/');
+      const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}` : e.date;
+      return {
+        user_id: user.id,
+        roster_id: rosterRow.id,
+        date: isoDate,
+        flight_number: e.flightNumber,
+        departure: e.departure,
+        arrival: e.arrival,
+        departure_time: e.departureTime,
+        arrival_time: e.arrivalTime,
+        status: e.status,
+        airline: e.airline,
+        report_time: e.reportTime || null,
+        duty_hours: e.dutyHours || null,
+        flight_hours: e.dutyHours || null,
+        is_flight: true,
+        activity_type: 'flight',
+        sort_datetime: `${isoDate}T${(e.departureTime || '00:00')}:00`,
+      };
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('schedule_entries') as any).insert(rows);
     if (error) {
+      await supabase
+        .from('imported_rosters')
+        .update({ import_status: 'error', import_error: error.message, inserted_count: 0 })
+        .eq('id', rosterRow.id);
       toast.error('Erro ao salvar escala no banco de dados');
       setProcessing(false);
       return;
     }
+
+    await supabase
+      .from('imported_rosters')
+      .update({ import_status: 'success', inserted_count: rows.length, import_error: null })
+      .eq('id', rosterRow.id);
 
     // Update airline on profile
     if (airline !== 'Não identificada') {

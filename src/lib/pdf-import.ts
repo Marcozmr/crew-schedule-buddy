@@ -370,9 +370,25 @@ function extractHotel(text: string): string {
 
 export async function importPdfFile(file: File, userId: string): Promise<PdfImportResult> {
   const fileName = file.name;
-  const emptyResult = (error: string): PdfImportResult => ({
-    success: false, header: null, parsedCount: 0, insertedCount: 0,
-    rosterId: null, fileName, extractedTextPreview: '', parsedEntriesPreview: [], savedRowsPreview: [], error,
+  const emptyResult = (error: string, currentUserId: string): PdfImportResult => ({
+    success: false,
+    header: null,
+    parsedCount: 0,
+    insertedCount: 0,
+    rosterId: null,
+    fileName,
+    extractedTextPreview: '',
+    parsedEntriesPreview: [],
+    savedRowsPreview: [],
+    debug: {
+      currentUserId,
+      rosterId: null,
+      deactivatedRosterIds: [],
+      activeRoster: null,
+      totalRowsActiveRoster: 0,
+      totalRowsOldRosters: 0,
+    },
+    error,
   });
 
   try {
@@ -392,11 +408,11 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     try {
       extractedText = await extractTextFromPdf(arrayBuffer);
     } catch (err) {
-      return emptyResult(`Falha ao extrair texto do PDF: ${err instanceof Error ? err.message : 'erro'}`);
+      return emptyResult(`Falha ao extrair texto do PDF: ${err instanceof Error ? err.message : 'erro'}`, effectiveUserId);
     }
 
     if (!extractedText.trim()) {
-      return emptyResult('O PDF não contém texto extraível. Pode ser um PDF de imagem (escaneado).');
+      return emptyResult('O PDF não contém texto extraível. Pode ser um PDF de imagem (escaneado).', effectiveUserId);
     }
 
     // 4. Parse header
@@ -406,23 +422,38 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     const entries = parseEntries(extractedText);
     if (entries.length === 0) {
       return {
-        success: false, header, parsedCount: 0, insertedCount: 0,
-        rosterId: null, fileName, extractedTextPreview: extractedText.substring(0, 1000),
-        parsedEntriesPreview: [], savedRowsPreview: [], error: 'Nenhum voo ou atividade identificado no PDF.',
+        success: false,
+        header,
+        parsedCount: 0,
+        insertedCount: 0,
+        rosterId: null,
+        fileName,
+        extractedTextPreview: extractedText.substring(0, 1000),
+        parsedEntriesPreview: [],
+        savedRowsPreview: [],
+        debug: {
+          currentUserId: effectiveUserId,
+          rosterId: null,
+          deactivatedRosterIds: [],
+          activeRoster: null,
+          totalRowsActiveRoster: 0,
+          totalRowsOldRosters: 0,
+        },
+        error: 'Nenhum voo ou atividade identificado no PDF.',
       };
     }
 
     // 6. Deactivate previous rosters
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from('imported_rosters') as any)
+    const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
       .update({ is_active: false })
       .eq('user_id', effectiveUserId)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .select('id');
 
-    // Delete old schedule entries for this user
-    await supabase.from('schedule_entries').delete().eq('user_id', effectiveUserId);
+    const deactivatedRosterIds = ((deactivatedRows as Array<{ id: string }> | null) ?? []).map((r) => r.id);
 
-    // 7. Create imported_rosters record
+    // 7. Create imported_rosters record as ACTIVE
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
@@ -446,12 +477,12 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     }).select('id').single();
 
     if (rosterError) {
-      return emptyResult(`Erro ao criar roster: ${rosterError.message}`);
+      return emptyResult(`Erro ao criar roster: ${rosterError.message}`, effectiveUserId);
     }
 
     const rosterId = rosterRow?.id || null;
 
-    // 8. Build rows
+    // 8. Build rows (mantém histórico antigo, sem apagar)
     const rows = entries.map(e => ({
       user_id: effectiveUserId,
       roster_id: rosterId,
@@ -493,7 +524,7 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       if (insertError) {
         for (const row of rows) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase.from('schedule_entries') as any).insert(row);
+          const { error } = await (supabase.from('schedule_entries') as any).insert([row]);
           if (!error) insertedCount++;
         }
       } else {
@@ -518,7 +549,7 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       await supabase.from('profiles').update(updates).eq('user_id', effectiveUserId);
     }
 
-    // 12. Fetch saved rows preview
+    // 12. Fetch diagnostics
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: savedPreview } = await (supabase.from('schedule_entries') as any)
       .select('date, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, activity_type, is_flight, raw_line, aircraft_type, flight_hours, duty_hours, sort_datetime')
@@ -526,6 +557,27 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       .eq('roster_id', rosterId)
       .order('sort_datetime', { ascending: true })
       .limit(10);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: activeRosterData } = await (supabase.from('imported_rosters') as any)
+      .select('id, file_name, is_active, created_at')
+      .eq('user_id', effectiveUserId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: activeCount } = await (supabase.from('schedule_entries') as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', effectiveUserId)
+      .eq('roster_id', rosterId);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: oldCount } = await (supabase.from('schedule_entries') as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', effectiveUserId)
+      .neq('roster_id', rosterId);
 
     return {
       success: true,
@@ -537,9 +589,17 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       extractedTextPreview: extractedText.substring(0, 1000),
       parsedEntriesPreview: entries.slice(0, 10),
       savedRowsPreview: (savedPreview as Record<string, unknown>[]) || [],
+      debug: {
+        currentUserId: effectiveUserId,
+        rosterId,
+        deactivatedRosterIds,
+        activeRoster: (activeRosterData as { id: string; file_name: string | null; is_active: boolean; created_at: string } | null) ?? null,
+        totalRowsActiveRoster: activeCount ?? 0,
+        totalRowsOldRosters: oldCount ?? 0,
+      },
       error: null,
     };
   } catch (err) {
-    return emptyResult(err instanceof Error ? err.message : 'Erro desconhecido');
+    return emptyResult(err instanceof Error ? err.message : 'Erro desconhecido', userId);
   }
 }

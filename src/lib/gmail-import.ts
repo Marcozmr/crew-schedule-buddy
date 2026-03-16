@@ -483,7 +483,7 @@ function buildImportResult(
   };
 }
 
-async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8Array): Promise<SavePdfResult> {
+async function savePdfIntoApp(userId: string, _messageId: string, pdfBytes: Uint8Array): Promise<SavePdfResult> {
   const storagePath = `${userId}/${STORAGE_FILENAME}`;
   const bytes = Uint8Array.from(pdfBytes);
   const pdfBlob = new Blob([bytes.buffer], { type: 'application/pdf' });
@@ -499,21 +499,14 @@ async function savePdfIntoApp(userId: string, messageId: string, pdfBytes: Uint8
     return {
       ok: false,
       warning: 'Encontrei o PDF no Gmail, mas não consegui salvar o arquivo bruto no storage.',
+      storagePath: null,
     };
   }
 
-  const { error: metadataError } = await supabase.from('imported_rosters').insert([
-    {
-      user_id: userId,
-      file_name: STORAGE_FILENAME,
-      source_message_id: messageId,
-      storage_path: storagePath,
-    },
-  ]);
-
   return {
     ok: true,
-    warning: metadataError ? 'PDF salvo no storage, mas não consegui registrar metadados na tabela imported_rosters.' : null,
+    warning: null,
+    storagePath,
   };
 }
 

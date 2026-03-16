@@ -151,7 +151,13 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                     </div>
                   )}
 
-                  {result.rosterId && <p className="text-muted-foreground">roster_id: <span className="font-mono text-foreground">{result.rosterId}</span></p>}
+                  {result.rosterId && <p className="text-muted-foreground">roster_id novo: <span className="font-mono text-foreground">{result.rosterId}</span></p>}
+                  <p className="text-muted-foreground">user_id atual: <span className="font-mono text-foreground">{result.debug.currentUserId}</span></p>
+                  <p className="text-muted-foreground">imported_rosters desativadas: <span className="font-mono text-foreground">{result.debug.deactivatedRosterIds.length > 0 ? result.debug.deactivatedRosterIds.join(', ') : 'nenhuma'}</span></p>
+                  <p className="text-muted-foreground">imported_rosters ativa: <span className="font-mono text-foreground">{result.debug.activeRoster ? `${result.debug.activeRoster.id} (${result.debug.activeRoster.file_name ?? 'sem nome'})` : 'não encontrada'}</span></p>
+                  <p className="text-muted-foreground">inserted_rows_count: <span className="font-mono text-foreground">{result.insertedCount}</span></p>
+                  <p className="text-muted-foreground">total_rows_roster_ativo: <span className="font-mono text-foreground">{result.debug.totalRowsActiveRoster}</span></p>
+                  <p className="text-muted-foreground">total_rows_rosters_antigos: <span className="font-mono text-foreground">{result.debug.totalRowsOldRosters}</span></p>
                 </div>
               )}
 
