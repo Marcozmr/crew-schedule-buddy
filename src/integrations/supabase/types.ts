@@ -47,6 +47,172 @@ export type Database = {
         }
         Relationships: []
       }
+      feedback_messages: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          message: string
+          route: string | null
+          status: string
+          subject: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          message: string
+          route?: string | null
+          status?: string
+          subject?: string | null
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          message?: string
+          route?: string | null
+          status?: string
+          subject?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      flight_swap_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          offer_id: string
+          sender_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          offer_id: string
+          sender_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          offer_id?: string
+          sender_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_swap_messages_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "flight_swap_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flight_swap_offers: {
+        Row: {
+          arrival_airport: string | null
+          created_at: string
+          departure_airport: string | null
+          flight_date: string | null
+          flight_number: string | null
+          id: string
+          notes: string | null
+          owner_user_id: string
+          schedule_entry_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          arrival_airport?: string | null
+          created_at?: string
+          departure_airport?: string | null
+          flight_date?: string | null
+          flight_number?: string | null
+          id?: string
+          notes?: string | null
+          owner_user_id: string
+          schedule_entry_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          arrival_airport?: string | null
+          created_at?: string
+          departure_airport?: string | null
+          flight_date?: string | null
+          flight_number?: string | null
+          id?: string
+          notes?: string | null
+          owner_user_id?: string
+          schedule_entry_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_swap_offers_schedule_entry_id_fkey"
+            columns: ["schedule_entry_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flight_swap_proposals: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          offer_id: string
+          proposed_schedule_entry_id: string | null
+          proposer_user_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          offer_id: string
+          proposed_schedule_entry_id?: string | null
+          proposer_user_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          offer_id?: string
+          proposed_schedule_entry_id?: string | null
+          proposer_user_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_swap_proposals_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "flight_swap_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flight_swap_proposals_proposed_schedule_entry_id_fkey"
+            columns: ["proposed_schedule_entry_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       flight_swap_requests: {
         Row: {
           created_at: string
