@@ -37,10 +37,7 @@ export default function SchedulePage() {
   }, [schedule]);
 
   const filteredSchedule = useMemo(() => {
-    return schedule.filter(e => {
-      const parts = e.date.split(/[\/\-]/);
-      return parts.length >= 3 && parseInt(parts[1]) - 1 === selectedMonth;
-    });
+    return schedule.filter(e => getMonth(e.date) === selectedMonth);
   }, [schedule, selectedMonth]);
 
   const calendarDays = useMemo(() => {
