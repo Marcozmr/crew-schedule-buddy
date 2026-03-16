@@ -1,0 +1,1 @@
+ALTER TABLE public.imported_rosters ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT false;
