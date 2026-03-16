@@ -77,6 +77,11 @@ export function FeedbackFAB() {
       return;
     }
 
+    if (!checkRateLimit('support', 3, 60_000)) {
+      toast.error(getRateLimitMessage());
+      return;
+    }
+
     setSending(true);
     setSubmitError(null);
 

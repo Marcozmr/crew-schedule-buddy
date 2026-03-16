@@ -135,6 +135,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </main>
 
       <FeedbackFAB />
+      <PWAInstallPrompt />
     </div>
   );
 }

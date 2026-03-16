@@ -28,6 +28,10 @@ export default function LoginPage() {
       toast.error('Preencha email e senha');
       return;
     }
+    if (!checkRateLimit('login', 5, 60_000)) {
+      toast.error(getRateLimitMessage());
+      return;
+    }
     setLoading(true);
     try {
       await signIn(email, password);
