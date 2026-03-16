@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: "EscalaX",
         short_name: "EscalaX",
-        description: "Gestão inteligente de escala para tripulantes de aviação",
+        description: "EscalaX",
         start_url: "/",
         display: "standalone",
         background_color: "#0B5ED7",

@@ -1,7 +1,7 @@
 {
   "name": "EscalaX",
   "short_name": "EscalaX",
-  "description": "Gestão de escala de tripulantes",
+  "description": "EscalaX",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B5ED7",
