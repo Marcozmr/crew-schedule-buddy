@@ -126,6 +126,11 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
+      {/* === SYNC DIAGNOSTIC CARD — ALWAYS FIRST === */}
+      <div className="mb-6">
+        <SyncDiagnosticCard onSyncComplete={handleSyncComplete} lastSyncTime={lastSyncTime} />
+      </div>
+
       <div className="mb-6">
         <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold text-foreground">
           Olá, {profile?.name || 'Tripulante'} ✈️
@@ -134,11 +139,6 @@ export default function DashboardPage() {
           {profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual
           {syncing && <span className="text-primary ml-2">• Sincronizando...</span>}
         </p>
-      </div>
-
-      {/* Diagnostic Card */}
-      <div className="mb-6">
-        <SyncDiagnosticCard onSyncComplete={handleSyncComplete} lastSyncTime={lastSyncTime} />
       </div>
 
       {/* Import summary stats */}
@@ -266,39 +266,51 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Recent flights */}
-      {schedule.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-card rounded-xl p-6 shadow-card">
-          <h2 className="font-semibold text-foreground mb-4">Últimos voos da escala</h2>
-          <div className="space-y-3">
-            {schedule.slice(-5).reverse().map(entry => (
-              <div key={entry.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Plane className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{entry.flight_number}</p>
-                    <p className="text-xs text-muted-foreground">{entry.departure} → {entry.arrival}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-mono text-foreground">{entry.date}</p>
-                  <p className="text-xs text-muted-foreground">{entry.departure_time} - {entry.arrival_time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
+      {/* === TABELA DE VOOS IMPORTADOS — SEMPRE VISÍVEL === */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-card rounded-xl p-6 shadow-card">
+        <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+          <Plane className="w-5 h-5 text-primary" />
+          Voos importados ({schedule.length})
+        </h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Query: <code className="bg-muted px-1 rounded">schedule_entries.select(*).eq(user_id, {user?.id?.slice(0, 8)}…).order(date, asc)</code>
+        </p>
 
-      {schedule.length === 0 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl p-12 shadow-card text-center">
-          <Plane className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="font-semibold text-foreground mb-2">Nenhuma escala importada</h3>
-          <p className="text-sm text-muted-foreground">Clique em "Sincronizar agora" acima para importar sua escala do Gmail.</p>
-        </motion.div>
-      )}
+        {schedule.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground text-xs">
+                  <th className="py-2 pr-3">Data</th>
+                  <th className="py-2 pr-3">Voo</th>
+                  <th className="py-2 pr-3">Rota</th>
+                  <th className="py-2 pr-3">Horário</th>
+                  <th className="py-2 pr-3">Duty (h)</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedule.map(entry => (
+                  <tr key={entry.id} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-3 font-mono text-foreground">{entry.date}</td>
+                    <td className="py-2 pr-3 font-medium text-foreground">{entry.flight_number}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{entry.departure} → {entry.arrival}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{entry.departure_time} - {entry.arrival_time}</td>
+                    <td className="py-2 pr-3 text-foreground">{entry.duty_hours ?? '—'}</td>
+                    <td className="py-2 text-muted-foreground">{entry.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Plane className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="font-medium text-foreground mb-1">Nenhum voo encontrado</p>
+            <p className="text-xs text-muted-foreground">Clique em "Sincronizar agora" no card acima para importar sua escala do Gmail.</p>
+          </div>
+        )}
+      </motion.div>
     </AppLayout>
   );
 }
