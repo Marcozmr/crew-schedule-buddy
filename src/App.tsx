@@ -66,6 +66,9 @@ const AppRoutes = () => (
     <Route path="/duty-calc" element={<ProtectedRoute><DutyCalcPage /></ProtectedRoute>} />
     <Route path="/weather" element={<ProtectedRoute><WeatherPage /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+    <Route path="/privacy" element={<PrivacyPage />} />
+    <Route path="/terms" element={<TermsPage />} />
+    <Route path="/support" element={<SupportPage />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
