@@ -105,7 +105,7 @@ export default function DashboardPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground text-xs">
-                    <th className="py-2 pr-3">Data</th><th className="py-2 pr-3">Voo</th><th className="py-2 pr-3">Origem</th><th className="py-2 pr-3">Destino</th><th className="py-2 pr-3">Saída</th><th className="py-2 pr-3">Chegada</th><th className="py-2 pr-3">Aeronave</th><th className="py-2">Duty</th>
+                    <th className="py-2 pr-3">Data</th><th className="py-2 pr-3">Voo</th><th className="py-2 pr-3">Origem</th><th className="py-2 pr-3">Destino</th><th className="py-2 pr-3">Saída</th><th className="py-2 pr-3">Chegada</th><th className="py-2 pr-3">Aeronave</th><th className="py-2">Jornada</th>
                   </tr>
                 </thead>
                 <tbody>
