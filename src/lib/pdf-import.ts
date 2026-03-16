@@ -457,7 +457,7 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
         source_pdf_path: storagePath,
         crosses_midnight: e.crossesMidnight,
         overnight: e.overnight,
-      } as Record<string, unknown>));
+      }));
 
     // 9. Insert
     let insertedCount = 0;
