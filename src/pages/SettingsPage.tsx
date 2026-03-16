@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Settings, Save, LogOut, Trash2 } from 'lucide-react';
+import { Settings, Save, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,7 +23,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!user) return;
-    // Load settings
     supabase.from('user_settings').select('*').eq('user_id', user.id).maybeSingle().then(({ data }) => {
       if (data) {
         setForm({
@@ -44,7 +43,6 @@ export default function SettingsPage() {
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
-    // Upsert settings
     const { error } = await supabase.from('user_settings').upsert({
       user_id: user.id,
       base_airport: form.base_airport,
@@ -55,14 +53,9 @@ export default function SettingsPage() {
       theme: form.theme,
     }, { onConflict: 'user_id' });
 
-    // Update profile name/airline
     if (form.name || form.company_name) {
-      await supabase.from('profiles').update({
-        name: form.name,
-        airline: form.company_name,
-      }).eq('user_id', user.id);
+      await supabase.from('profiles').update({ name: form.name, airline: form.company_name }).eq('user_id', user.id);
     }
-
     if (error) toast.error(error.message);
     else toast.success('Ajustes salvos!');
     setSaving(false);
@@ -78,7 +71,6 @@ export default function SettingsPage() {
       <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
         <Settings className="w-6 h-6 text-primary" />Ajustes
       </motion.h1>
-
       <div className="max-w-lg space-y-6">
         <div className="bg-card rounded-xl p-6 shadow-card border border-border">
           <h3 className="font-semibold text-foreground mb-4">Perfil</h3>
@@ -89,7 +81,6 @@ export default function SettingsPage() {
             <div><Label className="text-xs">Empresa</Label><Input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="LATAM" /></div>
           </div>
         </div>
-
         <div className="bg-card rounded-xl p-6 shadow-card border border-border">
           <h3 className="font-semibold text-foreground mb-4">Preferências</h3>
           <div className="space-y-4">
@@ -121,15 +112,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-
-        <Button onClick={handleSave} disabled={saving} className="w-full">
-          <Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar Ajustes'}
-        </Button>
-
+        <Button onClick={handleSave} disabled={saving} className="w-full"><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar Ajustes'}</Button>
         <div className="pt-4 border-t border-border">
-          <Button variant="outline" className="w-full text-destructive" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 mr-2" />Sair da Conta
-          </Button>
+          <Button variant="outline" className="w-full text-destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sair da Conta</Button>
         </div>
       </div>
     </AppLayout>

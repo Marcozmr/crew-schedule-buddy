@@ -4,11 +4,11 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Upload, Trash2, Eye, FileText, Camera } from 'lucide-react';
+import { Upload, Trash2, Eye, FileText, Camera, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { formatDateTimeBR } from '@/lib/date-utils';
 
 interface DocRow {
   id: string;
@@ -32,21 +32,30 @@ export default function DocumentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
-    if (!user) return;
-    const { data } = await supabase.from('documents').select('*').eq('user_id', user.id).order('uploaded_at', { ascending: false });
+    if (!user) { setDocs([]); setLoading(false); return; }
+    setLoading(true);
+    const { data } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('uploaded_at', { ascending: false });
     setDocs((data as DocRow[]) || []);
     setLoading(false);
   };
 
+  // Reload when user changes
   useEffect(() => { load(); }, [user]);
 
   const handleUpload = async (file: File) => {
     if (!user) return;
     setUploading(true);
     try {
-      const path = `${user.id}/${Date.now()}_${file.name}`;
+      // Store in user-scoped path: documents/<user_id>/<category>/<timestamp>_<filename>
+      const category = tab.toLowerCase();
+      const path = `${user.id}/${category}/${Date.now()}_${file.name}`;
       const { error: uploadErr } = await supabase.storage.from('documents').upload(path, file);
       if (uploadErr) throw uploadErr;
+
       const { error: dbErr } = await supabase.from('documents').insert({
         user_id: user.id,
         category: tab,
@@ -56,6 +65,7 @@ export default function DocumentsPage() {
         notes: notes || null,
       });
       if (dbErr) throw dbErr;
+
       toast.success('Documento enviado!');
       setNotes('');
       load();
@@ -63,12 +73,20 @@ export default function DocumentsPage() {
       toast.error(e.message || 'Erro ao enviar');
     } finally {
       setUploading(false);
+      // Reset the file input
+      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
   const handleDelete = async (doc: DocRow) => {
+    if (!user) return;
+    const confirmed = window.confirm(`Excluir "${doc.file_name}"?`);
+    if (!confirmed) return;
+
+    // Remove from storage first
     await supabase.storage.from('documents').remove([doc.storage_path]);
-    await supabase.from('documents').delete().eq('id', doc.id);
+    // Remove from database
+    await supabase.from('documents').delete().eq('id', doc.id).eq('user_id', user.id);
     toast.success('Documento excluído');
     load();
   };
@@ -76,6 +94,18 @@ export default function DocumentsPage() {
   const handleView = async (doc: DocRow) => {
     const { data } = await supabase.storage.from('documents').createSignedUrl(doc.storage_path, 300);
     if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+  };
+
+  const handleDownload = async (doc: DocRow) => {
+    const { data } = await supabase.storage.from('documents').download(doc.storage_path);
+    if (data) {
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.file_name;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   const filtered = docs.filter(d => d.category === tab);
@@ -88,7 +118,11 @@ export default function DocumentsPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="mb-4">
-          {CATEGORIES.map(c => <TabsTrigger key={c} value={c}>{c}</TabsTrigger>)}
+          {CATEGORIES.map(c => (
+            <TabsTrigger key={c} value={c}>
+              {c} {docs.filter(d => d.category === c).length > 0 && <span className="ml-1 text-xs opacity-60">({docs.filter(d => d.category === c).length})</span>}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {CATEGORIES.map(cat => (
@@ -119,15 +153,17 @@ export default function DocumentsPage() {
             ) : (
               <div className="space-y-3">
                 {filtered.map(doc => (
-                  <div key={doc.id} className="bg-card rounded-xl p-4 shadow-card flex items-center justify-between">
+                  <div key={doc.id} className="bg-card rounded-xl p-4 shadow-card flex items-center justify-between border border-border">
                     <div className="min-w-0">
                       <p className="font-medium text-foreground text-sm truncate">{doc.file_name}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(doc.uploaded_at).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-xs text-muted-foreground">{formatDateTimeBR(doc.uploaded_at)}</p>
+                      {doc.mime_type && <p className="text-xs text-muted-foreground">{doc.mime_type}</p>}
                       {doc.notes && <p className="text-xs text-muted-foreground mt-1">{doc.notes}</p>}
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <Button size="icon" variant="ghost" onClick={() => handleView(doc)}><Eye className="w-4 h-4" /></Button>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(doc)}><Trash2 className="w-4 h-4" /></Button>
+                    <div className="flex gap-1 shrink-0">
+                      <Button size="icon" variant="ghost" onClick={() => handleView(doc)} title="Visualizar"><Eye className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleDownload(doc)} title="Baixar"><Download className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(doc)} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
                     </div>
                   </div>
                 ))}

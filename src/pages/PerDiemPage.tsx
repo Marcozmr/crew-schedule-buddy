@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { UtensilsCrossed, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { formatDateBR } from '@/lib/date-utils';
 
 export default function PerDiemPage() {
   const { user } = useAuth();
@@ -18,7 +19,8 @@ export default function PerDiemPage() {
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    if (!user) return;
+    if (!user) { setEntries([]); setLoading(false); return; }
+    setLoading(true);
     const { data } = await supabase.from('perdiem_entries').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(100);
     setEntries(data || []);
     setLoading(false);
@@ -38,7 +40,8 @@ export default function PerDiemPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from('perdiem_entries').delete().eq('id', id);
+    if (!user) return;
+    await supabase.from('perdiem_entries').delete().eq('id', id).eq('user_id', user.id);
     toast.success('Excluída');
     load();
   };
@@ -82,7 +85,7 @@ export default function PerDiemPage() {
               <tbody>
                 {entries.map(e => (
                   <tr key={e.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3 font-mono text-foreground">{e.date}</td>
+                    <td className="py-2 pr-3 font-mono text-foreground">{formatDateBR(e.date)}</td>
                     <td className="py-2 pr-3 text-foreground">{e.location || '—'}</td>
                     <td className="py-2 pr-3 text-foreground">{e.quantity}</td>
                     <td className="py-2 pr-3 text-muted-foreground">R$ {Number(e.unit_value).toFixed(2)}</td>

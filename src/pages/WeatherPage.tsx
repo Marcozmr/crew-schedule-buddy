@@ -4,11 +4,10 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Cloud, Search, Thermometer, Wind, Eye, Droplets } from 'lucide-react';
+import { Cloud, Search, Thermometer, Wind, Droplets } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
-// IATA to coordinates mapping (common Brazilian airports)
 const AIRPORTS: Record<string, { lat: number; lon: number; name: string; icao: string }> = {
   GRU: { lat: -23.4356, lon: -46.4731, name: 'Guarulhos', icao: 'SBGR' },
   CGH: { lat: -23.6261, lon: -46.6564, name: 'Congonhas', icao: 'SBSP' },
@@ -32,14 +31,7 @@ const AIRPORTS: Record<string, { lat: number; lon: number; name: string; icao: s
   GYN: { lat: -16.6319, lon: -49.2206, name: 'Goiânia', icao: 'SBGO' },
 };
 
-interface WeatherData {
-  temp: number;
-  windSpeed: number;
-  windDir: number;
-  humidity: number;
-  condition: string;
-  visibility?: number;
-}
+interface WeatherData { temp: number; windSpeed: number; windDir: number; humidity: number; condition: string; }
 
 export default function WeatherPage() {
   const { user } = useAuth();
@@ -51,7 +43,7 @@ export default function WeatherPage() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setRecentSearches([]); return; }
     supabase.from('weather_recent_searches').select('airport_code').eq('user_id', user.id).order('searched_at', { ascending: false }).limit(5)
       .then(({ data }) => setRecentSearches([...new Set((data || []).map(d => d.airport_code))]));
   }, [user]);
@@ -61,44 +53,20 @@ export default function WeatherPage() {
     if (!q) return;
     const apt = AIRPORTS[q];
     if (!apt) { toast.error(`Aeroporto ${q} não encontrado`); return; }
-
     setLoading(true);
     setCode(q);
-
     try {
-      // Open-Meteo
       const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${apt.lat}&longitude=${apt.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&timezone=America/Sao_Paulo`);
       const wxData = await wxRes.json();
       const c = wxData.current;
-      setWeather({
-        temp: c.temperature_2m,
-        windSpeed: c.wind_speed_10m,
-        windDir: c.wind_direction_10m,
-        humidity: c.relative_humidity_2m,
-        condition: getCondition(c.weather_code),
-      });
-
-      // METAR/TAF from AviationWeather
-      try {
-        const metarRes = await fetch(`https://aviationweather.gov/api/data/metar?ids=${apt.icao}&format=raw`);
-        setMetar(await metarRes.text());
-      } catch { setMetar('Indisponível'); }
-
-      try {
-        const tafRes = await fetch(`https://aviationweather.gov/api/data/taf?ids=${apt.icao}&format=raw`);
-        setTaf(await tafRes.text());
-      } catch { setTaf('Indisponível'); }
-
-      // Save search
+      setWeather({ temp: c.temperature_2m, windSpeed: c.wind_speed_10m, windDir: c.wind_direction_10m, humidity: c.relative_humidity_2m, condition: getCondition(c.weather_code) });
+      try { const r = await fetch(`https://aviationweather.gov/api/data/metar?ids=${apt.icao}&format=raw`); setMetar(await r.text()); } catch { setMetar('Indisponível'); }
+      try { const r = await fetch(`https://aviationweather.gov/api/data/taf?ids=${apt.icao}&format=raw`); setTaf(await r.text()); } catch { setTaf('Indisponível'); }
       if (user) {
         await supabase.from('weather_recent_searches').insert({ user_id: user.id, airport_code: q });
         setRecentSearches(prev => [q, ...prev.filter(p => p !== q)].slice(0, 5));
       }
-    } catch (e: any) {
-      toast.error('Erro ao buscar clima');
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error('Erro ao buscar clima'); } finally { setLoading(false); }
   };
 
   const getCondition = (code: number): string => {
@@ -115,23 +83,14 @@ export default function WeatherPage() {
       <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
         <Cloud className="w-6 h-6 text-primary" />Clima
       </motion.h1>
-
       <div className="bg-card rounded-xl p-6 shadow-card mb-6 border border-border max-w-lg">
         <div className="flex gap-2 mb-3">
           <Input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Código IATA (BSB, GRU...)" onKeyDown={e => e.key === 'Enter' && search()} className="uppercase" />
           <Button onClick={() => search()} disabled={loading}><Search className="w-4 h-4" /></Button>
         </div>
-        {recentSearches.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            {recentSearches.map(s => (
-              <Button key={s} size="sm" variant="outline" onClick={() => search(s)} className="text-xs">{s}</Button>
-            ))}
-          </div>
-        )}
+        {recentSearches.length > 0 && <div className="flex gap-2 flex-wrap">{recentSearches.map(s => <Button key={s} size="sm" variant="outline" onClick={() => search(s)} className="text-xs">{s}</Button>)}</div>}
       </div>
-
       {loading && <div className="flex justify-center py-10"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>}
-
       {weather && !loading && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 max-w-lg">
           <div className="bg-card rounded-xl p-6 shadow-card">
@@ -144,20 +103,8 @@ export default function WeatherPage() {
               <div className="flex items-center gap-2"><Cloud className="w-5 h-5 text-primary" /><div><p className="text-xs text-muted-foreground">Condição</p><p className="text-xl font-bold text-foreground">{weather.condition}</p></div></div>
             </div>
           </div>
-
-          {metar && (
-            <div className="bg-card rounded-xl p-6 shadow-card">
-              <h3 className="font-semibold text-foreground mb-2">METAR</h3>
-              <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap bg-muted p-3 rounded-lg">{metar || 'Indisponível'}</pre>
-            </div>
-          )}
-
-          {taf && (
-            <div className="bg-card rounded-xl p-6 shadow-card">
-              <h3 className="font-semibold text-foreground mb-2">TAF</h3>
-              <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap bg-muted p-3 rounded-lg">{taf || 'Indisponível'}</pre>
-            </div>
-          )}
+          {metar && <div className="bg-card rounded-xl p-6 shadow-card"><h3 className="font-semibold text-foreground mb-2">METAR</h3><pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap bg-muted p-3 rounded-lg">{metar}</pre></div>}
+          {taf && <div className="bg-card rounded-xl p-6 shadow-card"><h3 className="font-semibold text-foreground mb-2">TAF</h3><pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap bg-muted p-3 rounded-lg">{taf}</pre></div>}
         </motion.div>
       )}
     </AppLayout>
