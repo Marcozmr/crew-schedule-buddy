@@ -184,7 +184,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      <RosterDebugCard />
+      {import.meta.env.DEV && <RosterDebugCard />}
       <ImportHistoryCard onRosterChanged={reload} />
     </AppLayout>
   );
