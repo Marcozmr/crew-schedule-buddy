@@ -393,7 +393,17 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       };
     }
 
-    // 6. Create imported_rosters record
+    // 6. Deactivate previous rosters and delete their schedule entries
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('imported_rosters') as any)
+      .update({ is_active: false })
+      .eq('user_id', effectiveUserId)
+      .eq('is_active', true);
+
+    // Delete old schedule entries for this user
+    await supabase.from('schedule_entries').delete().eq('user_id', effectiveUserId);
+
+    // 7. Create imported_rosters record
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
