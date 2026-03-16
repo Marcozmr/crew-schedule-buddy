@@ -19,12 +19,15 @@ export function useOnboardingModal() {
   const [shouldShow, setShouldShow] = useState(false);
 
   useEffect(() => {
+    // Wait until both user and profile are fully resolved
     if (!user || !profile) { setShouldShow(false); return; }
     if (profile.onboarding_completed) { setShouldShow(false); return; }
     const dismissed = sessionStorage.getItem(SESSION_DISMISSED_KEY);
     if (dismissed === 'true') { setShouldShow(false); return; }
-    setShouldShow(true);
-  }, [user, profile?.onboarding_completed]);
+    // Small delay to ensure DOM is ready after login navigation
+    const timer = setTimeout(() => setShouldShow(true), 300);
+    return () => clearTimeout(timer);
+  }, [user?.id, profile?.onboarding_completed]);
 
   const dismiss = () => {
     sessionStorage.setItem(SESSION_DISMISSED_KEY, 'true');

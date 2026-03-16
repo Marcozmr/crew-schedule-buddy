@@ -137,6 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const normalizedEmail = normalizeEmail(email);
+    // Clear onboarding dismissed flag so modal shows on fresh login
+    sessionStorage.removeItem('escalax_onboarding_dismissed');
     const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) throw error;
   };
