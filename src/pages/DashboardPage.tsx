@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { ImportHistoryCard } from '@/components/ImportHistoryCard';
+import { RosterDebugCard } from '@/components/RosterDebugCard';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
