@@ -427,6 +427,7 @@ function parseScheduleFromPdfText(text: string): ScheduleEntry[] {
 type SavePdfResult = {
   ok: boolean;
   warning: string | null;
+  storagePath: string | null;
 };
 
 function createInitialDiagnostic(authenticated: boolean): ImportDiagnostic {
