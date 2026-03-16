@@ -592,7 +592,7 @@ export async function importScheduleFromGmail(
     return buildImportResult(0, 0, 'Não identificada', diagnostic, diagnostic.final_error);
   }
 
-  const savePdfResult = await savePdfIntoApp(userId, searchResult.candidate.messageId, searchResult.candidate.pdfBytes);
+  const savePdfResult = await savePdfIntoApp(effectiveUserId, searchResult.candidate.messageId, searchResult.candidate.pdfBytes);
   diagnostic.pdf_saved_ok = savePdfResult.ok;
 
   if (!savePdfResult.ok) {
@@ -607,7 +607,7 @@ export async function importScheduleFromGmail(
     const parserError = error instanceof Error ? error.message : 'Falha ao extrair texto do PDF.';
     diagnostic.parser_ok = false;
     diagnostic.final_error = parserError;
-    diagnostic.parser_failure_log_path = await saveParserFailureLog(userId, searchResult.candidate.messageId, extractedText, parserError);
+    diagnostic.parser_failure_log_path = await saveParserFailureLog(effectiveUserId, searchResult.candidate.messageId, extractedText, parserError);
 
     return buildImportResult(0, 0, 'Não identificada', diagnostic, `Falha no parser: ${parserError}`, parserError);
   }
@@ -620,7 +620,7 @@ export async function importScheduleFromGmail(
     const parserError = error instanceof Error ? error.message : 'Erro desconhecido no parser de escala.';
     diagnostic.parser_ok = false;
     diagnostic.final_error = parserError;
-    diagnostic.parser_failure_log_path = await saveParserFailureLog(userId, searchResult.candidate.messageId, extractedText, parserError);
+    diagnostic.parser_failure_log_path = await saveParserFailureLog(effectiveUserId, searchResult.candidate.messageId, extractedText, parserError);
 
     return buildImportResult(0, 0, 'Não identificada', diagnostic, `Falha no parser: ${parserError}`, parserError);
   }
@@ -645,7 +645,7 @@ export async function importScheduleFromGmail(
   const { data: existingRows, error: existingRowsError } = await supabase
     .from('schedule_entries')
     .select('date, flight_number, departure_time, arrival_time')
-    .eq('user_id', userId);
+    .eq('user_id', effectiveUserId);
 
   if (existingRowsError) {
     diagnostic.final_error = 'Não foi possível ler os voos atuais no banco para deduplicação.';
@@ -656,40 +656,79 @@ export async function importScheduleFromGmail(
     (existingRows ?? []).map((row) => `${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`)
   );
 
-  const rows = parsedEntries
-    .map((entry) => ({
-      user_id: userId,
-      date: entry.date,
-      flight_number: entry.flightNumber,
-      departure: entry.departure,
-      arrival: entry.arrival,
-      departure_time: entry.departureTime,
-      arrival_time: entry.arrivalTime,
-      status: entry.status,
-      airline: entry.airline,
-      report_time: entry.reportTime || null,
-      duty_hours: entry.dutyHours || null,
-    }))
-    .filter((row) => !existingKeys.has(`${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`));
+  const parsedRows = parsedEntries.map((entry) => ({
+    user_id: effectiveUserId,
+    date: entry.date,
+    flight_number: entry.flightNumber,
+    departure: entry.departure,
+    arrival: entry.arrival,
+    departure_time: entry.departureTime,
+    arrival_time: entry.arrivalTime,
+    status: entry.status,
+    airline: entry.airline,
+    report_time: entry.reportTime || null,
+    duty_hours: entry.dutyHours || null,
+  }));
 
-  if (rows.length > 0) {
-    const { error } = await supabase.from('schedule_entries').insert(rows);
-    if (error) {
-      diagnostic.db_insert_ok = false;
-      diagnostic.final_error = 'Não foi possível salvar os voos na tabela schedule_entries.';
-      return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
+  const dedupedRows = parsedRows.filter(
+    (row) => !existingKeys.has(`${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`)
+  );
+
+  let insertedRowsCount = 0;
+
+  if (dedupedRows.length > 0) {
+    const { error: bulkInsertError } = await supabase.from('schedule_entries').insert(dedupedRows);
+
+    if (bulkInsertError) {
+      let partialInsertCount = 0;
+      let lastSingleErrorMessage: string | null = null;
+
+      for (const row of dedupedRows) {
+        const { error: singleInsertError } = await supabase.from('schedule_entries').insert(row);
+        if (!singleInsertError) {
+          partialInsertCount += 1;
+        } else {
+          lastSingleErrorMessage = singleInsertError.message;
+        }
+      }
+
+      if (partialInsertCount === 0) {
+        diagnostic.db_insert_ok = false;
+        diagnostic.final_error = `Não foi possível salvar os voos na tabela schedule_entries. ${bulkInsertError.message}`;
+        return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
+      }
+
+      insertedRowsCount = partialInsertCount;
+      diagnostic.final_error = lastSingleErrorMessage
+        ? `Inserção parcial concluída. Último erro: ${lastSingleErrorMessage}`
+        : savePdfResult.warning;
+    } else {
+      insertedRowsCount = dedupedRows.length;
     }
   }
 
-  diagnostic.db_insert_ok = true;
-  diagnostic.inserted_rows_count = rows.length;
-  diagnostic.final_error = savePdfResult.warning;
+  const { count: userRowsCountAfterInsert } = await supabase
+    .from('schedule_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', effectiveUserId);
 
-  if (airline !== 'Não identificada') {
-    await supabase.from('profiles').update({ airline }).eq('user_id', userId);
+  if (insertedRowsCount > 0 && (userRowsCountAfterInsert ?? 0) === 0) {
+    diagnostic.db_insert_ok = false;
+    diagnostic.final_error = 'Os voos não ficaram vinculados ao usuário autenticado atual.';
+    return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
   }
 
-  const reason = rows.length === 0 ? 'Importação processada, mas sem voos novos para inserir.' : savePdfResult.warning ?? undefined;
+  diagnostic.db_insert_ok = true;
+  diagnostic.inserted_rows_count = insertedRowsCount;
+  if (!diagnostic.final_error) {
+    diagnostic.final_error = savePdfResult.warning;
+  }
+
+  if (airline !== 'Não identificada') {
+    await supabase.from('profiles').update({ airline }).eq('user_id', effectiveUserId);
+  }
+
+  const reason = insertedRowsCount === 0 ? 'Importação processada, mas sem voos novos para inserir.' : savePdfResult.warning ?? undefined;
   return buildImportResult(rows.length, parsedEntries.length, airline, diagnostic, reason);
 }
 
