@@ -45,7 +45,7 @@ export default function FlightSwapPage() {
   const [proposals, setProposals] = useState<any[]>([]);
 
   const loadAll = async () => {
-    if (!user) return;
+    if (!user) { setOffers([]); setMyOffers([]); setMyProposals([]); return; }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sb = supabase as any;
     const { data: allOffers } = await sb.from('flight_swap_offers').select('*').order('created_at', { ascending: false });
@@ -80,10 +80,7 @@ export default function FlightSwapPage() {
   const handleSendProposal = async (offerId: string) => {
     if (!user || !proposalMsg.trim()) { toast.error('Escreva uma mensagem'); return; }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('flight_swap_proposals').insert({
-      offer_id: offerId, proposer_user_id: user.id, message: proposalMsg, status: 'sent',
-    });
-    // Update offer status
+    await (supabase as any).from('flight_swap_proposals').insert({ offer_id: offerId, proposer_user_id: user.id, message: proposalMsg, status: 'sent' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from('flight_swap_offers').update({ status: 'in_negotiation' }).eq('id', offerId);
     toast.success('Proposta enviada!');
@@ -128,7 +125,6 @@ export default function FlightSwapPage() {
         <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="w-4 h-4 mr-1" />Publicar Voo</Button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -138,7 +134,6 @@ export default function FlightSwapPage() {
         ))}
       </div>
 
-      {/* Marketplace */}
       {tab === 'marketplace' && (
         <div className="space-y-3">
           {offers.length === 0 && <p className="text-center text-muted-foreground text-sm py-10">Nenhuma oferta disponível no momento</p>}
@@ -152,19 +147,14 @@ export default function FlightSwapPage() {
                 </div>
                 <Badge variant="outline">Disponível</Badge>
               </div>
-              {(o.departure_airport || o.arrival_airport) && (
-                <p className="text-sm text-muted-foreground mb-1">{o.departure_airport || '?'} → {o.arrival_airport || '?'}</p>
-              )}
+              {(o.departure_airport || o.arrival_airport) && <p className="text-sm text-muted-foreground mb-1">{o.departure_airport || '?'} → {o.arrival_airport || '?'}</p>}
               {o.notes && <p className="text-sm text-muted-foreground mb-2">{o.notes}</p>}
-              <Button size="sm" onClick={() => { setSelectedOffer(o); setProposalMsg(''); }}>
-                <MessageCircle className="w-4 h-4 mr-1" />Tenho interesse
-              </Button>
+              <Button size="sm" onClick={() => { setSelectedOffer(o); setProposalMsg(''); }}><MessageCircle className="w-4 h-4 mr-1" />Tenho interesse</Button>
             </div>
           ))}
         </div>
       )}
 
-      {/* My Offers */}
       {tab === 'my-offers' && (
         <div className="space-y-3">
           {myOffers.length === 0 && <p className="text-center text-muted-foreground text-sm py-10">Você ainda não publicou nenhum voo para troca</p>}
@@ -181,12 +171,8 @@ export default function FlightSwapPage() {
                 </div>
                 {o.notes && <p className="text-sm text-muted-foreground mb-2">{o.notes}</p>}
                 <div className="flex gap-2 flex-wrap">
-                  <Button size="sm" variant="outline" onClick={() => { loadProposalsForOffer(o.id); setSelectedOffer({ ...o, _viewProposals: true }); }}>
-                    <Eye className="w-4 h-4 mr-1" />Ver Propostas
-                  </Button>
-                  {o.status !== 'cancelled' && o.status !== 'closed' && (
-                    <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleUpdateOfferStatus(o.id, 'cancelled')}>Cancelar</Button>
-                  )}
+                  <Button size="sm" variant="outline" onClick={() => { loadProposalsForOffer(o.id); setSelectedOffer({ ...o, _viewProposals: true }); }}><Eye className="w-4 h-4 mr-1" />Ver Propostas</Button>
+                  {o.status !== 'cancelled' && o.status !== 'closed' && <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleUpdateOfferStatus(o.id, 'cancelled')}>Cancelar</Button>}
                 </div>
               </div>
             );
@@ -194,7 +180,6 @@ export default function FlightSwapPage() {
         </div>
       )}
 
-      {/* My Proposals */}
       {tab === 'my-proposals' && (
         <div className="space-y-3">
           {myProposals.length === 0 && <p className="text-center text-muted-foreground text-sm py-10">Você ainda não enviou nenhuma proposta</p>}
@@ -214,7 +199,6 @@ export default function FlightSwapPage() {
         </div>
       )}
 
-      {/* Create Offer Sheet */}
       <Sheet open={showCreate} onOpenChange={setShowCreate}>
         <SheetContent side="bottom" className="rounded-t-2xl">
           <SheetHeader><SheetTitle>Publicar Voo para Troca</SheetTitle></SheetHeader>
@@ -233,13 +217,11 @@ export default function FlightSwapPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Proposal / View Proposals Sheet */}
       <Sheet open={!!selectedOffer} onOpenChange={() => setSelectedOffer(null)}>
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[80vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{selectedOffer?._viewProposals ? 'Propostas Recebidas' : `Propor troca — ${selectedOffer?.flight_number}`}</SheetTitle>
           </SheetHeader>
-
           {selectedOffer && !selectedOffer._viewProposals && (
             <div className="space-y-3 mt-4">
               <p className="text-sm text-muted-foreground">{selectedOffer.departure_airport} → {selectedOffer.arrival_airport} • {selectedOffer.flight_date ? formatDateBR(selectedOffer.flight_date) : 'Data não informada'}</p>
@@ -247,7 +229,6 @@ export default function FlightSwapPage() {
               <Button onClick={() => handleSendProposal(selectedOffer.id)} className="w-full"><Send className="w-4 h-4 mr-2" />Enviar Proposta</Button>
             </div>
           )}
-
           {selectedOffer?._viewProposals && (
             <div className="space-y-3 mt-4">
               {proposals.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Nenhuma proposta recebida ainda</p>}

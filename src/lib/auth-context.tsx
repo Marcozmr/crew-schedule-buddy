@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
+import { QueryClient } from '@tanstack/react-query';
 
 interface Profile {
   id: string;
@@ -29,47 +30,44 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 
-/**
- * Capture provider_token from every possible source:
- * 1. session.provider_token (set by Supabase on OAuth callback)
- * 2. URL hash #provider_token=...  (implicit grant flow)
- * 3. URL query ?provider_token=... (some redirect modes)
- */
+// App-specific localStorage keys to clear on logout
+const APP_STORAGE_KEYS = [
+  PROVIDER_TOKEN_STORAGE_KEY,
+  'crewscale_schedule',
+  'crewscale_user',
+];
+
+let _queryClient: QueryClient | null = null;
+
+/** Register the QueryClient so signOut can reset all caches */
+export function registerQueryClient(qc: QueryClient) {
+  _queryClient = qc;
+}
+
 function captureAndPersistProviderToken(session: Session | null): string | null {
-  // Source 1: session object
   const sessionToken = (session as { provider_token?: string | null } | null)?.provider_token ?? null;
   if (sessionToken) {
     localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, sessionToken);
-    console.log('[auth] provider_token captured from session ✓');
     return sessionToken;
   }
 
-  // Source 2: URL hash
   const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
   const hashParams = new URLSearchParams(hash);
   const hashToken = hashParams.get('provider_token');
   if (hashToken) {
     localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, hashToken);
-    console.log('[auth] provider_token captured from URL hash ✓');
     return hashToken;
   }
 
-  // Source 3: URL query params
   const queryToken = new URLSearchParams(window.location.search).get('provider_token');
   if (queryToken) {
     localStorage.setItem(PROVIDER_TOKEN_STORAGE_KEY, queryToken);
-    console.log('[auth] provider_token captured from URL query ✓');
     return queryToken;
   }
 
-  // Source 4: localStorage (previously saved)
   const storedToken = localStorage.getItem(PROVIDER_TOKEN_STORAGE_KEY);
-  if (storedToken) {
-    console.log('[auth] provider_token loaded from localStorage');
-    return storedToken;
-  }
+  if (storedToken) return storedToken;
 
-  console.warn('[auth] NO provider_token found anywhere');
   return null;
 }
 
@@ -92,12 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[auth] onAuthStateChange:', event, 'has session:', Boolean(session));
       const token = captureAndPersistProviderToken(session);
       setProviderToken(token);
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
+
+      if (event === 'SIGNED_OUT') {
+        // Clear all app state on sign out
+        setProfile(null);
+        setProviderToken(null);
+        _queryClient?.clear();
+      } else if (session?.user) {
         setTimeout(() => fetchProfile(session.user.id), 200);
       } else {
         setProfile(null);
@@ -137,10 +140,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    localStorage.removeItem(PROVIDER_TOKEN_STORAGE_KEY);
-    await supabase.auth.signOut();
-    setProviderToken(null);
+    // 1. Clear app-specific localStorage keys
+    APP_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+
+    // 2. Clear React Query cache entirely
+    _queryClient?.clear();
+
+    // 3. Clear local state
     setProfile(null);
+    setProviderToken(null);
+    setSession(null);
+    setUser(null);
+
+    // 4. Sign out from Supabase (triggers onAuthStateChange SIGNED_OUT)
+    await supabase.auth.signOut();
   };
 
   const refreshProfile = async () => {

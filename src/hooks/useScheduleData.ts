@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 
@@ -37,12 +37,12 @@ export function useScheduleData() {
   const { user } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const prevUserIdRef = useRef<string | null>(null);
 
   const loadSchedule = useCallback(async () => {
     if (!user) { setSchedule([]); setLoading(false); return; }
     setLoading(true);
 
-    // Find the active roster
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: activeRoster } = await (supabase.from('imported_rosters') as any)
       .select('id')
@@ -69,7 +69,17 @@ export function useScheduleData() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { void loadSchedule(); }, [loadSchedule]);
+  // Clear schedule when user changes (critical for account switching)
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    if (prevUserIdRef.current !== currentUserId) {
+      // User changed — clear stale data immediately
+      setSchedule([]);
+      setLoading(true);
+      prevUserIdRef.current = currentUserId;
+    }
+    void loadSchedule();
+  }, [loadSchedule, user]);
 
   useEffect(() => {
     const handleFocus = () => void loadSchedule();

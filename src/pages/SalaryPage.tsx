@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { DollarSign, Save, Trash2 } from 'lucide-react';
+import { DollarSign, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const now = new Date();
@@ -49,7 +49,7 @@ export default function SalaryPage() {
   };
 
   const loadHistory = async () => {
-    if (!user) return;
+    if (!user) { setHistory([]); return; }
     const { data } = await supabase.from('salary_entries').select('*').eq('user_id', user.id).order('reference_month', { ascending: false }).limit(12);
     setHistory(data || []);
   };

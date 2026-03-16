@@ -6,21 +6,21 @@ import { motion } from 'framer-motion';
 import { Plane, Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight, BedDouble, Clock, Cloud, Settings, LogOut, ShieldCheck, ShieldAlert, ShieldX, ChevronRight } from 'lucide-react';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { toast } from 'sonner';
 import { useMemo } from 'react';
+import { parseDateBRT } from '@/lib/date-utils';
 
 const menuItems = [
-  { label: 'Escala', icon: Plane, path: '/schedule', color: 'from-primary to-sky-500' },
-  { label: 'Baixar Escala', icon: Download, path: '/download-roster', color: 'from-primary to-sky-500' },
-  { label: 'Escala PDF', icon: FileText, path: '/dashboard', color: 'from-primary to-sky-500' },
-  { label: 'Documentos', icon: FolderOpen, path: '/documents', color: 'from-primary to-sky-500' },
-  { label: 'Salário', icon: DollarSign, path: '/salary', color: 'from-primary to-sky-500' },
-  { label: 'Diárias', icon: UtensilsCrossed, path: '/perdiem', color: 'from-primary to-sky-500' },
-  { label: 'Troca de Voo', icon: ArrowLeftRight, path: '/flight-swap', color: 'from-primary to-sky-500' },
-  { label: 'Cálc. Descanso', icon: BedDouble, path: '/rest-calc', color: 'from-primary to-sky-500' },
-  { label: 'Cálc. Jornada', icon: Clock, path: '/duty-calc', color: 'from-primary to-sky-500' },
-  { label: 'Clima', icon: Cloud, path: '/weather', color: 'from-primary to-sky-500' },
-  { label: 'Ajustes', icon: Settings, path: '/settings', color: 'from-primary to-sky-500' },
+  { label: 'Escala', icon: Plane, path: '/schedule' },
+  { label: 'Baixar Escala', icon: Download, path: '/download-roster' },
+  { label: 'Escala PDF', icon: FileText, path: '/dashboard' },
+  { label: 'Documentos', icon: FolderOpen, path: '/documents' },
+  { label: 'Salário', icon: DollarSign, path: '/salary' },
+  { label: 'Diárias', icon: UtensilsCrossed, path: '/perdiem' },
+  { label: 'Troca de Voo', icon: ArrowLeftRight, path: '/flight-swap' },
+  { label: 'Cálc. Descanso', icon: BedDouble, path: '/rest-calc' },
+  { label: 'Cálc. Jornada', icon: Clock, path: '/duty-calc' },
+  { label: 'Clima', icon: Cloud, path: '/weather' },
+  { label: 'Ajustes', icon: Settings, path: '/settings' },
 ];
 
 export default function HomePage() {
@@ -38,7 +38,11 @@ export default function HomePage() {
 
   const stats = useMemo(() => {
     const now = new Date();
-    const flights = schedule.filter(e => e.is_flight && new Date(e.date.includes('-') && e.date.indexOf('-') === 4 ? e.date : e.date.split(/[\/\-]/).reverse().join('-')).getMonth() === now.getMonth());
+    const flights = schedule.filter(e => {
+      if (!e.is_flight) return false;
+      const d = parseDateBRT(e.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
     const hours = flights.reduce((s, e) => s + (e.flight_hours || 0), 0);
     const flightDays = new Set(flights.map(e => e.date)).size;
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -75,22 +79,17 @@ export default function HomePage() {
       {/* Quick Stats Row */}
       <div className="relative z-10 px-4 py-2">
         <div className="flex gap-2 overflow-x-auto pb-1">
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 min-w-[80px] text-center shrink-0">
-            <p className="text-white/60 text-[10px]">Voos</p>
-            <p className="text-white font-bold text-lg">{stats.flights}</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 min-w-[80px] text-center shrink-0">
-            <p className="text-white/60 text-[10px]">Horas</p>
-            <p className="text-white font-bold text-lg">{stats.hours}h</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 min-w-[80px] text-center shrink-0">
-            <p className="text-white/60 text-[10px]">Dias Voo</p>
-            <p className="text-white font-bold text-lg">{stats.flightDays}</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 min-w-[80px] text-center shrink-0">
-            <p className="text-white/60 text-[10px]">Folgas</p>
-            <p className="text-white font-bold text-lg">{stats.daysOff}</p>
-          </div>
+          {[
+            { label: 'Voos', value: stats.flights },
+            { label: 'Horas', value: `${stats.hours}h` },
+            { label: 'Dias Voo', value: stats.flightDays },
+            { label: 'Folgas', value: stats.daysOff },
+          ].map(s => (
+            <div key={s.label} className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 min-w-[80px] text-center shrink-0">
+              <p className="text-white/60 text-[10px]">{s.label}</p>
+              <p className="text-white font-bold text-lg">{s.value}</p>
+            </div>
+          ))}
         </div>
       </div>
 
