@@ -90,27 +90,40 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
   );
 
   const fetchUserScheduleSnapshot = useCallback(async (userId: string) => {
+    // First find active roster
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: activeRoster } = await (supabase.from('imported_rosters') as any)
+      .select('id')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const rosterId = activeRoster?.id;
+    const rosterFilter = (q: any) => rosterId ? q.eq('roster_id', rosterId) : q;
+
     const [{ count }, { data: previewData }, { data: latestDateData }, { data: compareData }] = await Promise.all([
-      supabase
+      rosterFilter(supabase
         .from('schedule_entries')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId),
-      supabase
+        .eq('user_id', userId)),
+      rosterFilter(supabase
         .from('schedule_entries')
         .select('user_id, date, status, flight_number, departure, arrival')
-        .eq('user_id', userId)
+        .eq('user_id', userId))
         .order('created_at', { ascending: false })
         .limit(5),
-      supabase
+      rosterFilter(supabase
         .from('schedule_entries')
         .select('date')
-        .eq('user_id', userId)
+        .eq('user_id', userId))
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase
+      rosterFilter(supabase
         .from('schedule_entries')
-        .select('user_id, date, flight_number')
+        .select('user_id, date, flight_number'))
         .order('created_at', { ascending: false })
         .limit(5),
     ]);
