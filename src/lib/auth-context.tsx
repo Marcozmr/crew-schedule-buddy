@@ -35,8 +35,8 @@ const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 // App-specific localStorage keys to clear on logout
 const APP_STORAGE_KEYS = [
   PROVIDER_TOKEN_STORAGE_KEY,
-  'crewscale_schedule',
-  'crewscale_user',
+  'escalax_schedule',
+  'escalax_user',
 ];
 
 let _queryClient: QueryClient | null = null;

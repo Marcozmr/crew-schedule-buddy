@@ -132,7 +132,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <p className="text-center mt-6 text-white/30 text-xs">
-          © {new Date().getFullYear()} EscalaX — Desenvolvido por Marcos Vinicius
+          © {new Date().getFullYear()} EscalaX. Todos os direitos reservados.
         </p>
       </motion.div>
     </div>
