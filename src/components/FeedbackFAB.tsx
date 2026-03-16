@@ -5,6 +5,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 
 const TYPES = [
   { value: 'suggestion', label: 'Sugerir melhoria', icon: Lightbulb, color: 'text-yellow-500' },
