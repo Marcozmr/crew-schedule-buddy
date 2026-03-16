@@ -467,7 +467,8 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       if (insertError) {
         // Try individual inserts
         for (const row of rows) {
-          const { error } = await supabase.from('schedule_entries').insert(row);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase.from('schedule_entries') as any).insert(row);
           if (!error) insertedCount++;
         }
       } else {
