@@ -21,6 +21,12 @@ type ScheduleRowPreview = {
   arrival_airport: string;
 };
 
+type ScheduleCompareRow = {
+  user_id: string;
+  date: string;
+  flight_number: string;
+};
+
 type SyncSnapshot = {
   user_id: string;
   email: string;
@@ -39,6 +45,7 @@ type SyncSnapshot = {
   latest_import_error: string | null;
   last_sync_at: string;
   schedule_entries_preview: ScheduleRowPreview[];
+  schedule_entries_compare_preview: ScheduleCompareRow[];
   // new diagnostic fields
   access_token_present: boolean;
   provider_token_present: boolean;
@@ -83,7 +90,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
   );
 
   const fetchUserScheduleSnapshot = useCallback(async (userId: string) => {
-    const [{ count }, { data: previewData }] = await Promise.all([
+    const [{ count }, { data: previewData }, { data: latestDateData }, { data: compareData }] = await Promise.all([
       supabase
         .from('schedule_entries')
         .select('id', { count: 'exact', head: true })
@@ -94,17 +101,21 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(5),
+      supabase
+        .from('schedule_entries')
+        .select('date')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('schedule_entries')
+        .select('user_id, date, flight_number')
+        .order('created_at', { ascending: false })
+        .limit(5),
     ]);
 
     const totalRows = count ?? 0;
-
-    const { data: latestDateData } = await supabase
-      .from('schedule_entries')
-      .select('date')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
 
     const schedulePreview: ScheduleRowPreview[] = (previewData ?? []).map((row) => ({
       user_id: row.user_id,
@@ -115,10 +126,19 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
       arrival_airport: row.arrival,
     }));
 
+    const comparePreview: ScheduleCompareRow[] = totalRows === 0
+      ? (compareData ?? []).map((row) => ({
+          user_id: row.user_id,
+          date: row.date,
+          flight_number: row.flight_number,
+        }))
+      : [];
+
     return {
       totalRows,
       latestDutyDate: latestDateData?.date ?? null,
       schedulePreview,
+      comparePreview,
     };
   }, []);
 
@@ -157,6 +177,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         latest_import_error: 'Nenhuma execução registrada ainda. Clique em Sincronizar agora.',
         last_sync_at: lastSyncTime ?? '',
         schedule_entries_preview: sched.schedulePreview,
+        schedule_entries_compare_preview: sched.comparePreview,
         access_token_present: Boolean(session?.access_token),
         provider_token_present: hasToken,
         provider_token_source: tokenSource,
@@ -192,6 +213,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
       latest_import_error: error,
       last_sync_at: nowIso,
       schedule_entries_preview: sched.schedulePreview,
+      schedule_entries_compare_preview: sched.comparePreview,
       access_token_present: Boolean(session?.access_token),
       provider_token_present: hasToken,
       provider_token_source: tokenSource,
@@ -374,8 +396,15 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
 
           {snapshot.schedule_entries_preview.length > 0 && (
             <div className="rounded-lg border border-border bg-background p-3">
-              <p className="text-xs font-semibold text-foreground mb-2">5 registros reais de schedule_entries</p>
+              <p className="text-xs font-semibold text-foreground mb-2">5 registros reais de schedule_entries (usuária atual)</p>
               <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify(snapshot.schedule_entries_preview, null, 2)}</pre>
+            </div>
+          )}
+
+          {snapshot.total_rows_in_schedule_entries_for_current_user === 0 && snapshot.schedule_entries_compare_preview.length > 0 && (
+            <div className="rounded-lg border border-border bg-background p-3">
+              <p className="text-xs font-semibold text-foreground mb-2">Usuária atual sem registros. Primeiros 5 registros existentes em schedule_entries (comparação)</p>
+              <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify(snapshot.schedule_entries_compare_preview, null, 2)}</pre>
             </div>
           )}
         </div>
