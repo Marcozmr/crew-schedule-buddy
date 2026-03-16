@@ -144,8 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    // 1. Clear app-specific localStorage keys
+    // Clear app-specific localStorage keys
     APP_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    sessionStorage.removeItem('escalax_onboarding_dismissed');
 
     // 2. Clear React Query cache entirely
     _queryClient?.clear();
