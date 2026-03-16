@@ -213,6 +213,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
       latest_import_error: error,
       last_sync_at: nowIso,
       schedule_entries_preview: sched.schedulePreview,
+      schedule_entries_compare_preview: sched.comparePreview,
       access_token_present: Boolean(session?.access_token),
       provider_token_present: hasToken,
       provider_token_source: tokenSource,
