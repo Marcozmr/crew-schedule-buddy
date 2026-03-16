@@ -426,20 +426,8 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
 
     const rosterId = rosterRow?.id || null;
 
-    // 7. Dedup against existing entries
-    const { data: existingRows } = await supabase
-      .from('schedule_entries')
-      .select('date, flight_number, departure_time, arrival_time')
-      .eq('user_id', effectiveUserId);
-
-    const existingKeys = new Set(
-      (existingRows ?? []).map(r => `${r.date}|${r.flight_number}|${r.departure_time}|${r.arrival_time}`)
-    );
-
-    // 8. Build rows
-    const rows = entries
-      .filter(e => !existingKeys.has(`${e.date}|${e.flightNumber}|${e.departureTime}|${e.arrivalTime}`))
-      .map(e => ({
+    // 8. Build rows (no dedup needed since we deleted old entries)
+    const rows = entries.map(e => ({
         user_id: effectiveUserId,
         roster_id: rosterId,
         date: e.date,
