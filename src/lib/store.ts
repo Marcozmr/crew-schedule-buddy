@@ -1,7 +1,7 @@
 import { ScheduleEntry, CrewMember } from './types';
 
-const SCHEDULE_KEY = 'crewscale_schedule';
-const USER_KEY = 'crewscale_user';
+const SCHEDULE_KEY = 'escalax_schedule';
+const USER_KEY = 'escalax_user';
 
 export function getSchedule(): ScheduleEntry[] {
   const data = localStorage.getItem(SCHEDULE_KEY);
