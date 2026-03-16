@@ -1,30 +1,31 @@
-import { useMemo, useEffect, useCallback } from 'react';
+import { useMemo } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { ImportHistoryCard } from '@/components/ImportHistoryCard';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
-import { supabase } from '@/integrations/supabase/client';
 import { checkCompliance, ComplianceResult } from '@/lib/rbac117';
-import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Upload, FileText } from 'lucide-react';
+import { Clock, CalendarDays, Plane, Coffee, AlertCircle, TrendingUp, ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Upload, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
-  const { profile, user } = useAuth();
+  const { profile } = useAuth();
   const { schedule, loading, reload } = useScheduleData();
+
+  // Separate flights from non-flights
+  const flights = useMemo(() => schedule.filter(e => e.is_flight), [schedule]);
 
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const daysInMonth = new Date(now.getFullYear(), currentMonth + 1, 0).getDate();
 
-    const monthEntries = schedule.filter(e => {
+    const monthEntries = flights.filter(e => {
       const parts = e.date.split(/[\/\-]/);
-      if (parts.length < 3) return false;
-      return parseInt(parts[1]) - 1 === currentMonth;
+      return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
     });
 
     const totalHours = monthEntries.reduce((sum, e) => sum + (e.duty_hours || 0), 0);
@@ -44,25 +45,23 @@ export default function DashboardPage() {
     });
 
     return { totalFlights: monthEntries.length, totalHours: Math.round(totalHours * 10) / 10, daysOff, flightDays, nextFlight, maxHours: 85 };
-  }, [schedule]);
+  }, [flights]);
 
   const compliance = useMemo<ComplianceResult>(() => checkCompliance(schedule), [schedule]);
   const hoursPercentage = Math.min((stats.totalHours / stats.maxHours) * 100, 100);
-
   const complianceIcon = compliance.status === 'regular' ? ShieldCheck : compliance.status === 'atencao' ? ShieldAlert : ShieldX;
   const complianceColor = compliance.status === 'regular' ? 'text-success' : compliance.status === 'atencao' ? 'text-yellow-500' : 'text-destructive';
   const complianceBg = compliance.status === 'regular' ? 'bg-success/10 border-success/30' : compliance.status === 'atencao' ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-destructive/10 border-destructive/30';
 
-  // Show recent flights: current month or fallback to all
   const displayFlights = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
-    const monthFlights = schedule.filter(e => {
+    const monthFlights = flights.filter(e => {
       const parts = e.date.split(/[\/\-]/);
       return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
     });
-    return monthFlights.length > 0 ? monthFlights : schedule.slice(-20);
-  }, [schedule]);
+    return monthFlights.length > 0 ? monthFlights : flights.slice(-20);
+  }, [flights]);
 
   return (
     <AppLayout>
@@ -70,63 +69,43 @@ export default function DashboardPage() {
         <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold text-foreground">
           Olá, {profile?.name || 'Tripulante'} ✈️
         </motion.h1>
-        <p className="text-muted-foreground mt-1">
-          {profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual
-        </p>
+        <p className="text-muted-foreground mt-1">{profile?.airline ? `${profile.airline} • ` : ''}Resumo do mês atual</p>
       </div>
 
-      {/* Action bar */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <PdfImportDialog onImportComplete={reload} />
-        <Link to="/schedule">
-          <Button variant="outline">
-            <CalendarDays className="w-4 h-4 mr-2" />Ver Escala Completa
-          </Button>
-        </Link>
+        <Link to="/schedule"><Button variant="outline"><CalendarDays className="w-4 h-4 mr-2" />Ver Escala</Button></Link>
       </div>
 
-      {/* Empty state */}
       {!loading && schedule.length === 0 && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-10 shadow-card mb-6 text-center">
           <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-lg font-bold text-foreground mb-2">Nenhuma escala importada</h2>
-          <p className="text-muted-foreground text-sm mb-4">
-            Clique em <strong>"Importar Escala PDF"</strong> acima para enviar o PDF da sua escala e começar a usar o EscalaX.
-          </p>
-          <PdfImportDialog onImportComplete={reload} trigger={
-            <Button className="gradient-sky text-primary-foreground">
-              <Upload className="w-4 h-4 mr-2" />Importar meu primeiro PDF
-            </Button>
-          } />
+          <p className="text-muted-foreground text-sm mb-4">Clique em <strong>"Importar Escala PDF"</strong> para começar.</p>
+          <PdfImportDialog onImportComplete={reload} trigger={<Button className="gradient-sky text-primary-foreground"><Upload className="w-4 h-4 mr-2" />Importar meu primeiro PDF</Button>} />
         </motion.div>
       )}
 
-      {/* Stats */}
       {schedule.length > 0 && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard title="Voos no mês" value={stats.totalFlights} icon={Plane} variant="primary" />
-            <StatCard title="Horas voadas" value={`${stats.totalHours}h`} subtitle={`de ${stats.maxHours}h permitidas`} icon={Clock} />
+            <StatCard title="Horas voadas" value={`${stats.totalHours}h`} subtitle={`de ${stats.maxHours}h`} icon={Clock} />
             <StatCard title="Dias de folga" value={stats.daysOff} icon={Coffee} variant="accent" />
             <StatCard title="Dias de voo" value={stats.flightDays} icon={CalendarDays} />
           </div>
 
           {/* RBAC 117 */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`rounded-xl p-6 shadow-card mb-6 border ${complianceBg}`}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                {(() => { const Icon = complianceIcon; return <Icon className={`w-7 h-7 ${complianceColor}`} />; })()}
-                <div>
-                  <h2 className="font-bold text-foreground text-lg">RBAC 117 — {compliance.label}</h2>
-                  <p className="text-xs text-muted-foreground">Regulamentação de Fadiga • Apêndice B</p>
-                </div>
-              </div>
+            <div className="flex items-center gap-3 mb-4">
+              {(() => { const Icon = complianceIcon; return <Icon className={`w-7 h-7 ${complianceColor}`} />; })()}
+              <div><h2 className="font-bold text-foreground text-lg">RBAC 117 — {compliance.label}</h2><p className="text-xs text-muted-foreground">Regulamentação de Fadiga</p></div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase">Horas/Mês</p><p className="text-lg font-bold text-foreground">{compliance.accumulatedHoursMonth.toFixed(1)}h</p><p className="text-[10px] text-muted-foreground">máx 85h</p></div>
-              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase">Horas/7 dias</p><p className="text-lg font-bold text-foreground">{compliance.accumulatedHours7Days.toFixed(1)}h</p><p className="text-[10px] text-muted-foreground">máx 44h</p></div>
-              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase flex items-center gap-1"><Moon className="w-3 h-3" />Madrugadas</p><p className="text-lg font-bold text-foreground">{compliance.nightOpsCount}</p><p className="text-[10px] text-muted-foreground">máx 4/168h</p></div>
-              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase">Folgas</p><p className="text-lg font-bold text-foreground">{compliance.daysOffCount}</p><p className="text-[10px] text-muted-foreground">mín 8/mês</p></div>
+              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase">Horas/Mês</p><p className="text-lg font-bold text-foreground">{compliance.accumulatedHoursMonth.toFixed(1)}h</p></div>
+              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase">Horas/7d</p><p className="text-lg font-bold text-foreground">{compliance.accumulatedHours7Days.toFixed(1)}h</p></div>
+              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase flex items-center gap-1"><Moon className="w-3 h-3" />Madrugadas</p><p className="text-lg font-bold text-foreground">{compliance.nightOpsCount}</p></div>
+              <div className="bg-background/50 rounded-lg p-3"><p className="text-[10px] text-muted-foreground uppercase">Folgas</p><p className="text-lg font-bold text-foreground">{compliance.daysOffCount}</p></div>
             </div>
             {compliance.alerts.length > 0 && (
               <div className="space-y-2">
@@ -138,7 +117,7 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-            {compliance.alerts.length === 0 && (<p className="text-sm text-success flex items-center gap-2"><ShieldCheck className="w-4 h-4" />Sua escala está dentro dos limites da RBAC 117</p>)}
+            {compliance.alerts.length === 0 && <p className="text-sm text-success flex items-center gap-2"><ShieldCheck className="w-4 h-4" />Dentro dos limites da RBAC 117</p>}
           </motion.div>
 
           {/* Hours bar */}
@@ -148,9 +127,8 @@ export default function DashboardPage() {
               <span className="text-sm font-mono text-muted-foreground">{stats.totalHours}h / {stats.maxHours}h</span>
             </div>
             <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
-              <motion.div initial={{ width: 0 }} animate={{ width: `${hoursPercentage}%` }} transition={{ duration: 1, ease: 'easeOut' }} className={`h-full rounded-full ${hoursPercentage > 90 ? 'bg-destructive' : hoursPercentage > 75 ? 'bg-yellow-500' : 'gradient-sky'}`} />
+              <motion.div initial={{ width: 0 }} animate={{ width: `${hoursPercentage}%` }} transition={{ duration: 1 }} className={`h-full rounded-full ${hoursPercentage > 90 ? 'bg-destructive' : hoursPercentage > 75 ? 'bg-yellow-500' : 'gradient-sky'}`} />
             </div>
-            {hoursPercentage > 80 && (<div className="flex items-center gap-2 mt-3 text-destructive text-sm"><AlertCircle className="w-4 h-4" /><span>Atenção: próximo do limite mensal (RBAC 117)</span></div>)}
           </motion.div>
 
           {/* Next flight */}
@@ -160,29 +138,28 @@ export default function DashboardPage() {
               <div className="flex flex-wrap items-center gap-6">
                 <div><p className="text-xs text-muted-foreground">Data</p><p className="font-bold text-foreground">{stats.nextFlight.date}</p></div>
                 <div><p className="text-xs text-muted-foreground">Voo</p><p className="font-bold text-foreground">{stats.nextFlight.flight_number}</p></div>
-                <div><p className="text-xs text-muted-foreground">Rota</p><p className="font-bold text-foreground">{stats.nextFlight.departure} → {stats.nextFlight.arrival}</p></div>
+                <div><p className="text-xs text-muted-foreground">Rota</p><p className="font-bold text-foreground">{stats.nextFlight.departure_airport || stats.nextFlight.departure} → {stats.nextFlight.arrival_airport || stats.nextFlight.arrival}</p></div>
                 <div><p className="text-xs text-muted-foreground">Apresentação</p><p className="font-bold text-primary">{stats.nextFlight.report_time || stats.nextFlight.departure_time}</p></div>
-                <div><p className="text-xs text-muted-foreground">Duty</p><p className="font-bold text-foreground">{stats.nextFlight.duty_hours}h</p></div>
+                {stats.nextFlight.duty_hours != null && <div><p className="text-xs text-muted-foreground">Duty</p><p className="font-bold text-foreground">{stats.nextFlight.duty_hours}h</p></div>}
               </div>
             </motion.div>
           )}
 
           {/* Flight table */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl p-6 shadow-card mb-6">
-            <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Plane className="w-5 h-5 text-primary" />
-              Voos ({displayFlights.length})
-            </h2>
+            <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2"><Plane className="w-5 h-5 text-primary" />Voos ({displayFlights.length})</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground text-xs">
                     <th className="py-2 pr-3">Data</th>
                     <th className="py-2 pr-3">Voo</th>
-                    <th className="py-2 pr-3">Rota</th>
-                    <th className="py-2 pr-3">Horário</th>
-                    <th className="py-2 pr-3">Duty</th>
-                    <th className="py-2">Status</th>
+                    <th className="py-2 pr-3">Origem</th>
+                    <th className="py-2 pr-3">Destino</th>
+                    <th className="py-2 pr-3">Saída</th>
+                    <th className="py-2 pr-3">Chegada</th>
+                    <th className="py-2 pr-3">Aeronave</th>
+                    <th className="py-2">Duty</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -190,10 +167,12 @@ export default function DashboardPage() {
                     <tr key={entry.id} className="border-b border-border last:border-0">
                       <td className="py-2 pr-3 font-mono text-foreground">{entry.date}</td>
                       <td className="py-2 pr-3 font-medium text-foreground">{entry.flight_number}</td>
-                      <td className="py-2 pr-3 text-muted-foreground">{entry.departure} → {entry.arrival}</td>
-                      <td className="py-2 pr-3 text-muted-foreground">{entry.departure_time} - {entry.arrival_time}</td>
-                      <td className="py-2 pr-3 text-foreground">{entry.duty_hours ?? '—'}</td>
-                      <td className="py-2 text-muted-foreground">{entry.status}</td>
+                      <td className="py-2 pr-3 text-foreground">{entry.departure_airport || entry.departure}</td>
+                      <td className="py-2 pr-3 text-foreground">{entry.arrival_airport || entry.arrival}</td>
+                      <td className="py-2 pr-3 font-mono text-muted-foreground">{entry.departure_time !== '00:00' ? entry.departure_time : '—'}</td>
+                      <td className="py-2 pr-3 font-mono text-muted-foreground">{entry.arrival_time !== '00:00' ? entry.arrival_time : '—'}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{entry.aircraft_type || '—'}</td>
+                      <td className="py-2 text-foreground">{entry.duty_hours ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -203,7 +182,6 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Import history */}
       <ImportHistoryCard />
     </AppLayout>
   );

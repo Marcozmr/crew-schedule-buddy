@@ -16,27 +16,66 @@ export type Database = {
     Tables: {
       imported_rosters: {
         Row: {
+          base_airport: string | null
           created_at: string
+          crew_role: string | null
+          duty_hours_total: number | null
+          employee_code: string | null
           file_name: string
+          flying_hours_total: number | null
           id: string
+          import_error: string | null
+          import_status: string | null
+          inserted_count: number | null
+          name: string | null
+          parsed_count: number | null
+          parser_version: string | null
+          roster_end_date: string | null
+          roster_start_date: string | null
           source_message_id: string
           storage_path: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          base_airport?: string | null
           created_at?: string
+          crew_role?: string | null
+          duty_hours_total?: number | null
+          employee_code?: string | null
           file_name?: string
+          flying_hours_total?: number | null
           id?: string
+          import_error?: string | null
+          import_status?: string | null
+          inserted_count?: number | null
+          name?: string | null
+          parsed_count?: number | null
+          parser_version?: string | null
+          roster_end_date?: string | null
+          roster_start_date?: string | null
           source_message_id: string
           storage_path: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          base_airport?: string | null
           created_at?: string
+          crew_role?: string | null
+          duty_hours_total?: number | null
+          employee_code?: string | null
           file_name?: string
+          flying_hours_total?: number | null
           id?: string
+          import_error?: string | null
+          import_status?: string | null
+          inserted_count?: number | null
+          name?: string | null
+          parsed_count?: number | null
+          parser_version?: string | null
+          roster_end_date?: string | null
+          roster_start_date?: string | null
           source_message_id?: string
           storage_path?: string
           updated_at?: string
@@ -112,57 +151,116 @@ export type Database = {
       }
       schedule_entries: {
         Row: {
+          activity_type: string
           aircraft_prefix: string | null
+          aircraft_type: string | null
           airline: string | null
           arrival: string
+          arrival_airport: string | null
           arrival_time: string
+          comments: string | null
           created_at: string
+          crew_role: string | null
+          crosses_midnight: boolean | null
           date: string
+          debrief_time: string | null
           departure: string
+          departure_airport: string | null
           departure_time: string
           duty_hours: number | null
+          flight_hours: number | null
           flight_number: string
+          hotel_name: string | null
           id: string
+          is_flight: boolean
+          operation_type: string | null
+          overnight: boolean | null
+          pairing_code: string | null
+          raw_line: string | null
           report_time: string | null
+          roster_id: string | null
+          source_pdf_path: string | null
           status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          activity_type?: string
           aircraft_prefix?: string | null
+          aircraft_type?: string | null
           airline?: string | null
           arrival?: string
+          arrival_airport?: string | null
           arrival_time?: string
+          comments?: string | null
           created_at?: string
+          crew_role?: string | null
+          crosses_midnight?: boolean | null
           date: string
+          debrief_time?: string | null
           departure?: string
+          departure_airport?: string | null
           departure_time?: string
           duty_hours?: number | null
+          flight_hours?: number | null
           flight_number: string
+          hotel_name?: string | null
           id?: string
+          is_flight?: boolean
+          operation_type?: string | null
+          overnight?: boolean | null
+          pairing_code?: string | null
+          raw_line?: string | null
           report_time?: string | null
+          roster_id?: string | null
+          source_pdf_path?: string | null
           status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          activity_type?: string
           aircraft_prefix?: string | null
+          aircraft_type?: string | null
           airline?: string | null
           arrival?: string
+          arrival_airport?: string | null
           arrival_time?: string
+          comments?: string | null
           created_at?: string
+          crew_role?: string | null
+          crosses_midnight?: boolean | null
           date?: string
+          debrief_time?: string | null
           departure?: string
+          departure_airport?: string | null
           departure_time?: string
           duty_hours?: number | null
+          flight_hours?: number | null
           flight_number?: string
+          hotel_name?: string | null
           id?: string
+          is_flight?: boolean
+          operation_type?: string | null
+          overnight?: boolean | null
+          pairing_code?: string | null
+          raw_line?: string | null
           report_time?: string | null
+          roster_id?: string | null
+          source_pdf_path?: string | null
           status?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "schedule_entries_roster_id_fkey"
+            columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
