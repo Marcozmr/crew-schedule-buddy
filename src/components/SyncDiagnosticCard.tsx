@@ -90,7 +90,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
   );
 
   const fetchUserScheduleSnapshot = useCallback(async (userId: string) => {
-    const [{ count }, { data: previewData }] = await Promise.all([
+    const [{ count }, { data: previewData }, { data: latestDateData }, { data: compareData }] = await Promise.all([
       supabase
         .from('schedule_entries')
         .select('id', { count: 'exact', head: true })
@@ -101,17 +101,21 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(5),
+      supabase
+        .from('schedule_entries')
+        .select('date')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('schedule_entries')
+        .select('user_id, date, flight_number')
+        .order('created_at', { ascending: false })
+        .limit(5),
     ]);
 
     const totalRows = count ?? 0;
-
-    const { data: latestDateData } = await supabase
-      .from('schedule_entries')
-      .select('date')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
 
     const schedulePreview: ScheduleRowPreview[] = (previewData ?? []).map((row) => ({
       user_id: row.user_id,
@@ -122,10 +126,19 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
       arrival_airport: row.arrival,
     }));
 
+    const comparePreview: ScheduleCompareRow[] = totalRows === 0
+      ? (compareData ?? []).map((row) => ({
+          user_id: row.user_id,
+          date: row.date,
+          flight_number: row.flight_number,
+        }))
+      : [];
+
     return {
       totalRows,
       latestDutyDate: latestDateData?.date ?? null,
       schedulePreview,
+      comparePreview,
     };
   }, []);
 
