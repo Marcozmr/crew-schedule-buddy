@@ -18,33 +18,33 @@ export default function DashboardPage() {
   // Separate flights from non-flights
   const flights = useMemo(() => schedule.filter(e => e.is_flight), [schedule]);
 
+  const parseEntryDate = (dateStr: string) => {
+    if (dateStr.includes('-') && dateStr.indexOf('-') === 4) return new Date(dateStr + 'T00:00:00');
+    const parts = dateStr.split(/[\/\-]/);
+    if (parts.length < 3) return new Date();
+    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+  };
+
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
-    const daysInMonth = new Date(now.getFullYear(), currentMonth + 1, 0).getDate();
+    const currentYear = now.getFullYear();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     const monthEntries = flights.filter(e => {
-      const parts = e.date.split(/[\/\-]/);
-      return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
+      const d = parseEntryDate(e.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
-    const totalHours = monthEntries.reduce((sum, e) => sum + (e.duty_hours || 0), 0);
+    const totalFlightHours = monthEntries.reduce((sum, e) => sum + (e.flight_hours || 0), 0);
     const flightDays = new Set(monthEntries.map(e => e.date)).size;
     const daysOff = daysInMonth - flightDays;
 
-    const sorted = [...monthEntries].sort((a, b) => {
-      const dateA = new Date(a.date.split(/[\/\-]/).reverse().join('-'));
-      const dateB = new Date(b.date.split(/[\/\-]/).reverse().join('-'));
-      return dateA.getTime() - dateB.getTime();
-    });
+    const sorted = [...monthEntries].sort((a, b) => parseEntryDate(a.date).getTime() - parseEntryDate(b.date).getTime());
 
-    const nextFlight = sorted.find(e => {
-      const parts = e.date.split(/[\/\-]/);
-      const entryDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-      return entryDate >= now;
-    });
+    const nextFlight = sorted.find(e => parseEntryDate(e.date) >= now);
 
-    return { totalFlights: monthEntries.length, totalHours: Math.round(totalHours * 10) / 10, daysOff, flightDays, nextFlight, maxHours: 85 };
+    return { totalFlights: monthEntries.length, totalHours: Math.round(totalFlightHours * 10) / 10, daysOff, flightDays, nextFlight, maxHours: 85 };
   }, [flights]);
 
   const compliance = useMemo<ComplianceResult>(() => checkCompliance(schedule), [schedule]);
@@ -56,9 +56,10 @@ export default function DashboardPage() {
   const displayFlights = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
     const monthFlights = flights.filter(e => {
-      const parts = e.date.split(/[\/\-]/);
-      return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
+      const d = parseEntryDate(e.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
     return monthFlights.length > 0 ? monthFlights : flights.slice(-20);
   }, [flights]);

@@ -14,6 +14,7 @@ export interface ScheduleEntry {
   airline: string | null;
   report_time: string | null;
   duty_hours: number | null;
+  flight_hours: number | null;
   activity_type: string;
   is_flight: boolean;
   pairing_code: string | null;
@@ -21,12 +22,15 @@ export interface ScheduleEntry {
   departure_airport: string | null;
   arrival_airport: string | null;
   debrief_time: string | null;
-  flight_hours: number | null;
   aircraft_type: string | null;
   hotel_name: string | null;
   raw_line: string | null;
   crosses_midnight: boolean;
   overnight: boolean;
+  operation_type: string | null;
+  assignment: string | null;
+  comments: string | null;
+  sort_datetime: string | null;
 }
 
 export function useScheduleData() {
@@ -58,7 +62,8 @@ export function useScheduleData() {
       .select('*')
       .eq('user_id', user.id)
       .eq('roster_id', activeRoster.id)
-      .order('date', { ascending: true });
+      .order('sort_datetime', { ascending: true, nullsFirst: false });
+
     if (data) setSchedule(data as unknown as ScheduleEntry[]);
     setLoading(false);
   }, [user]);

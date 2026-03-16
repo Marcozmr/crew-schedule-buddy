@@ -81,9 +81,12 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                 <div className="bg-background rounded-lg p-3 mb-3 text-xs space-y-1">
                   {result.header.crewName && <p><span className="text-muted-foreground">Tripulante:</span> <span className="font-medium text-foreground">{result.header.crewName}</span></p>}
                   {result.header.employeeCode && <p><span className="text-muted-foreground">Matrícula:</span> <span className="font-medium text-foreground">{result.header.employeeCode}</span></p>}
+                  {result.header.crewGroupCode && <p><span className="text-muted-foreground">Grupo:</span> <span className="font-medium text-foreground">{result.header.crewGroupCode}</span></p>}
                   {result.header.baseAirport && <p><span className="text-muted-foreground">Base:</span> <span className="font-medium text-foreground">{result.header.baseAirport}</span></p>}
                   {result.header.crewRole && <p><span className="text-muted-foreground">Função:</span> <span className="font-medium text-foreground">{result.header.crewRole}</span></p>}
                   {result.header.rosterStartDate && <p><span className="text-muted-foreground">Período:</span> <span className="font-medium text-foreground">{result.header.rosterStartDate} — {result.header.rosterEndDate}</span></p>}
+                  {result.header.flyingHoursTotal != null && <p><span className="text-muted-foreground">Horas Voo:</span> <span className="font-medium text-foreground">{result.header.flyingHoursTotal}h</span></p>}
+                  {result.header.dutyHoursTotal != null && <p><span className="text-muted-foreground">Horas Duty:</span> <span className="font-medium text-foreground">{result.header.dutyHoursTotal}h</span></p>}
                 </div>
               )}
 

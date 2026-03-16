@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           base_airport: string | null
           created_at: string
+          crew_group_code: string | null
           crew_role: string | null
           duty_hours_total: number | null
           employee_code: string | null
@@ -31,6 +32,7 @@ export type Database = {
           name: string | null
           parsed_count: number | null
           parser_version: string | null
+          raw_text_excerpt: string | null
           roster_end_date: string | null
           roster_start_date: string | null
           source_message_id: string
@@ -41,6 +43,7 @@ export type Database = {
         Insert: {
           base_airport?: string | null
           created_at?: string
+          crew_group_code?: string | null
           crew_role?: string | null
           duty_hours_total?: number | null
           employee_code?: string | null
@@ -54,6 +57,7 @@ export type Database = {
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
+          raw_text_excerpt?: string | null
           roster_end_date?: string | null
           roster_start_date?: string | null
           source_message_id: string
@@ -64,6 +68,7 @@ export type Database = {
         Update: {
           base_airport?: string | null
           created_at?: string
+          crew_group_code?: string | null
           crew_role?: string | null
           duty_hours_total?: number | null
           employee_code?: string | null
@@ -77,6 +82,7 @@ export type Database = {
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
+          raw_text_excerpt?: string | null
           roster_end_date?: string | null
           roster_start_date?: string | null
           source_message_id?: string
@@ -161,6 +167,7 @@ export type Database = {
           arrival: string
           arrival_airport: string | null
           arrival_time: string
+          assignment: string | null
           comments: string | null
           created_at: string
           crew_role: string | null
@@ -182,6 +189,7 @@ export type Database = {
           raw_line: string | null
           report_time: string | null
           roster_id: string | null
+          sort_datetime: string | null
           source_pdf_path: string | null
           status: string
           updated_at: string
@@ -195,6 +203,7 @@ export type Database = {
           arrival?: string
           arrival_airport?: string | null
           arrival_time?: string
+          assignment?: string | null
           comments?: string | null
           created_at?: string
           crew_role?: string | null
@@ -216,6 +225,7 @@ export type Database = {
           raw_line?: string | null
           report_time?: string | null
           roster_id?: string | null
+          sort_datetime?: string | null
           source_pdf_path?: string | null
           status?: string
           updated_at?: string
@@ -229,6 +239,7 @@ export type Database = {
           arrival?: string
           arrival_airport?: string | null
           arrival_time?: string
+          assignment?: string | null
           comments?: string | null
           created_at?: string
           crew_role?: string | null
@@ -250,6 +261,7 @@ export type Database = {
           raw_line?: string | null
           report_time?: string | null
           roster_id?: string | null
+          sort_datetime?: string | null
           source_pdf_path?: string | null
           status?: string
           updated_at?: string
