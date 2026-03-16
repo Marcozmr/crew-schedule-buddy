@@ -101,6 +101,18 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                 </div>
               </div>
 
+              {/* Parse stats */}
+              {result.parseStats && (
+                <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Voos</p><p className="font-bold text-foreground">{result.parseStats.totalFlights}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">DO/OFF</p><p className="font-bold text-foreground">{result.parseStats.totalDO}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Standby</p><p className="font-bold text-foreground">{result.parseStats.totalStandby}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">APR</p><p className="font-bold text-foreground">{result.parseStats.totalAPR}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Dedup</p><p className="font-bold text-foreground">{result.parseStats.totalAfterDedup}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Anchors</p><p className="font-bold text-foreground">{result.parseStats.totalRawAnchors}</p></div>
+                </div>
+              )}
+
               {result.error && <p className="mt-3 text-xs text-muted-foreground">{result.error}</p>}
 
               {/* Debug section */}
@@ -111,12 +123,6 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
 
               {showDebug && (
                 <div className="mt-2 space-y-3 text-xs">
-                  {/* Extracted text preview */}
-                  <div>
-                    <p className="font-medium text-muted-foreground mb-1">Texto extraído (1000 chars)</p>
-                    <pre className="bg-muted rounded-lg p-2 overflow-x-auto text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap text-foreground">{result.extractedTextPreview || '(vazio)'}</pre>
-                  </div>
-
                   {/* Parsed entries preview */}
                   {result.parsedEntriesPreview.length > 0 && (
                     <div>
@@ -124,7 +130,22 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                       <div className="bg-muted rounded-lg p-2 overflow-x-auto max-h-40 overflow-y-auto">
                         {result.parsedEntriesPreview.map((e, i) => (
                           <div key={i} className="py-1 border-b border-border last:border-0 text-[10px] text-foreground">
-                            <span className="font-mono">{e.date}</span> | <span className={e.isFlight ? 'text-primary font-bold' : 'text-accent-foreground'}>{e.flightNumber}</span> | {e.departureAirport}→{e.arrivalAirport} | {e.departureTime}-{e.arrivalTime} | {e.aircraftType || '—'} | duty:{e.dutyHours ?? '—'}h
+                            <span className="font-mono">{e.date}</span> | <span className={e.isFlight ? 'text-primary font-bold' : 'text-accent-foreground font-bold'}>{e.activityType}</span> | {e.flightNumber} | {e.departureAirport}→{e.arrivalAirport} | {e.departureTime}-{e.arrivalTime} | FH:{e.flightHours ?? '—'} | DH:{e.dutyHours ?? '—'} | {e.aircraftType || '—'}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Text by day */}
+                  {result.textByDay && Object.keys(result.textByDay).length > 0 && (
+                    <div>
+                      <p className="font-medium text-muted-foreground mb-1">Texto bruto por dia</p>
+                      <div className="bg-muted rounded-lg p-2 overflow-x-auto max-h-48 overflow-y-auto">
+                        {Object.entries(result.textByDay).slice(0, 10).map(([day, txt]) => (
+                          <div key={day} className="py-1 border-b border-border last:border-0">
+                            <p className="font-mono font-bold text-[10px] text-primary">{day}</p>
+                            <p className="text-[9px] text-foreground whitespace-pre-wrap break-all">{txt}</p>
                           </div>
                         ))}
                       </div>
