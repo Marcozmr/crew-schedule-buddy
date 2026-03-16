@@ -478,11 +478,12 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
 
     // 10. Update roster status
     if (rosterId) {
-      await supabase.from('imported_rosters').update({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('imported_rosters') as any).update({
         import_status: insertedCount > 0 ? 'success' : (rows.length === 0 ? 'duplicate' : 'error'),
         inserted_count: insertedCount,
         import_error: insertedCount === 0 && rows.length > 0 ? 'Falha ao inserir registros' : null,
-      } as Record<string, unknown>).eq('id', rosterId);
+      }).eq('id', rosterId);
     }
 
     // 11. Update profile airline
