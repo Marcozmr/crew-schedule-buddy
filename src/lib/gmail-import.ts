@@ -636,49 +636,74 @@ export async function importScheduleFromGmail(
 
   const airline = detectAirline(extractedText);
 
-  const { data: existingRows, error: existingRowsError } = await supabase
-    .from('schedule_entries')
-    .select('date, flight_number, departure_time, arrival_time')
-    .eq('user_id', effectiveUserId);
+  // Desativa escala ativa anterior e cria nova escala ativa para este import Gmail
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('imported_rosters') as any)
+    .update({ is_active: false })
+    .eq('user_id', effectiveUserId)
+    .eq('is_active', true);
 
-  if (existingRowsError) {
-    diagnostic.final_error = 'Não foi possível ler os voos atuais no banco para deduplicação.';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any)
+    .insert({
+      user_id: effectiveUserId,
+      file_name: searchResult.candidate.attachmentName || STORAGE_FILENAME,
+      source_message_id: searchResult.candidate.messageId,
+      storage_path: savePdfResult.storagePath,
+      parser_version: 'gmail-import-v2',
+      import_status: 'processing',
+      parsed_count: parsedEntries.length,
+      inserted_count: 0,
+      is_active: true,
+      raw_text_excerpt: extractedText.substring(0, 2000),
+    })
+    .select('id')
+    .single();
+
+  if (rosterError || !rosterRow?.id) {
+    diagnostic.db_insert_ok = false;
+    diagnostic.final_error = `Não foi possível criar a importação ativa: ${rosterError?.message || 'erro desconhecido'}`;
     return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
   }
 
-  const existingKeys = new Set(
-    (existingRows ?? []).map((row) => `${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`)
-  );
+  const rosterId = rosterRow.id as string;
 
-  const parsedRows = parsedEntries.map((entry) => ({
-    user_id: effectiveUserId,
-    date: entry.date,
-    flight_number: entry.flightNumber,
-    departure: entry.departure,
-    arrival: entry.arrival,
-    departure_time: entry.departureTime,
-    arrival_time: entry.arrivalTime,
-    status: entry.status,
-    airline: entry.airline,
-    report_time: entry.reportTime || null,
-    duty_hours: entry.dutyHours || null,
-  }));
-
-  const dedupedRows = parsedRows.filter(
-    (row) => !existingKeys.has(`${row.date}|${row.flight_number}|${row.departure_time}|${row.arrival_time}`)
-  );
+  const parsedRows = parsedEntries.map((entry) => {
+    const [day, month, year] = entry.date.split('/');
+    const isoDate = day && month && year ? `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}` : entry.date;
+    return {
+      user_id: effectiveUserId,
+      roster_id: rosterId,
+      date: isoDate,
+      flight_number: entry.flightNumber,
+      departure: entry.departure,
+      arrival: entry.arrival,
+      departure_time: entry.departureTime,
+      arrival_time: entry.arrivalTime,
+      status: entry.status,
+      airline: entry.airline,
+      report_time: entry.reportTime || null,
+      duty_hours: entry.dutyHours || null,
+      flight_hours: entry.dutyHours || null,
+      is_flight: true,
+      activity_type: 'flight',
+      sort_datetime: `${isoDate}T${(entry.departureTime || '00:00')}:00`,
+    };
+  });
 
   let insertedRowsCount = 0;
 
-  if (dedupedRows.length > 0) {
-    const { error: bulkInsertError } = await supabase.from('schedule_entries').insert(dedupedRows);
+  if (parsedRows.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: bulkInsertError } = await (supabase.from('schedule_entries') as any).insert(parsedRows);
 
     if (bulkInsertError) {
       let partialInsertCount = 0;
       let lastSingleErrorMessage: string | null = null;
 
-      for (const row of dedupedRows) {
-        const { error: singleInsertError } = await supabase.from('schedule_entries').insert(row);
+      for (const row of parsedRows) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: singleInsertError } = await (supabase.from('schedule_entries') as any).insert([row]);
         if (!singleInsertError) {
           partialInsertCount += 1;
         } else {
@@ -689,6 +714,10 @@ export async function importScheduleFromGmail(
       if (partialInsertCount === 0) {
         diagnostic.db_insert_ok = false;
         diagnostic.final_error = `Não foi possível salvar os voos na tabela schedule_entries. ${bulkInsertError.message}`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('imported_rosters') as any)
+          .update({ import_status: 'error', import_error: diagnostic.final_error, inserted_count: 0 })
+          .eq('id', rosterId);
         return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
       }
 
@@ -697,18 +726,28 @@ export async function importScheduleFromGmail(
         ? `Inserção parcial concluída. Último erro: ${lastSingleErrorMessage}`
         : savePdfResult.warning;
     } else {
-      insertedRowsCount = dedupedRows.length;
+      insertedRowsCount = parsedRows.length;
     }
   }
 
-  const { count: userRowsCountAfterInsert } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('imported_rosters') as any)
+    .update({
+      import_status: insertedRowsCount > 0 ? 'success' : 'error',
+      import_error: insertedRowsCount > 0 ? null : 'Nenhuma linha inserida',
+      inserted_count: insertedRowsCount,
+    })
+    .eq('id', rosterId);
+
+  const { count: rosterRowsCountAfterInsert } = await supabase
     .from('schedule_entries')
     .select('id', { count: 'exact', head: true })
-    .eq('user_id', effectiveUserId);
+    .eq('user_id', effectiveUserId)
+    .eq('roster_id', rosterId);
 
-  if (insertedRowsCount > 0 && (userRowsCountAfterInsert ?? 0) === 0) {
+  if (insertedRowsCount > 0 && (rosterRowsCountAfterInsert ?? 0) === 0) {
     diagnostic.db_insert_ok = false;
-    diagnostic.final_error = 'Os voos não ficaram vinculados ao usuário autenticado atual.';
+    diagnostic.final_error = 'Os voos não ficaram vinculados ao roster ativo.';
     return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
   }
 
