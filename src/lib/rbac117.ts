@@ -1,5 +1,10 @@
 // RBAC 117 Apêndice B - Compliance Engine
-// Uses flight_hours for flight accumulation, duty_hours for duty, activity_type for days off
+// All calculations use America/Sao_Paulo timezone (BRT/BRST)
+// flight_hours for accumulation, activity_type for days off
+
+import { TZDate } from '@date-fns/tz';
+
+const BRAZIL_TZ = 'America/Sao_Paulo';
 
 export interface ComplianceResult {
   status: 'regular' | 'atencao' | 'irregular';
@@ -58,9 +63,52 @@ const LIMITS = {
 
 const DAY_OFF_CODES = new Set(['DO', 'FOLGA', 'OFF', 'X']);
 
-function getHourFromTime(time: string): number {
-  const [h] = time.split(':').map(Number);
-  return h;
+// ─── Timezone helpers ───
+
+/** Parse a date string (YYYY-MM-DD or DD/MM/YYYY) into a TZDate at midnight BRT */
+function parseDateBRT(dateStr: string): TZDate {
+  let year: number, month: number, day: number;
+  if (dateStr.includes('-') && dateStr.indexOf('-') === 4) {
+    [year, month, day] = dateStr.split('-').map(Number);
+  } else {
+    const parts = dateStr.split(/[\/\-]/);
+    day = parseInt(parts[0]);
+    month = parseInt(parts[1]);
+    year = parseInt(parts[2]);
+  }
+  return new TZDate(year, month - 1, day, 0, 0, 0, BRAZIL_TZ);
+}
+
+/** Create a TZDate for a specific date + time (HH:MM) in BRT */
+function toDateTimeBRT(dateStr: string, time: string): TZDate {
+  const base = parseDateBRT(dateStr);
+  const [h, m] = time.split(':').map(Number);
+  return new TZDate(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, BRAZIL_TZ);
+}
+
+/** Get the arrival datetime in BRT, adding +1 day if arrival < departure (crosses midnight) */
+function getArrivalDateTimeBRT(entry: ScheduleEntry): TZDate {
+  const arr = toDateTimeBRT(entry.date, entry.arrival_time);
+  const dep = toDateTimeBRT(entry.date, entry.departure_time);
+  // If arrival time < departure time, the flight crossed midnight
+  if (arr.getTime() <= dep.getTime()) {
+    return new TZDate(arr.getFullYear(), arr.getMonth(), arr.getDate() + 1, arr.getHours(), arr.getMinutes(), 0, BRAZIL_TZ);
+  }
+  return arr;
+}
+
+function getHourBRT(time: string): number {
+  return parseInt(time.split(':')[0]);
+}
+
+/** Night operation: any part of the flight between 00:00-05:59 BRT */
+function isNightOp(entry: ScheduleEntry): boolean {
+  if (!entry.is_flight) return false;
+  const depH = getHourBRT(entry.departure_time);
+  const arrDT = getArrivalDateTimeBRT(entry);
+  const arrH = arrDT.getHours();
+  // Night = departure or arrival in 00:00-05:59 BRT, or crosses midnight
+  return depH < 6 || arrH < 6 || entry.crosses_midnight;
 }
 
 function getTimeRangeKey(hour: number): string {
@@ -81,57 +129,38 @@ function getLegsKey(legs: number): string {
   return '7+';
 }
 
-function isNightOp(entry: ScheduleEntry): boolean {
-  if (!entry.is_flight) return false;
-  const depH = getHourFromTime(entry.departure_time);
-  const arrH = getHourFromTime(entry.arrival_time);
-  return depH < 6 || arrH < 6 || entry.crosses_midnight;
-}
-
-function parseDate(dateStr: string): Date {
-  // Supports YYYY-MM-DD and DD/MM/YYYY
-  if (dateStr.includes('-') && dateStr.indexOf('-') === 4) {
-    return new Date(dateStr + 'T00:00:00');
-  }
-  const parts = dateStr.split(/[\/\-]/);
-  if (parts.length < 3) return new Date();
-  return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-}
+// ─── Main compliance check ───
 
 export function checkCompliance(
   schedule: ScheduleEntry[],
   currentDate: Date = new Date()
 ): ComplianceResult {
   const alerts: ComplianceAlert[] = [];
-  const now = currentDate;
+  // Convert "now" to BRT
+  const now = new TZDate(currentDate, BRAZIL_TZ);
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  // Filter entries for current month
+  // Filter entries for current month (in BRT)
   const monthEntries = schedule.filter(e => {
-    const d = parseDate(e.date);
+    const d = parseDateBRT(e.date);
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   });
 
-  const sorted = [...monthEntries].sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+  const sorted = [...monthEntries].sort((a, b) => parseDateBRT(a.date).getTime() - parseDateBRT(b.date).getTime());
 
-  // Flights only for flight hour accumulation
+  // Flights only
   const monthFlights = sorted.filter(e => e.is_flight);
-
-  // Use flight_hours for flight accumulation (not duty_hours)
   const totalFlightHours = monthFlights.reduce((sum, e) => sum + (e.flight_hours || 0), 0);
 
-  // Count days off using activity_type
+  // Days off
   const daysOffFromSchedule = sorted.filter(e => DAY_OFF_CODES.has(e.activity_type)).length;
-  const flightDates = new Set(monthFlights.map(e => e.date));
   const allDates = new Set(sorted.map(e => e.date));
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  // Days off = explicit DO/OFF entries + days not in schedule at all
-  const scheduledDays = allDates.size;
-  const unscheduledDays = Math.max(0, daysInMonth - scheduledDays);
+  const unscheduledDays = Math.max(0, daysInMonth - allDates.size);
   const daysOff = daysOffFromSchedule + unscheduledDays;
 
-  // Count night ops
+  // Night ops
   let nightOpsCount = 0;
   let consecutiveNightOps = 0;
   let maxConsecutiveNight = 0;
@@ -146,117 +175,88 @@ export function checkCompliance(
     }
   });
 
-  // 7-day window (use flight_hours)
-  const sevenDaysAgo = new Date(now);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  // 7-day window
+  const sevenDaysAgo = new TZDate(now.getFullYear(), now.getMonth(), now.getDate() - 7, 0, 0, 0, BRAZIL_TZ);
   const flights7d = schedule.filter(e => {
     if (!e.is_flight) return false;
-    const d = parseDate(e.date);
-    return d >= sevenDaysAgo && d <= now;
+    const d = parseDateBRT(e.date);
+    return d.getTime() >= sevenDaysAgo.getTime() && d.getTime() <= now.getTime();
   });
   const hours7d = flights7d.reduce((sum, e) => sum + (e.flight_hours || 0), 0);
 
-  // 28-day window (use flight_hours)
-  const twentyEightDaysAgo = new Date(now);
-  twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 28);
+  // 28-day window
+  const twentyEightDaysAgo = new TZDate(now.getFullYear(), now.getMonth(), now.getDate() - 28, 0, 0, 0, BRAZIL_TZ);
   const flights28d = schedule.filter(e => {
     if (!e.is_flight) return false;
-    const d = parseDate(e.date);
-    return d >= twentyEightDaysAgo && d <= now;
+    const d = parseDateBRT(e.date);
+    return d.getTime() >= twentyEightDaysAgo.getTime() && d.getTime() <= now.getTime();
   });
   const hours28d = flights28d.reduce((sum, e) => sum + (e.flight_hours || 0), 0);
 
-  // Duty limits lookup
-  const startHour = monthFlights.length > 0 ? getHourFromTime(monthFlights[0].report_time || monthFlights[0].departure_time) : 8;
+  // Duty limits
+  const flightDates = new Set(monthFlights.map(e => e.date));
+  const startHour = monthFlights.length > 0 ? getHourBRT(monthFlights[0].report_time || monthFlights[0].departure_time) : 8;
   const legsPerDay = Math.ceil(monthFlights.length / Math.max(flightDates.size, 1));
-  const timeKey = getTimeRangeKey(startHour);
-  const legsKey = getLegsKey(legsPerDay);
-  const dutyLimits = DUTY_TABLE[timeKey]?.[legsKey] || [12, 9];
+  const dutyLimits = DUTY_TABLE[getTimeRangeKey(startHour)]?.[getLegsKey(legsPerDay)] || [12, 9];
 
   // ===== COMPLIANCE CHECKS =====
 
   // 1. Monthly flight hours (85h)
   if (totalFlightHours > LIMITS.MAX_FLIGHT_HOURS_MONTH) {
-    alerts.push({
-      type: 'danger', title: 'Limite mensal de horas de voo excedido',
-      description: `${totalFlightHours.toFixed(1)}h voadas — máximo: ${LIMITS.MAX_FLIGHT_HOURS_MONTH}h`,
-      reference: 'RBAC 117, Apêndice B, Tabela 5',
-    });
+    alerts.push({ type: 'danger', title: 'Limite mensal de horas de voo excedido', description: `${totalFlightHours.toFixed(1)}h voadas — máximo: ${LIMITS.MAX_FLIGHT_HOURS_MONTH}h`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   } else if (totalFlightHours > LIMITS.MAX_FLIGHT_HOURS_MONTH * 0.85) {
-    alerts.push({
-      type: 'warning', title: 'Próximo do limite mensal',
-      description: `${totalFlightHours.toFixed(1)}h voadas de ${LIMITS.MAX_FLIGHT_HOURS_MONTH}h (${Math.round((totalFlightHours / LIMITS.MAX_FLIGHT_HOURS_MONTH) * 100)}%)`,
-      reference: 'RBAC 117, Apêndice B, Tabela 5',
-    });
+    alerts.push({ type: 'warning', title: 'Próximo do limite mensal', description: `${totalFlightHours.toFixed(1)}h voadas de ${LIMITS.MAX_FLIGHT_HOURS_MONTH}h (${Math.round((totalFlightHours / LIMITS.MAX_FLIGHT_HOURS_MONTH) * 100)}%)`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   }
 
   // 2. 7-day limit (44h)
   if (hours7d > LIMITS.MAX_FLIGHT_HOURS_7D) {
-    alerts.push({
-      type: 'danger', title: 'Limite de 7 dias excedido',
-      description: `${hours7d.toFixed(1)}h em 7 dias — máximo: ${LIMITS.MAX_FLIGHT_HOURS_7D}h`,
-      reference: 'RBAC 117, Apêndice B, Tabela 5',
-    });
+    alerts.push({ type: 'danger', title: 'Limite de 7 dias excedido', description: `${hours7d.toFixed(1)}h em 7 dias — máximo: ${LIMITS.MAX_FLIGHT_HOURS_7D}h`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   } else if (hours7d > LIMITS.MAX_FLIGHT_HOURS_7D * 0.85) {
-    alerts.push({
-      type: 'warning', title: 'Próximo do limite de 7 dias',
-      description: `${hours7d.toFixed(1)}h em 7 dias de ${LIMITS.MAX_FLIGHT_HOURS_7D}h`,
-      reference: 'RBAC 117, Apêndice B, Tabela 5',
-    });
+    alerts.push({ type: 'warning', title: 'Próximo do limite de 7 dias', description: `${hours7d.toFixed(1)}h em 7 dias de ${LIMITS.MAX_FLIGHT_HOURS_7D}h`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   }
 
   // 3. 28-day limit (100h)
   if (hours28d > LIMITS.MAX_FLIGHT_HOURS_28D) {
-    alerts.push({
-      type: 'danger', title: 'Limite de 28 dias excedido',
-      description: `${hours28d.toFixed(1)}h em 28 dias — máximo: ${LIMITS.MAX_FLIGHT_HOURS_28D}h`,
-      reference: 'RBAC 117, Apêndice B, Tabela 5',
-    });
+    alerts.push({ type: 'danger', title: 'Limite de 28 dias excedido', description: `${hours28d.toFixed(1)}h em 28 dias — máximo: ${LIMITS.MAX_FLIGHT_HOURS_28D}h`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   }
 
-  // 4. Minimum days off (8/month)
+  // 4. Days off (8/month)
   if (daysOff < LIMITS.MIN_DAYS_OFF_MONTH) {
-    alerts.push({
-      type: 'danger', title: 'Folgas insuficientes',
-      description: `${daysOff} folgas no mês — mínimo: ${LIMITS.MIN_DAYS_OFF_MONTH}`,
-      reference: 'RBAC 117, Apêndice B — Folgas periódicas',
-    });
+    alerts.push({ type: 'danger', title: 'Folgas insuficientes', description: `${daysOff} folgas no mês — mínimo: ${LIMITS.MIN_DAYS_OFF_MONTH}`, reference: 'RBAC 117, Apêndice B — Folgas periódicas' });
   } else if (daysOff <= LIMITS.MIN_DAYS_OFF_MONTH + 1) {
-    alerts.push({
-      type: 'warning', title: 'Poucas folgas restantes',
-      description: `${daysOff} folgas no mês — mínimo: ${LIMITS.MIN_DAYS_OFF_MONTH}`,
-      reference: 'RBAC 117, Apêndice B — Folgas periódicas',
-    });
+    alerts.push({ type: 'warning', title: 'Poucas folgas restantes', description: `${daysOff} folgas no mês — mínimo: ${LIMITS.MIN_DAYS_OFF_MONTH}`, reference: 'RBAC 117, Apêndice B — Folgas periódicas' });
   }
 
-  // 5. Consecutive night operations
+  // 5. Consecutive night ops
   if (maxConsecutiveNight > LIMITS.MAX_CONSECUTIVE_NIGHT_OPS) {
-    alerts.push({
-      type: 'danger', title: 'Madrugadas consecutivas excedidas',
-      description: `${maxConsecutiveNight} consecutivas — máximo: ${LIMITS.MAX_CONSECUTIVE_NIGHT_OPS}`,
-      reference: 'RBAC 117, Apêndice B, item (o)',
-    });
+    alerts.push({ type: 'danger', title: 'Madrugadas consecutivas excedidas', description: `${maxConsecutiveNight} consecutivas — máximo: ${LIMITS.MAX_CONSECUTIVE_NIGHT_OPS}`, reference: 'RBAC 117, Apêndice B, item (o)' });
   }
 
-  // 6. Rest between flights
+  // 6. Rest between flights (BRT local times)
   const flightsSorted = sorted.filter(e => e.is_flight);
   for (let i = 1; i < flightsSorted.length; i++) {
     const prev = flightsSorted[i - 1];
     const curr = flightsSorted[i];
-    const prevDate = parseDate(prev.date);
-    const currDate = parseDate(curr.date);
 
-    const [prevArrH, prevArrM] = prev.arrival_time.split(':').map(Number);
-    const [currDepH, currDepM] = (curr.report_time || curr.departure_time).split(':').map(Number);
+    // Previous arrival in BRT (with +1 day if crosses midnight)
+    const prevArrival = getArrivalDateTimeBRT(prev);
+    // Add 30min post-flight (debrief)
+    const prevEnd = new TZDate(
+      prevArrival.getFullYear(), prevArrival.getMonth(), prevArrival.getDate(),
+      prevArrival.getHours(), prevArrival.getMinutes() + 30, 0, BRAZIL_TZ
+    );
 
-    const prevEnd = prevDate.getTime() + (prevArrH * 60 + prevArrM + 30) * 60000;
-    const currStart = currDate.getTime() + (currDepH * 60 + currDepM) * 60000;
-    const restHours = (currStart - prevEnd) / 3600000;
+    // Current departure (report or departure) in BRT
+    const currStart = toDateTimeBRT(curr.date, curr.report_time || curr.departure_time);
+
+    const restMs = currStart.getTime() - prevEnd.getTime();
+    const restHours = restMs / 3600000;
 
     if (restHours > 0 && restHours < LIMITS.MIN_REST_ACCLIMATED) {
       alerts.push({
-        type: 'danger', title: `Repouso insuficiente (${prev.date} → ${curr.date})`,
-        description: `${restHours.toFixed(1)}h — mínimo: ${LIMITS.MIN_REST_ACCLIMATED}h`,
+        type: 'danger',
+        title: `Repouso insuficiente (${prev.date} → ${curr.date})`,
+        description: `${Math.floor(restHours)}h${Math.round((restHours % 1) * 60).toString().padStart(2, '0')}m — mínimo: ${LIMITS.MIN_REST_ACCLIMATED}h`,
         reference: 'RBAC 117, Apêndice B, Tabela 6',
       });
     }
