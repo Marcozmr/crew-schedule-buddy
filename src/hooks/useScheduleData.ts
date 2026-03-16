@@ -39,11 +39,11 @@ export function useScheduleData() {
     setLoading(true);
 
     // Find the active roster
-    const { data: activeRoster } = await supabase
-      .from('imported_rosters')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: activeRoster } = await (supabase.from('imported_rosters') as any)
       .select('id')
       .eq('user_id', user.id)
-      .eq('is_active' as any, true)
+      .eq('is_active', true)
       .limit(1)
       .single();
 
@@ -53,11 +53,11 @@ export function useScheduleData() {
       return;
     }
 
-    const { data } = await supabase
-      .from('schedule_entries')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('schedule_entries') as any)
       .select('*')
       .eq('user_id', user.id)
-      .eq('roster_id' as any, activeRoster.id)
+      .eq('roster_id', activeRoster.id)
       .order('date', { ascending: true });
     if (data) setSchedule(data as unknown as ScheduleEntry[]);
     setLoading(false);
