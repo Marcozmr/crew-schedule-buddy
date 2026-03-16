@@ -396,8 +396,15 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
 
           {snapshot.schedule_entries_preview.length > 0 && (
             <div className="rounded-lg border border-border bg-background p-3">
-              <p className="text-xs font-semibold text-foreground mb-2">5 registros reais de schedule_entries</p>
+              <p className="text-xs font-semibold text-foreground mb-2">5 registros reais de schedule_entries (usuária atual)</p>
               <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify(snapshot.schedule_entries_preview, null, 2)}</pre>
+            </div>
+          )}
+
+          {snapshot.total_rows_in_schedule_entries_for_current_user === 0 && snapshot.schedule_entries_compare_preview.length > 0 && (
+            <div className="rounded-lg border border-border bg-background p-3">
+              <p className="text-xs font-semibold text-foreground mb-2">Usuária atual sem registros. Primeiros 5 registros existentes em schedule_entries (comparação)</p>
+              <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words">{JSON.stringify(snapshot.schedule_entries_compare_preview, null, 2)}</pre>
             </div>
           )}
         </div>
