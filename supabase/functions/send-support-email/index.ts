@@ -4,23 +4,35 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const SUPPORT_EMAIL = "support@escalax.app.br";
+const EMAIL_API_URL = Deno.env.get("LOVABLE_EMAIL_API_URL") || "https://email.lovable.dev/v1/send";
+const GENERIC_SEND_ERROR = "Não foi possível enviar sua mensagem agora. Tente novamente em instantes.";
+
+const jsonResponse = (payload: unknown, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const categoryToLabel = (type: string | null | undefined) =>
+  type === "suggestion"
+    ? "Sugerir melhoria"
+    : type === "bug"
+      ? "Relatar problema"
+      : "Entrar em contato";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ sent: false, error: "Não autorizado" }, 401);
     }
 
     const supabase = createClient(
@@ -29,37 +41,38 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ sent: false, error: "Não autorizado" }, 401);
     }
 
     const { name, email, type, subject, message, route } = await req.json();
 
     if (!message?.trim()) {
-      return new Response(JSON.stringify({ error: "Mensagem é obrigatória" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ sent: false, error: "Mensagem é obrigatória" }, 400);
     }
 
-    const categoryLabel =
-      type === "suggestion" ? "Sugerir melhoria" :
-      type === "bug" ? "Relatar problema" : "Entrar em contato";
+    const categoryLabel = categoryToLabel(type);
+    const safeName = name?.trim() || "Usuário";
+    const safeType = type?.trim() || "contact";
+    const safeSubject = subject?.trim() || null;
+    const safeEmail = email?.trim() || null;
+    const now = new Date().toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+    });
 
-    const emailSubject = `[EscalaX] ${categoryLabel} - ${name || "Usuário"}`;
-    const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-
+    const emailSubject = `[EscalaX] ${categoryLabel} - ${safeName}`;
     const emailBody = `
 Nova mensagem de feedback do EscalaX
 
 Categoria: ${categoryLabel}
-Nome: ${name || "Não informado"}
-E-mail: ${email || "Não informado"}
-Assunto: ${subject || "Sem assunto"}
+Nome: ${safeName}
+E-mail: ${safeEmail || "Não informado"}
+Assunto: ${safeSubject || "Sem assunto"}
 Rota: ${route || "/"}
 Data/Hora: ${now}
 
@@ -67,63 +80,68 @@ Mensagem:
 ${message}
 `.trim();
 
-    // Save to database
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    await serviceClient.from("feedback_messages").insert({
-      user_id: user.id,
-      type,
-      subject: subject || null,
-      message,
-      email: email || null,
-      route: route || null,
-      status: "pending",
-    });
+    const { data: createdFeedback, error: insertError } = await serviceClient
+      .from("feedback_messages")
+      .insert({
+        user_id: user.id,
+        type: safeType,
+        subject: safeSubject,
+        message,
+        email: safeEmail,
+        route: route || null,
+        status: "pending",
+      })
+      .select("id")
+      .single();
 
-    // Send email via Lovable API
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (lovableApiKey) {
-      const res = await fetch("https://email.lovable.dev/v1/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${lovableApiKey}`,
-        },
-        body: JSON.stringify({
-          to: [SUPPORT_EMAIL],
-          subject: emailSubject,
-          text: emailBody,
-          replyTo: email || undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        console.error("Email send failed:", await res.text());
-        return new Response(
-          JSON.stringify({ sent: false, fallback: true, subject: emailSubject, body: emailBody }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ sent: true }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (insertError || !createdFeedback) {
+      console.error("feedback_messages insert failed", insertError);
+      return jsonResponse({ sent: false, error: "Não foi possível registrar sua solicitação." }, 500);
     }
 
-    // No API key - return fallback data for mailto
-    return new Response(
-      JSON.stringify({ sent: false, fallback: true, subject: emailSubject, body: emailBody }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!lovableApiKey) {
+      await serviceClient.from("feedback_messages").update({ status: "failed" }).eq("id", createdFeedback.id);
+      console.error("LOVABLE_API_KEY não configurada");
+      return jsonResponse({ sent: false, stored: true, error: GENERIC_SEND_ERROR }, 503);
+    }
+
+    const providerResponse = await fetch(EMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${lovableApiKey}`,
+      },
+      body: JSON.stringify({
+        to: [SUPPORT_EMAIL],
+        subject: emailSubject,
+        text: emailBody,
+        replyTo: safeEmail || undefined,
+      }),
+    });
+
+    if (!providerResponse.ok) {
+      const providerErrorBody = await providerResponse.text();
+      console.error("Email provider request failed", {
+        status: providerResponse.status,
+        body: providerErrorBody,
+      });
+
+      await serviceClient.from("feedback_messages").update({ status: "failed" }).eq("id", createdFeedback.id);
+
+      return jsonResponse({ sent: false, stored: true, error: GENERIC_SEND_ERROR }, 502);
+    }
+
+    await serviceClient.from("feedback_messages").update({ status: "sent" }).eq("id", createdFeedback.id);
+
+    return jsonResponse({ sent: true, stored: true });
   } catch (err) {
-    console.error("Error:", err);
-    return new Response(
-      JSON.stringify({ error: "Erro interno" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("send-support-email fatal error", err);
+    return jsonResponse({ sent: false, error: "Erro interno" }, 500);
   }
 });
