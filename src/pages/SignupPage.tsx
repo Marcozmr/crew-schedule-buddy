@@ -20,7 +20,7 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (session) navigate('/dashboard', { replace: true });
+    if (session) navigate('/home', { replace: true });
   }, [session, navigate]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
