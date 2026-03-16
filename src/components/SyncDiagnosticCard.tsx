@@ -177,6 +177,7 @@ export function SyncDiagnosticCard({ onSyncComplete, lastSyncTime }: SyncDiagnos
         latest_import_error: 'Nenhuma execução registrada ainda. Clique em Sincronizar agora.',
         last_sync_at: lastSyncTime ?? '',
         schedule_entries_preview: sched.schedulePreview,
+        schedule_entries_compare_preview: sched.comparePreview,
         access_token_present: Boolean(session?.access_token),
         provider_token_present: hasToken,
         provider_token_source: tokenSource,
