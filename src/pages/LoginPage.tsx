@@ -93,7 +93,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center mt-6 text-white/30 text-xs">
-          © {new Date().getFullYear()} EscalaX. Todos os direitos reservados.
+          © {new Date().getFullYear()} EscalaX. Desenvolvido por Marcos Vinicius.
         </p>
       </motion.div>
     </div>

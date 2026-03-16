@@ -124,7 +124,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full">
               <LogOut className="w-4 h-4" />Sair
             </button>
-            <p className="px-3 text-xs text-sidebar-foreground/50 mt-2">© {new Date().getFullYear()} EscalaX. Todos os direitos reservados.</p>
+            <p className="px-3 text-xs text-sidebar-foreground/50 mt-2">© {new Date().getFullYear()} EscalaX. Desenvolvido por Marcos Vinicius.</p>
           </div>
         </SheetContent>
       </Sheet>
