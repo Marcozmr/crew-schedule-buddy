@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      documents: {
+        Row: {
+          category: string
+          file_name: string
+          id: string
+          mime_type: string | null
+          notes: string | null
+          storage_path: string
+          uploaded_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          file_name: string
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          storage_path: string
+          uploaded_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          file_name?: string
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          storage_path?: string
+          uploaded_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      flight_swap_requests: {
+        Row: {
+          created_at: string
+          flight_date: string | null
+          flight_number: string | null
+          id: string
+          notes: string | null
+          schedule_entry_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          flight_date?: string | null
+          flight_number?: string | null
+          id?: string
+          notes?: string | null
+          schedule_entry_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          flight_date?: string | null
+          flight_number?: string | null
+          id?: string
+          notes?: string | null
+          schedule_entry_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_swap_requests_schedule_entry_id_fkey"
+            columns: ["schedule_entry_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imported_rosters: {
         Row: {
           base_airport: string | null
@@ -122,6 +199,53 @@ export type Database = {
         }
         Relationships: []
       }
+      perdiem_entries: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          location: string | null
+          notes: string | null
+          quantity: number | null
+          related_schedule_entry_id: string | null
+          total_value: number | null
+          unit_value: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          quantity?: number | null
+          related_schedule_entry_id?: string | null
+          total_value?: number | null
+          unit_value?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          quantity?: number | null
+          related_schedule_entry_id?: string | null
+          total_value?: number | null
+          unit_value?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perdiem_entries_related_schedule_entry_id_fkey"
+            columns: ["related_schedule_entry_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           airline: string | null
@@ -153,6 +277,149 @@ export type Database = {
           id?: string
           name?: string
           registration?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      regulation_alerts: {
+        Row: {
+          description: string | null
+          detected_at: string
+          id: string
+          is_active: boolean | null
+          roster_id: string | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          description?: string | null
+          detected_at?: string
+          id?: string
+          is_active?: boolean | null
+          roster_id?: string | null
+          severity?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          description?: string | null
+          detected_at?: string
+          id?: string
+          is_active?: boolean | null
+          roster_id?: string | null
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regulation_alerts_roster_id_fkey"
+            columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      regulation_rules: {
+        Row: {
+          crew_type: string | null
+          id: string
+          is_active: boolean | null
+          max_duty_hours: number | null
+          max_flight_hours: number | null
+          min_rest_hours: number | null
+          period_type: string | null
+          rest_class: string | null
+          rule_type: string
+          stage_count: number | null
+        }
+        Insert: {
+          crew_type?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_duty_hours?: number | null
+          max_flight_hours?: number | null
+          min_rest_hours?: number | null
+          period_type?: string | null
+          rest_class?: string | null
+          rule_type: string
+          stage_count?: number | null
+        }
+        Update: {
+          crew_type?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_duty_hours?: number | null
+          max_flight_hours?: number | null
+          min_rest_hours?: number | null
+          period_type?: string | null
+          rest_class?: string | null
+          rule_type?: string
+          stage_count?: number | null
+        }
+        Relationships: []
+      }
+      salary_entries: {
+        Row: {
+          base_salary: number | null
+          created_at: string
+          gross_total: number | null
+          health_plan: number | null
+          id: string
+          inss: number | null
+          irrf: number | null
+          net_total: number | null
+          night_additional: number | null
+          notes: string | null
+          other_additions: number | null
+          other_discounts: number | null
+          overnight_total: number | null
+          per_diem_total: number | null
+          productivity_bonus: number | null
+          reference_month: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          base_salary?: number | null
+          created_at?: string
+          gross_total?: number | null
+          health_plan?: number | null
+          id?: string
+          inss?: number | null
+          irrf?: number | null
+          net_total?: number | null
+          night_additional?: number | null
+          notes?: string | null
+          other_additions?: number | null
+          other_discounts?: number | null
+          overnight_total?: number | null
+          per_diem_total?: number | null
+          productivity_bonus?: number | null
+          reference_month: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          base_salary?: number | null
+          created_at?: string
+          gross_total?: number | null
+          health_plan?: number | null
+          id?: string
+          inss?: number | null
+          irrf?: number | null
+          net_total?: number | null
+          night_additional?: number | null
+          notes?: string | null
+          other_additions?: number | null
+          other_discounts?: number | null
+          overnight_total?: number | null
+          per_diem_total?: number | null
+          productivity_bonus?: number | null
+          reference_month?: string
           updated_at?: string
           user_id?: string
         }
@@ -276,6 +543,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_settings: {
+        Row: {
+          base_airport: string | null
+          company_name: string | null
+          created_at: string
+          crew_role: string | null
+          id: string
+          notifications_enabled: boolean | null
+          theme: string | null
+          timezone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          base_airport?: string | null
+          company_name?: string | null
+          created_at?: string
+          crew_role?: string | null
+          id?: string
+          notifications_enabled?: boolean | null
+          theme?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          base_airport?: string | null
+          company_name?: string | null
+          created_at?: string
+          crew_role?: string | null
+          id?: string
+          notifications_enabled?: boolean | null
+          theme?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      weather_recent_searches: {
+        Row: {
+          airport_code: string
+          id: string
+          searched_at: string
+          user_id: string
+        }
+        Insert: {
+          airport_code: string
+          id?: string
+          searched_at?: string
+          user_id: string
+        }
+        Update: {
+          airport_code?: string
+          id?: string
+          searched_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
