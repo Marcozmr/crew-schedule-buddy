@@ -394,7 +394,8 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     }
 
     // 6. Create imported_rosters record
-    const { data: rosterRow, error: rosterError } = await supabase.from('imported_rosters').insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
       file_name: fileName,
       source_message_id: `manual-upload-${Date.now()}`,
@@ -410,7 +411,7 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       parser_version: PARSER_VERSION,
       import_status: 'processing',
       parsed_count: entries.length,
-    } as Record<string, unknown>).select('id').single();
+    }).select('id').single();
 
     const rosterId = rosterRow?.id || null;
 
