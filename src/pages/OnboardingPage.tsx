@@ -36,16 +36,28 @@ export default function OnboardingPage() {
   });
 
   useEffect(() => {
-    if (!user) return;
-    OnboardingService.getProgress(user.id).then(({ step: savedStep, completed }) => {
-      if (completed) {
-        navigate('/home', { replace: true });
-        return;
-      }
-      setStep(savedStep);
-      setLoading(false);
-    });
-  }, [user, navigate]);
+    if (!user) { setLoading(false); return; }
+
+    // Timeout protection: never stay loading forever
+    const timeout = setTimeout(() => setLoading(false), 5000);
+
+    OnboardingService.getProgress(user.id)
+      .then(({ step: savedStep, completed }) => {
+        clearTimeout(timeout);
+        if (completed) {
+          navigate('/home', { replace: true });
+          return;
+        }
+        setStep(savedStep);
+        setLoading(false);
+      })
+      .catch(() => {
+        clearTimeout(timeout);
+        setLoading(false); // Show onboarding from step 0 on error
+      });
+
+    return () => clearTimeout(timeout);
+  }, [user?.id]);
 
   useEffect(() => {
     if (profile) {
