@@ -1,16 +1,17 @@
 // RBAC 117 Apêndice B - Compliance Engine
 // All calculations use America/Sao_Paulo timezone (BRT/BRST)
-// Flights grouped into duty periods before rest calculation
+// Flights AND standbys grouped into duty periods before rest calculation
 
 import { TZDate } from '@date-fns/tz';
 
 const BRAZIL_TZ = 'America/Sao_Paulo';
 const DUTY_GAP_THRESHOLD_MS = 10 * 3600000; // 10h in ms
+const MAX_REASONABLE_REST_MS = 72 * 3600000; // 72h — flag as possible error
 
 // Activity types that are NOT flights
-const NON_FLIGHT_CODES = new Set(['DO', 'FOLGA', 'OFF', 'X', 'HSB', 'ASB', 'HSBE', 'APR', 'TRE', 'SIM', 'GND', 'ADM', 'RES', 'SBY', 'RSV']);
 const DAY_OFF_CODES = new Set(['DO', 'FOLGA', 'OFF', 'X']);
-const STANDBY_CODES = new Set(['HSB', 'ASB', 'HSBE', 'SBY', 'RSV', 'RES']);
+const STANDBY_CODES = new Set(['HSB', 'ASB', 'HSBE', 'SBY', 'RSV', 'RES', 'APR']);
+const GROUND_DUTY_CODES = new Set(['TRE', 'SIM', 'GND', 'ADM']);
 
 export interface ComplianceResult {
   status: 'regular' | 'atencao' | 'irregular';
@@ -49,6 +50,7 @@ export interface DutyPeriod {
   crossesMidnight: boolean;
   flights: string[];
   restUntilNext: string | null; // e.g. "15h23m"
+  restWarning?: boolean;        // true if rest < 12h or > 72h
 }
 
 interface ScheduleEntry {
@@ -81,6 +83,8 @@ const LIMITS = {
   MAX_FLIGHT_HOURS_7D: 44,
   MAX_FLIGHT_HOURS_28D: 100,
   MIN_REST_ACCLIMATED: 12,
+  MIN_WEEKLY_REST: 36,
+  MAX_DUTY_HOURS: 14,
   MAX_CONSECUTIVE_NIGHT_OPS: 2,
   MIN_DAYS_OFF_MONTH: 8,
 };
@@ -108,6 +112,7 @@ function getArrivalMs(entry: ScheduleEntry): number {
   const dep = toDateTimeBRT(entry.date, entry.departure_time);
   const arr = toDateTimeBRT(entry.date, entry.arrival_time);
   if (arr.getTime() <= dep.getTime()) {
+    // Midnight crossing: arrival is next day
     return new TZDate(arr.getFullYear(), arr.getMonth(), arr.getDate() + 1, arr.getHours(), arr.getMinutes(), 0, BRAZIL_TZ).getTime();
   }
   return arr.getTime();
@@ -115,6 +120,14 @@ function getArrivalMs(entry: ScheduleEntry): number {
 
 function getDepartureMs(entry: ScheduleEntry): number {
   return toDateTimeBRT(entry.date, entry.report_time || entry.departure_time).getTime();
+}
+
+function getEndMs(entry: ScheduleEntry): number {
+  // For non-flight duties (standby, ground), use arrival_time or departure_time + duty_hours
+  const arrMs = getArrivalMs(entry);
+  const depMs = getDepartureMs(entry);
+  // Ensure end > start
+  return Math.max(arrMs, depMs + 3600000); // at minimum 1h duty
 }
 
 function getHourBRT(time: string): number {
@@ -126,18 +139,25 @@ function isNightOp(entry: ScheduleEntry): boolean {
   const depH = getHourBRT(entry.departure_time);
   const arrDate = new TZDate(getArrivalMs(entry), BRAZIL_TZ);
   const arrH = arrDate.getHours();
-  // Night = any part of the flight touches 00:00-05:59 BRT
   return depH < 6 || arrH < 6 || (entry.crosses_midnight && arrH < 6);
 }
 
-/** Determine if entry is an actual flight (not standby, day off, ground, etc.) */
+/** Entry is a real flight (not standby, day off, ground) */
 function isActualFlight(entry: ScheduleEntry): boolean {
   if (!entry.is_flight) return false;
   const code = (entry.activity_type || '').toUpperCase().trim();
-  if (NON_FLIGHT_CODES.has(code)) return false;
-  // Also check flight_number for common non-flight patterns
   const fn = (entry.flight_number || '').toUpperCase().trim();
-  if (DAY_OFF_CODES.has(fn) || STANDBY_CODES.has(fn)) return false;
+  if (DAY_OFF_CODES.has(code) || DAY_OFF_CODES.has(fn)) return false;
+  if (STANDBY_CODES.has(code) || STANDBY_CODES.has(fn)) return false;
+  if (GROUND_DUTY_CODES.has(code) || GROUND_DUTY_CODES.has(fn)) return false;
+  return true;
+}
+
+/** Entry is a duty (flight, standby, or ground) but NOT a day off */
+function isDutyEntry(entry: ScheduleEntry): boolean {
+  const code = (entry.activity_type || '').toUpperCase().trim();
+  const fn = (entry.flight_number || '').toUpperCase().trim();
+  if (DAY_OFF_CODES.has(code) || DAY_OFF_CODES.has(fn)) return false;
   return true;
 }
 
@@ -172,38 +192,56 @@ function formatRestDuration(ms: number): string {
 }
 
 // ─── Duty Period grouping ───
+// CRITICAL: Include ALL duty entries (flights + standbys + ground), not just flights
+// Rest is calculated between consecutive duty periods only
 
-function buildDutyPeriods(flights: ScheduleEntry[]): DutyPeriod[] {
-  if (flights.length === 0) return [];
+function buildDutyPeriods(dutyEntries: ScheduleEntry[]): DutyPeriod[] {
+  if (dutyEntries.length === 0) return [];
 
-  const sorted = [...flights].sort((a, b) => getDepartureMs(a) - getDepartureMs(b));
+  // Sort strictly by departure/report datetime
+  const sorted = [...dutyEntries].sort((a, b) => getDepartureMs(a) - getDepartureMs(b));
+
   const periods: { entries: ScheduleEntry[]; startMs: number; endMs: number }[] = [];
 
   let current = {
     entries: [sorted[0]],
     startMs: getDepartureMs(sorted[0]),
-    endMs: getArrivalMs(sorted[0]),
+    endMs: getEndMs(sorted[0]),
   };
 
   for (let i = 1; i < sorted.length; i++) {
     const depMs = getDepartureMs(sorted[i]);
     const gap = depMs - current.endMs;
 
-    // Same duty: same date OR gap < 10h
+    // Same duty period: same date OR gap < threshold
     const sameDate = sorted[i].date === current.entries[current.entries.length - 1].date;
     if (sameDate || gap < DUTY_GAP_THRESHOLD_MS) {
       current.entries.push(sorted[i]);
-      current.endMs = Math.max(current.endMs, getArrivalMs(sorted[i]));
+      current.startMs = Math.min(current.startMs, depMs);
+      current.endMs = Math.max(current.endMs, getEndMs(sorted[i]));
     } else {
       periods.push(current);
-      current = { entries: [sorted[i]], startMs: depMs, endMs: getArrivalMs(sorted[i]) };
+      current = { entries: [sorted[i]], startMs: depMs, endMs: getEndMs(sorted[i]) };
     }
   }
   periods.push(current);
 
-  // Finalize and compute rest between consecutive periods
+  // Validate: ensure periods are sorted and non-overlapping
+  periods.sort((a, b) => a.startMs - b.startMs);
+  for (let i = 1; i < periods.length; i++) {
+    if (periods[i].startMs < periods[i - 1].endMs) {
+      // Overlap: merge into previous
+      periods[i - 1].entries.push(...periods[i].entries);
+      periods[i - 1].endMs = Math.max(periods[i - 1].endMs, periods[i].endMs);
+      periods.splice(i, 1);
+      i--;
+    }
+  }
+
+  // Build result with rest between CONSECUTIVE periods only
   const result: DutyPeriod[] = periods.map((p, idx) => {
-    const fh = p.entries.reduce((s, e) => s + (e.flight_hours || 0), 0);
+    const flightEntries = p.entries.filter(e => isActualFlight(e));
+    const fh = flightEntries.reduce((s, e) => s + (e.flight_hours || 0), 0);
     const dutyMs = p.endMs - p.startMs;
     const dutyH = Math.round((dutyMs / 3600000) * 10) / 10;
     const cm = p.entries.some(e => e.crosses_midnight);
@@ -211,11 +249,27 @@ function buildDutyPeriods(flights: ScheduleEntry[]): DutyPeriod[] {
     const dateStr = `${startDate.getFullYear()}-${(startDate.getMonth() + 1).toString().padStart(2, '0')}-${startDate.getDate().toString().padStart(2, '0')}`;
 
     let restUntilNext: string | null = null;
+    let restWarning = false;
+
     if (idx < periods.length - 1) {
       const nextStart = periods[idx + 1].startMs;
-      const thisEndDebrief = p.endMs + 30 * 60000;
-      const restMs = nextStart - thisEndDebrief;
-      restUntilNext = formatRestDuration(restMs);
+      const thisEnd = p.endMs + 30 * 60000; // +30min debrief
+      const restMs = nextStart - thisEnd;
+
+      // Safeguards
+      if (restMs < 0) {
+        restUntilNext = '⚠️ sobreposição';
+        restWarning = true;
+      } else if (restMs > MAX_REASONABLE_REST_MS) {
+        // Flag but still show
+        restUntilNext = formatRestDuration(restMs) + ' ⚠️';
+        restWarning = true;
+      } else {
+        restUntilNext = formatRestDuration(restMs);
+        if (restMs < LIMITS.MIN_REST_ACCLIMATED * 3600000) {
+          restWarning = true;
+        }
+      }
     }
 
     return {
@@ -226,10 +280,11 @@ function buildDutyPeriods(flights: ScheduleEntry[]): DutyPeriod[] {
       endMs: p.endMs,
       totalFlightHours: Math.round(fh * 10) / 10,
       totalDutyHours: dutyH,
-      flightCount: p.entries.length,
+      flightCount: flightEntries.length,
       crossesMidnight: cm,
-      flights: p.entries.map(e => e.flight_number),
+      flights: flightEntries.map(e => e.flight_number).filter(Boolean),
       restUntilNext,
+      restWarning,
     };
   });
 
@@ -254,7 +309,7 @@ export function checkCompliance(
 
   const sorted = [...monthEntries].sort((a, b) => parseDateBRT(a.date).getTime() - parseDateBRT(b.date).getTime());
 
-  // Filter actual flights only (exclude standbys, DO, etc.)
+  // Filter actual flights only for FH accumulation
   const monthFlights = sorted.filter(e => isActualFlight(e));
   const totalFlightHours = monthFlights.reduce((sum, e) => sum + (e.flight_hours || 0), 0);
 
@@ -281,8 +336,7 @@ export function checkCompliance(
   let nightOpsCount = 0;
   let consecutiveNightOps = 0;
   let maxConsecutiveNight = 0;
-  const sortedFlightsForNight = monthFlights;
-  sortedFlightsForNight.forEach(entry => {
+  monthFlights.forEach(entry => {
     if (isNightOp(entry)) { nightOpsCount++; consecutiveNightOps++; maxConsecutiveNight = Math.max(maxConsecutiveNight, consecutiveNightOps); }
     else { consecutiveNightOps = 0; }
   });
@@ -294,8 +348,9 @@ export function checkCompliance(
   const hours7d = allFlights.filter(e => { const t = parseDateBRT(e.date).getTime(); return t >= sevenDaysAgo.getTime() && t <= now.getTime(); }).reduce((s, e) => s + (e.flight_hours || 0), 0);
   const hours28d = allFlights.filter(e => { const t = parseDateBRT(e.date).getTime(); return t >= twentyEightDaysAgo.getTime() && t <= now.getTime(); }).reduce((s, e) => s + (e.flight_hours || 0), 0);
 
-  // Build duty periods from actual flights only
-  const dutyPeriods = buildDutyPeriods(allFlights);
+  // Build duty periods from ALL duty entries (flights + standbys + ground), NOT just flights
+  const allDutyEntries = schedule.filter(e => isDutyEntry(e));
+  const dutyPeriods = buildDutyPeriods(allDutyEntries);
 
   // Filter duty periods for current month (for display)
   const monthDutyPeriods = dutyPeriods.filter(dp => {
@@ -313,6 +368,7 @@ export function checkCompliance(
 
   // ===== COMPLIANCE CHECKS =====
 
+  // Flight hours limits
   if (totalFlightHours > LIMITS.MAX_FLIGHT_HOURS_MONTH) {
     alerts.push({ type: 'danger', title: 'Limite mensal de horas de voo excedido', description: `${totalFlightHours.toFixed(1)}h voadas — máximo: ${LIMITS.MAX_FLIGHT_HOURS_MONTH}h`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   } else if (totalFlightHours > LIMITS.MAX_FLIGHT_HOURS_MONTH * 0.85) {
@@ -329,17 +385,19 @@ export function checkCompliance(
     alerts.push({ type: 'danger', title: 'Limite de 28 dias excedido', description: `${hours28d.toFixed(1)}h em 28 dias — máximo: ${LIMITS.MAX_FLIGHT_HOURS_28D}h`, reference: 'RBAC 117, Apêndice B, Tabela 5' });
   }
 
+  // Days off
   if (daysOff < LIMITS.MIN_DAYS_OFF_MONTH) {
     alerts.push({ type: 'danger', title: 'Folgas insuficientes', description: `${daysOff} folgas no mês — mínimo: ${LIMITS.MIN_DAYS_OFF_MONTH}`, reference: 'RBAC 117, Apêndice B — Folgas periódicas' });
   } else if (daysOff <= LIMITS.MIN_DAYS_OFF_MONTH + 1) {
     alerts.push({ type: 'warning', title: 'Poucas folgas restantes', description: `${daysOff} folgas no mês — mínimo: ${LIMITS.MIN_DAYS_OFF_MONTH}`, reference: 'RBAC 117, Apêndice B — Folgas periódicas' });
   }
 
+  // Night ops
   if (maxConsecutiveNight > LIMITS.MAX_CONSECUTIVE_NIGHT_OPS) {
     alerts.push({ type: 'danger', title: 'Madrugadas consecutivas excedidas', description: `${maxConsecutiveNight} consecutivas — máximo: ${LIMITS.MAX_CONSECUTIVE_NIGHT_OPS}`, reference: 'RBAC 117, Apêndice B, item (o)' });
   }
 
-  // REST between DUTY PERIODS (not individual flights)
+  // REST between CONSECUTIVE duty periods
   for (let i = 1; i < dutyPeriods.length; i++) {
     const prev = dutyPeriods[i - 1];
     const curr = dutyPeriods[i];
@@ -347,7 +405,15 @@ export function checkCompliance(
     const restMs = curr.startMs - prevEndWithDebrief;
     const restHours = restMs / 3600000;
 
-    if (restHours > 0 && restHours < LIMITS.MIN_REST_ACCLIMATED) {
+    // Negative rest = overlapping duties
+    if (restMs < 0) {
+      alerts.push({
+        type: 'danger',
+        title: `Sobreposição de jornadas (${prev.date} → ${curr.date})`,
+        description: 'Jornadas sobrepostas detectadas — verificar escala',
+        reference: 'RBAC 117 — Integridade da escala',
+      });
+    } else if (restHours < LIMITS.MIN_REST_ACCLIMATED && restHours >= 0) {
       const h = Math.floor(restHours);
       const m = Math.round((restHours - h) * 60);
       alerts.push({
@@ -357,6 +423,61 @@ export function checkCompliance(
         reference: 'RBAC 117, Apêndice B, Tabela 6',
       });
     }
+  }
+
+  // MAX DUTY HOURS per period
+  for (const dp of monthDutyPeriods) {
+    if (dp.totalDutyHours > LIMITS.MAX_DUTY_HOURS) {
+      alerts.push({
+        type: 'danger',
+        title: `Jornada excede ${LIMITS.MAX_DUTY_HOURS}h (${dp.date})`,
+        description: `${dp.totalDutyHours}h de jornada — máximo: ${LIMITS.MAX_DUTY_HOURS}h`,
+        reference: 'RBAC 117, Apêndice B, Tabela 4',
+      });
+    }
+  }
+
+  // WEEKLY REST: check 7-day sliding window for 36h consecutive rest
+  // Simplified: check if any 7-day window lacks a 36h rest gap
+  const recentDuties = dutyPeriods.filter(dp => {
+    const t = parseDateBRT(dp.date).getTime();
+    return t >= sevenDaysAgo.getTime() && t <= now.getTime();
+  });
+  if (recentDuties.length >= 2) {
+    let hasWeeklyRest = false;
+    for (let i = 1; i < recentDuties.length; i++) {
+      const prevEnd = recentDuties[i - 1].endMs + 30 * 60000;
+      const nextStart = recentDuties[i].startMs;
+      if ((nextStart - prevEnd) >= LIMITS.MIN_WEEKLY_REST * 3600000) {
+        hasWeeklyRest = true;
+        break;
+      }
+    }
+    if (!hasWeeklyRest && recentDuties.length > 0) {
+      alerts.push({
+        type: 'warning',
+        title: 'Repouso semanal insuficiente',
+        description: `Nenhum repouso ≥ ${LIMITS.MIN_WEEKLY_REST}h nos últimos 7 dias`,
+        reference: 'RBAC 117, Apêndice B — Repouso semanal',
+      });
+    }
+  }
+
+  // CONSECUTIVE EARLY DUTIES (report before 06:00)
+  let consecutiveEarly = 0;
+  let maxConsecutiveEarly = 0;
+  for (const dp of monthDutyPeriods) {
+    const h = getHourBRT(dp.startTime);
+    if (h < 6) { consecutiveEarly++; maxConsecutiveEarly = Math.max(maxConsecutiveEarly, consecutiveEarly); }
+    else { consecutiveEarly = 0; }
+  }
+  if (maxConsecutiveEarly >= 3) {
+    alerts.push({
+      type: 'warning',
+      title: `${maxConsecutiveEarly} jornadas consecutivas com início antes das 06:00`,
+      description: 'Apresentações de madrugada consecutivas aumentam risco de fadiga',
+      reference: 'RBAC 117 — Gestão de fadiga',
+    });
   }
 
   const hasDanger = alerts.some(a => a.type === 'danger');

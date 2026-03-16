@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/AppLayout';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { checkCompliance } from '@/lib/rbac117';
 import { formatDateBR } from '@/lib/date-utils';
-import { ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Calendar, Clock, Coffee, Plane, FileText, BarChart3 } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Moon, Calendar, Clock, Coffee, Plane, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function RegulationPage() {
@@ -41,12 +41,12 @@ export default function RegulationPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-background/60 rounded-lg p-4">
-                <div className="flex items-center gap-1.5 mb-1"><Clock className="w-3.5 h-3.5 text-muted-foreground" /><p className="text-[10px] text-muted-foreground uppercase">Horas Voo/Mês</p></div>
+                <div className="flex items-center gap-1.5 mb-1"><Clock className="w-3.5 h-3.5 text-muted-foreground" /><p className="text-[10px] text-muted-foreground uppercase">Horas de Voo/Mês</p></div>
                 <p className="text-xl font-bold text-foreground">{compliance.accumulatedHoursMonth.toFixed(1)}h</p>
                 <p className="text-[10px] text-muted-foreground">máx 85h</p>
               </div>
               <div className="bg-background/60 rounded-lg p-4">
-                <div className="flex items-center gap-1.5 mb-1"><Calendar className="w-3.5 h-3.5 text-muted-foreground" /><p className="text-[10px] text-muted-foreground uppercase">Horas/7d</p></div>
+                <div className="flex items-center gap-1.5 mb-1"><Calendar className="w-3.5 h-3.5 text-muted-foreground" /><p className="text-[10px] text-muted-foreground uppercase">Horas de Voo/7d</p></div>
                 <p className="text-xl font-bold text-foreground">{compliance.accumulatedHours7Days.toFixed(1)}h</p>
                 <p className="text-[10px] text-muted-foreground">máx 44h</p>
               </div>
@@ -84,11 +84,11 @@ export default function RegulationPage() {
                 <p className="text-lg font-bold text-foreground">{compliance.standbyCount}</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground">Flight Hours</p>
+                <p className="text-xs text-muted-foreground">Horas de Voo</p>
                 <p className="text-lg font-bold text-foreground">{compliance.accumulatedHoursMonth.toFixed(1)}h</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground">Duty Hours</p>
+                <p className="text-xs text-muted-foreground">Horas de Jornada</p>
                 <p className="text-lg font-bold text-foreground">{compliance.totalDutyHoursMonth}h</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3 text-center">
@@ -135,8 +135,8 @@ export default function RegulationPage() {
                       <th className="py-2 pr-3">Início</th>
                       <th className="py-2 pr-3">Fim</th>
                       <th className="py-2 pr-3">Voos</th>
-                      <th className="py-2 pr-3">FH</th>
-                      <th className="py-2 pr-3">Duty</th>
+                      <th className="py-2 pr-3">Horas de Voo</th>
+                      <th className="py-2 pr-3">Jornada</th>
                       <th className="py-2">Repouso</th>
                     </tr>
                   </thead>
@@ -146,10 +146,10 @@ export default function RegulationPage() {
                         <td className="py-2 pr-3 font-mono text-foreground">{formatDateBR(dp.date)}</td>
                         <td className="py-2 pr-3 font-mono text-foreground">{dp.startTime}</td>
                         <td className="py-2 pr-3 font-mono text-foreground">{dp.endTime}</td>
-                        <td className="py-2 pr-3 text-muted-foreground text-xs">{dp.flights.join(', ')}</td>
+                        <td className="py-2 pr-3 text-muted-foreground text-xs">{dp.flights.join(', ') || '—'}</td>
                         <td className="py-2 pr-3 text-foreground">{dp.totalFlightHours}h</td>
                         <td className="py-2 pr-3 text-foreground">{dp.totalDutyHours}h</td>
-                        <td className="py-2 font-mono text-foreground">{dp.restUntilNext || '—'}</td>
+                        <td className={`py-2 font-mono ${dp.restWarning ? 'text-destructive font-semibold' : 'text-foreground'}`}>{dp.restUntilNext || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -170,8 +170,8 @@ export default function RegulationPage() {
                       <th className="py-2 pr-3">Início</th>
                       <th className="py-2 pr-3">Fim</th>
                       <th className="py-2 pr-3">Voos</th>
-                      <th className="py-2 pr-3">FH</th>
-                      <th className="py-2 pr-3">Duty</th>
+                      <th className="py-2 pr-3">Horas de Voo</th>
+                      <th className="py-2 pr-3">Jornada</th>
                       <th className="py-2">Repouso</th>
                     </tr>
                   </thead>
@@ -181,10 +181,10 @@ export default function RegulationPage() {
                         <td className="py-2 pr-3 font-mono text-foreground">{formatDateBR(dp.date)}</td>
                         <td className="py-2 pr-3 font-mono text-foreground">{dp.startTime}</td>
                         <td className="py-2 pr-3 font-mono text-foreground">{dp.endTime}</td>
-                        <td className="py-2 pr-3 text-muted-foreground text-xs">{dp.flights.join(', ')}</td>
+                        <td className="py-2 pr-3 text-muted-foreground text-xs">{dp.flights.join(', ') || '—'}</td>
                         <td className="py-2 pr-3 text-foreground">{dp.totalFlightHours}h</td>
                         <td className="py-2 pr-3 text-foreground">{dp.totalDutyHours}h</td>
-                        <td className="py-2 font-mono text-foreground">{dp.restUntilNext || '—'}</td>
+                        <td className={`py-2 font-mono ${dp.restWarning ? 'text-destructive font-semibold' : 'text-foreground'}`}>{dp.restUntilNext || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
