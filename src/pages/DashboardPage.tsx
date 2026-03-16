@@ -56,9 +56,10 @@ export default function DashboardPage() {
   const displayFlights = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
     const monthFlights = flights.filter(e => {
-      const parts = e.date.split(/[\/\-]/);
-      return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
+      const d = parseEntryDate(e.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
     return monthFlights.length > 0 ? monthFlights : flights.slice(-20);
   }, [flights]);

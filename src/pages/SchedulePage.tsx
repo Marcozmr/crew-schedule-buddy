@@ -86,7 +86,7 @@ export default function SchedulePage() {
 
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
         {months.map((m, i) => {
-          const hasData = schedule.some(e => { const parts = e.date.split(/[\/\-]/); return parts.length >= 3 && parseInt(parts[1]) - 1 === i; });
+          const hasData = schedule.some(e => getMonth(e.date) === i);
           return (
             <button key={m} onClick={() => setSelectedMonth(i)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${i === selectedMonth ? 'gradient-sky text-primary-foreground' : hasData ? 'bg-card text-foreground hover:bg-muted shadow-card' : 'bg-card text-muted-foreground hover:bg-muted shadow-card'}`}>
               {m}{hasData && i !== selectedMonth && <span className="ml-1 text-xs">•</span>}
