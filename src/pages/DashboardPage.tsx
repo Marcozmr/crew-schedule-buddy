@@ -120,6 +120,21 @@ export default function DashboardPage() {
               </div>
             )}
             {compliance.alerts.length === 0 && <p className="text-sm text-success flex items-center gap-2"><ShieldCheck className="w-4 h-4" />Dentro dos limites da RBAC 117</p>}
+
+            {/* Duty Periods debug (dev only) */}
+            {import.meta.env.DEV && compliance.dutyPeriods.length > 0 && (
+              <details className="mt-4">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">🔍 Duty Periods ({compliance.dutyPeriods.length})</summary>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-[11px] font-mono">
+                    <thead><tr className="text-left text-muted-foreground border-b border-border"><th className="py-1 pr-2">Data</th><th className="py-1 pr-2">Início</th><th className="py-1 pr-2">Fim</th><th className="py-1 pr-2">Voos</th><th className="py-1 pr-2">FH</th><th className="py-1">Duty</th></tr></thead>
+                    <tbody>{compliance.dutyPeriods.map((dp, i) => (
+                      <tr key={i} className="border-b border-border/50"><td className="py-1 pr-2 text-foreground">{dp.date}</td><td className="py-1 pr-2 text-foreground">{dp.startTime}</td><td className="py-1 pr-2 text-foreground">{dp.endTime}</td><td className="py-1 pr-2 text-muted-foreground">{dp.flights.join(', ')}</td><td className="py-1 pr-2 text-foreground">{dp.totalFlightHours}h</td><td className="py-1 text-foreground">{dp.totalDutyHours}h</td></tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </details>
+            )}
           </motion.div>
 
           {/* Hours bar */}
