@@ -421,6 +421,7 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       parser_version: PARSER_VERSION,
       import_status: 'processing',
       parsed_count: entries.length,
+      is_active: true,
     }).select('id').single();
 
     const rosterId = rosterRow?.id || null;
