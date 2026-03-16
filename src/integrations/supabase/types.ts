@@ -123,6 +123,7 @@ export type Database = {
           flight_date: string | null
           flight_number: string | null
           id: string
+          interest_count: number
           notes: string | null
           owner_user_id: string
           schedule_entry_id: string | null
@@ -136,6 +137,7 @@ export type Database = {
           flight_date?: string | null
           flight_number?: string | null
           id?: string
+          interest_count?: number
           notes?: string | null
           owner_user_id: string
           schedule_entry_id?: string | null
@@ -149,6 +151,7 @@ export type Database = {
           flight_date?: string | null
           flight_number?: string | null
           id?: string
+          interest_count?: number
           notes?: string | null
           owner_user_id?: string
           schedule_entry_id?: string | null
