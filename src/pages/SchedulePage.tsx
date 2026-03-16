@@ -46,7 +46,7 @@ export default function SchedulePage() {
     const days: { day: number; entries: typeof schedule }[] = [];
     for (let i = 0; i < firstDay; i++) days.push({ day: 0, entries: [] });
     for (let d = 1; d <= daysInMonth; d++) {
-      const entries = filteredSchedule.filter(e => { const parts = e.date.split(/[\/\-]/); return parseInt(parts[0]) === d; });
+      const entries = filteredSchedule.filter(e => getDay(e.date) === d);
       days.push({ day: d, entries });
     }
     return days;
