@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
+import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 
 export default function LoginPage() {
   const navigate = useNavigate();
