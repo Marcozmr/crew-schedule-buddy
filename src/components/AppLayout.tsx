@@ -7,6 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { FeedbackFAB } from '@/components/FeedbackFAB';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 const fullNav = [
   { path: '/home', label: 'Menu Principal', icon: Home },
@@ -134,6 +135,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </main>
 
       <FeedbackFAB />
+      <PWAInstallPrompt />
     </div>
   );
 }

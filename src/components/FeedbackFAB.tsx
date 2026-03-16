@@ -5,6 +5,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 
 const TYPES = [
   { value: 'suggestion', label: 'Sugerir melhoria', icon: Lightbulb, color: 'text-yellow-500' },
@@ -73,6 +74,11 @@ export function FeedbackFAB() {
 
     if (!user) {
       toast.error('Faça login para enviar sua mensagem.');
+      return;
+    }
+
+    if (!checkRateLimit('support', 3, 60_000)) {
+      toast.error(getRateLimitMessage());
       return;
     }
 

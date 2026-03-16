@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
+import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -25,6 +26,10 @@ export default function LoginPage() {
     e.preventDefault();
     if (!email.trim() || !password) {
       toast.error('Preencha email e senha');
+      return;
+    }
+    if (!checkRateLimit('login', 5, 60_000)) {
+      toast.error(getRateLimitMessage());
       return;
     }
     setLoading(true);
