@@ -393,7 +393,17 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       };
     }
 
-    // 6. Create imported_rosters record
+    // 6. Deactivate previous rosters and delete their schedule entries
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('imported_rosters') as any)
+      .update({ is_active: false })
+      .eq('user_id', effectiveUserId)
+      .eq('is_active', true);
+
+    // Delete old schedule entries for this user
+    await supabase.from('schedule_entries').delete().eq('user_id', effectiveUserId);
+
+    // 7. Create imported_rosters record
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
@@ -411,24 +421,13 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       parser_version: PARSER_VERSION,
       import_status: 'processing',
       parsed_count: entries.length,
+      is_active: true,
     }).select('id').single();
 
     const rosterId = rosterRow?.id || null;
 
-    // 7. Dedup against existing entries
-    const { data: existingRows } = await supabase
-      .from('schedule_entries')
-      .select('date, flight_number, departure_time, arrival_time')
-      .eq('user_id', effectiveUserId);
-
-    const existingKeys = new Set(
-      (existingRows ?? []).map(r => `${r.date}|${r.flight_number}|${r.departure_time}|${r.arrival_time}`)
-    );
-
-    // 8. Build rows
-    const rows = entries
-      .filter(e => !existingKeys.has(`${e.date}|${e.flightNumber}|${e.departureTime}|${e.arrivalTime}`))
-      .map(e => ({
+    // 8. Build rows (no dedup needed since we deleted old entries)
+    const rows = entries.map(e => ({
         user_id: effectiveUserId,
         roster_id: rosterId,
         date: e.date,

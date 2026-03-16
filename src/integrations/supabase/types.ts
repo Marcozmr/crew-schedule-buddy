@@ -27,6 +27,7 @@ export type Database = {
           import_error: string | null
           import_status: string | null
           inserted_count: number | null
+          is_active: boolean
           name: string | null
           parsed_count: number | null
           parser_version: string | null
@@ -49,6 +50,7 @@ export type Database = {
           import_error?: string | null
           import_status?: string | null
           inserted_count?: number | null
+          is_active?: boolean
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
@@ -71,6 +73,7 @@ export type Database = {
           import_error?: string | null
           import_status?: string | null
           inserted_count?: number | null
+          is_active?: boolean
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
