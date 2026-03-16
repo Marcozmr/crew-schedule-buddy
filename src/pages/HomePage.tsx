@@ -1,13 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
-import { checkCompliance } from '@/lib/rbac117';
 import { motion } from 'framer-motion';
-import { Plane, Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight, BedDouble, Clock, Cloud, Settings, LogOut, ShieldCheck, ShieldAlert, ShieldX, ChevronRight } from 'lucide-react';
+import { Plane, Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight, BedDouble, Clock, Cloud, Settings, LogOut, Info, ChevronRight } from 'lucide-react';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useMemo } from 'react';
-import { parseDateBRT } from '@/lib/date-utils';
 
 const menuItems = [
   { label: 'Escala', icon: Plane, path: '/schedule' },
@@ -28,26 +25,7 @@ export default function HomePage() {
   const { profile, signOut } = useAuth();
   const { schedule } = useScheduleData();
 
-  const compliance = useMemo(() => checkCompliance(schedule), [schedule]);
-  const compIcon = compliance.status === 'regular' ? ShieldCheck : compliance.status === 'atencao' ? ShieldAlert : ShieldX;
-  const compColor = compliance.status === 'regular' ? 'text-success' : compliance.status === 'atencao' ? 'text-yellow-400' : 'text-destructive';
-  const compBg = compliance.status === 'regular' ? 'bg-success/20' : compliance.status === 'atencao' ? 'bg-yellow-500/20' : 'bg-destructive/20';
-  const CompIcon = compIcon;
-
   const initials = profile?.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
-
-  const stats = useMemo(() => {
-    const now = new Date();
-    const flights = schedule.filter(e => {
-      if (!e.is_flight) return false;
-      const d = parseDateBRT(e.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
-    const hours = flights.reduce((s, e) => s + (e.flight_hours || 0), 0);
-    const flightDays = new Set(flights.map(e => e.date)).size;
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    return { flights: flights.length, hours: Math.round(hours * 10) / 10, flightDays, daysOff: daysInMonth - flightDays };
-  }, [schedule]);
 
   const handleLogout = async () => {
     await signOut();
@@ -59,7 +37,7 @@ export default function HomePage() {
       <img src={airplaneBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/50 to-black/70" />
 
-      {/* Header */}
+      {/* Header — user info only */}
       <div className="relative z-10 flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex items-center gap-3">
           <Avatar className="w-10 h-10 border-2 border-white/30">
@@ -76,33 +54,14 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Quick Stats Row */}
-      <div className="relative z-10 px-4 py-2">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {[
-            { label: 'Voos', value: stats.flights },
-            { label: 'Horas', value: `${stats.hours}h` },
-            { label: 'Dias Voo', value: stats.flightDays },
-            { label: 'Folgas', value: stats.daysOff },
-          ].map(s => (
-            <div key={s.label} className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 min-w-[80px] text-center shrink-0">
-              <p className="text-white/60 text-[10px]">{s.label}</p>
-              <p className="text-white font-bold text-lg">{s.value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Regulation Badge */}
+      {/* Optional informational link to regulation */}
       {schedule.length > 0 && (
         <div className="relative z-10 px-4 py-1">
-          <button onClick={() => navigate('/regulation')} className={`w-full flex items-center gap-3 ${compBg} backdrop-blur-sm rounded-xl px-4 py-2.5 transition-all hover:scale-[1.01] active:scale-[0.99]`}>
-            <CompIcon className={`w-5 h-5 ${compColor}`} />
+          <button onClick={() => navigate('/regulation')} className="w-full flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2.5 transition-all hover:scale-[1.01] active:scale-[0.99]">
+            <Info className="w-5 h-5 text-white/70" />
             <div className="flex-1 text-left">
-              <p className="text-white text-sm font-semibold">RBAC 117: {compliance.label}</p>
-              {compliance.alerts.length > 0 && (
-                <p className="text-white/60 text-xs">{compliance.alerts.length} alerta{compliance.alerts.length > 1 ? 's' : ''} ativo{compliance.alerts.length > 1 ? 's' : ''}</p>
-              )}
+              <p className="text-white text-sm font-medium">Análise operacional</p>
+              <p className="text-white/50 text-xs">Avisos operacionais disponíveis</p>
             </div>
             <ChevronRight className="w-4 h-4 text-white/40" />
           </button>
