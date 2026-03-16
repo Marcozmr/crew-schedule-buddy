@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (session) navigate('/dashboard', { replace: true });
+    if (session) navigate('/home', { replace: true });
   }, [session, navigate]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
