@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
+import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
 import { motion } from 'framer-motion';
-import { Plane, Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight, BedDouble, Clock, Cloud, Settings, LogOut, Info, ChevronRight } from 'lucide-react';
+import { Plane, Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight, BedDouble, Clock, Cloud, Settings, LogOut, Info, ChevronRight, Sparkles } from 'lucide-react';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
@@ -24,6 +25,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { schedule } = useScheduleData();
+  const { shouldShow, dismiss, openManually, needsOnboarding } = useOnboardingModal();
 
   const initials = profile?.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
 
@@ -53,6 +55,20 @@ export default function HomePage() {
           <Plane className="w-5 h-5 text-white" />
         </div>
       </div>
+
+      {/* Onboarding resume card */}
+      {needsOnboarding && (
+        <div className="relative z-10 px-4 py-1">
+          <button onClick={openManually} className="w-full flex items-center gap-3 bg-primary/20 backdrop-blur-sm rounded-xl px-4 py-3 transition-all hover:scale-[1.01] active:scale-[0.99] border border-primary/30">
+            <Sparkles className="w-5 h-5 text-primary-foreground" />
+            <div className="flex-1 text-left">
+              <p className="text-white text-sm font-medium">Complete sua configuração inicial</p>
+              <p className="text-white/50 text-xs">Personalize seu EscalaX</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/40" />
+          </button>
+        </div>
+      )}
 
       {/* Optional informational link to regulation */}
       {schedule.length > 0 && (
@@ -102,6 +118,9 @@ export default function HomePage() {
         <h2 className="text-xl font-extrabold text-white tracking-tight">EscalaX</h2>
         <p className="text-white/40 text-[10px] mt-0.5">© {new Date().getFullYear()} Marcos Vinicius</p>
       </div>
+
+      {/* Onboarding Modal */}
+      <OnboardingModal open={shouldShow} onClose={dismiss} />
     </div>
   );
 }
