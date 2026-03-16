@@ -13,18 +13,25 @@ export default function SchedulePage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
 
+  const parseEntryDate = (dateStr: string) => {
+    if (dateStr.includes('-') && dateStr.indexOf('-') === 4) return new Date(dateStr + 'T00:00:00');
+    const parts = dateStr.split(/[\/\-]/);
+    if (parts.length < 3) return new Date();
+    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+  };
+
+  const getDay = (dateStr: string) => parseEntryDate(dateStr).getDate();
+  const getMonth = (dateStr: string) => parseEntryDate(dateStr).getMonth();
+
   useEffect(() => {
     if (schedule.length === 0) return;
     const currentMonth = new Date().getMonth();
-    const hasCurrentMonth = schedule.some(e => {
-      const parts = e.date.split(/[\/\-]/);
-      return parts.length >= 3 && parseInt(parts[1]) - 1 === currentMonth;
-    });
+    const hasCurrentMonth = schedule.some(e => getMonth(e.date) === currentMonth);
     if (hasCurrentMonth) { setSelectedMonth(currentMonth); return; }
     let latestMonth = -1;
     for (const e of schedule) {
-      const parts = e.date.split(/[\/\-]/);
-      if (parts.length >= 3) { const m = parseInt(parts[1]) - 1; if (m > latestMonth) latestMonth = m; }
+      const m = getMonth(e.date);
+      if (m > latestMonth) latestMonth = m;
     }
     if (latestMonth >= 0) setSelectedMonth(latestMonth);
   }, [schedule]);
