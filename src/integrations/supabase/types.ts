@@ -188,7 +188,7 @@ export type Database = {
           pairing_code: string | null
           raw_line: string | null
           report_time: string | null
-          roster_id: string | null
+          roster_id: string
           sort_datetime: string | null
           source_pdf_path: string | null
           status: string
@@ -224,7 +224,7 @@ export type Database = {
           pairing_code?: string | null
           raw_line?: string | null
           report_time?: string | null
-          roster_id?: string | null
+          roster_id: string
           sort_datetime?: string | null
           source_pdf_path?: string | null
           status?: string
@@ -260,7 +260,7 @@ export type Database = {
           pairing_code?: string | null
           raw_line?: string | null
           report_time?: string | null
-          roster_id?: string | null
+          roster_id?: string
           sort_datetime?: string | null
           source_pdf_path?: string | null
           status?: string

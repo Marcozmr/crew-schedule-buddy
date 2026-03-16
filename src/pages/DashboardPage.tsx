@@ -183,7 +183,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      <ImportHistoryCard />
+      <ImportHistoryCard onRosterChanged={reload} />
     </AppLayout>
   );
 }
