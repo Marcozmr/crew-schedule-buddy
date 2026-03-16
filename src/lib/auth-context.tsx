@@ -11,6 +11,8 @@ interface Profile {
   airline: string | null;
   registration: string | null;
   avatar_url: string | null;
+  onboarding_completed: boolean;
+  onboarding_step: number;
 }
 
 interface AuthContextType {
