@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SmtpClient } from "https://deno.land/x/smtp@v0.7.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,13 +18,158 @@ const categoryToLabel = (type: string | null | undefined) =>
     : type === "bug" ? "Relatar problema"
     : "Entrar em contato";
 
+// ── SMTP helpers using raw Deno TCP + STARTTLS ──
+
+async function readLine(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): Promise<string> {
+  let line = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    line += decoder.decode(value, { stream: true });
+    if (line.includes("\r\n")) break;
+  }
+  return line.trim();
+}
+
+async function drainResponse(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): Promise<string> {
+  // Read all available response lines (multi-line responses end with "XXX " not "XXX-")
+  let full = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    full += decoder.decode(value, { stream: true });
+    // Check if last line is a final response (3-digit code followed by space)
+    const lines = full.split("\r\n").filter(Boolean);
+    const lastLine = lines[lines.length - 1] || "";
+    if (/^\d{3} /.test(lastLine)) break;
+  }
+  return full.trim();
+}
+
+async function sendCommand(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+  encoder: TextEncoder,
+  cmd: string
+): Promise<string> {
+  await writer.write(encoder.encode(cmd + "\r\n"));
+  return drainResponse(reader, decoder);
+}
+
+async function sendSmtpEmail(options: {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+}) {
+  const { host, port, username, password, from, to, subject, html } = options;
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  console.log(`[SMTP] Connecting to ${host}:${port}`);
+
+  // 1. Connect plain TCP
+  const conn = await Deno.connect({ hostname: host, port });
+  let reader = conn.readable.getReader();
+  let writer = conn.writable.getWriter();
+
+  // Read greeting
+  const greeting = await drainResponse(reader, decoder);
+  console.log(`[SMTP] Greeting: ${greeting.substring(0, 80)}`);
+  if (!greeting.startsWith("220")) throw new Error(`Bad greeting: ${greeting}`);
+
+  // EHLO
+  let ehlo = await sendCommand(writer, reader, decoder, encoder, `EHLO escalax.app.br`);
+  console.log(`[SMTP] EHLO response received`);
+
+  // STARTTLS
+  const starttls = await sendCommand(writer, reader, decoder, encoder, "STARTTLS");
+  console.log(`[SMTP] STARTTLS: ${starttls.substring(0, 40)}`);
+  if (!starttls.startsWith("220")) throw new Error(`STARTTLS failed: ${starttls}`);
+
+  // Release plain readers/writers before TLS upgrade
+  reader.releaseLock();
+  writer.releaseLock();
+
+  // Upgrade to TLS
+  const tlsConn = await Deno.startTls(conn, { hostname: host });
+  reader = tlsConn.readable.getReader();
+  writer = tlsConn.writable.getWriter();
+
+  // EHLO again over TLS
+  ehlo = await sendCommand(writer, reader, decoder, encoder, `EHLO escalax.app.br`);
+  console.log(`[SMTP] TLS EHLO OK`);
+
+  // AUTH LOGIN
+  const authResp = await sendCommand(writer, reader, decoder, encoder, "AUTH LOGIN");
+  if (!authResp.startsWith("334")) throw new Error(`AUTH failed: ${authResp}`);
+
+  const userResp = await sendCommand(writer, reader, decoder, encoder, btoa(username));
+  if (!userResp.startsWith("334")) throw new Error(`AUTH user failed: ${userResp}`);
+
+  const passResp = await sendCommand(writer, reader, decoder, encoder, btoa(password));
+  if (!passResp.startsWith("235")) throw new Error(`AUTH pass failed: ${passResp}`);
+  console.log(`[SMTP] Authenticated`);
+
+  // MAIL FROM
+  const mailFrom = await sendCommand(writer, reader, decoder, encoder, `MAIL FROM:<${from}>`);
+  if (!mailFrom.startsWith("250")) throw new Error(`MAIL FROM failed: ${mailFrom}`);
+
+  // RCPT TO
+  const rcptTo = await sendCommand(writer, reader, decoder, encoder, `RCPT TO:<${to}>`);
+  if (!rcptTo.startsWith("250")) throw new Error(`RCPT TO failed: ${rcptTo}`);
+
+  // DATA
+  const dataResp = await sendCommand(writer, reader, decoder, encoder, "DATA");
+  if (!dataResp.startsWith("354")) throw new Error(`DATA failed: ${dataResp}`);
+
+  // Build message
+  const boundary = `----=_Part_${Date.now()}`;
+  const msg = [
+    `From: EscalaX Support <${from}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    html,
+    ``,
+    `--${boundary}--`,
+    `.`,
+  ].join("\r\n");
+
+  const endResp = await sendCommand(writer, reader, decoder, encoder, msg);
+  if (!endResp.startsWith("250")) throw new Error(`Send failed: ${endResp}`);
+  console.log(`[SMTP] Message accepted`);
+
+  // QUIT
+  await sendCommand(writer, reader, decoder, encoder, "QUIT");
+
+  try {
+    reader.releaseLock();
+    writer.releaseLock();
+    tlsConn.close();
+  } catch { /* ignore close errors */ }
+}
+
+// ── Main handler ──
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // ── Auth ──
+    // Auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ sent: false, stored: false, error: "Não autorizado" }, 401);
 
@@ -38,7 +182,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return json({ sent: false, stored: false, error: "Não autorizado" }, 401);
 
-    // ── Payload ──
+    // Payload
     const { name, email, type, subject, message, route } = await req.json();
     if (!message?.trim()) return json({ sent: false, stored: false, error: "Mensagem é obrigatória" }, 400);
 
@@ -47,7 +191,7 @@ serve(async (req) => {
     const safeSubject = subject?.trim() || null;
     const safeEmail = email?.trim() || null;
 
-    // ── Persist first ──
+    // Persist first
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -72,7 +216,7 @@ serve(async (req) => {
       return json({ sent: false, stored: false, error: "Não foi possível registrar." }, 500);
     }
 
-    // ── SMTP Config ──
+    // SMTP Config
     const smtpHost = Deno.env.get("SMTP_HOST");
     const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "587", 10);
     const smtpUser = Deno.env.get("SMTP_USER");
@@ -83,11 +227,7 @@ serve(async (req) => {
     if (!smtpHost || !smtpUser || !smtpPass) {
       console.warn("[send-support-email] SMTP not configured — stored only");
       await serviceClient.from("feedback_messages").update({ status: "stored_no_email" }).eq("id", feedback.id);
-      return json({
-        sent: false,
-        stored: true,
-        error: "Mensagem salva. Envio por e-mail pendente de configuração.",
-      });
+      return json({ sent: false, stored: true, error: "Mensagem salva. Envio por e-mail pendente de configuração." });
     }
 
     const categoryLabel = categoryToLabel(safeType);
@@ -95,7 +235,7 @@ serve(async (req) => {
 
     const emailHtml = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:#0a1628;padding:24px;border-radius:12px 12px 0 0">
+  <div style="background:#2563EB;padding:24px;border-radius:12px 12px 0 0">
     <h1 style="color:#fff;margin:0;font-size:18px">✈️ EscalaX — ${categoryLabel}</h1>
   </div>
   <div style="background:#f8f9fa;padding:24px;border-radius:0 0 12px 12px">
@@ -114,26 +254,16 @@ serve(async (req) => {
 </div>`;
 
     try {
-      console.log(`[send-support-email] Sending via SMTP ${smtpHost}:${smtpPort} to ${toEmail}`);
-
-      const client = new SmtpClient();
-
-      await client.connectTLS({
-        hostname: smtpHost,
+      await sendSmtpEmail({
+        host: smtpHost,
         port: smtpPort,
         username: smtpUser,
         password: smtpPass,
-      });
-
-      await client.send({
         from: fromEmail,
         to: toEmail,
         subject: `[EscalaX] ${categoryLabel} — ${safeName}`,
-        content: "text/html",
         html: emailHtml,
       });
-
-      await client.close();
 
       console.log("[send-support-email] Email sent successfully");
       await serviceClient.from("feedback_messages").update({ status: "sent" }).eq("id", feedback.id);
@@ -142,11 +272,7 @@ serve(async (req) => {
     } catch (emailErr) {
       console.error("[send-support-email] SMTP error:", emailErr);
       await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
-      return json({
-        sent: false,
-        stored: true,
-        error: "Mensagem salva. Falha no envio do e-mail.",
-      });
+      return json({ sent: false, stored: true, error: "Mensagem salva. Falha no envio do e-mail." });
     }
 
   } catch (err) {
