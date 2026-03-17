@@ -224,8 +224,10 @@ export const rbac117Rules: RegulationRule[] = [
   rbac117MaxDutyHours,
   rbac117MaxFlightHours,
   rbac117MinRest,
-  rbac117FlightHoursMonth,
   rbac117FlightHours7Days,
+  rbac117FlightHoursMonth,
+  rbac117FlightHours90Days,
+  rbac117FlightHours365Days,
   rbac117WeeklyRest,
   rbac117WoclExposure,
 ];

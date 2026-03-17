@@ -63,6 +63,7 @@ function calculateAccumulatedHours(
     last7Days: round2(sumFlightHours(7)),
     last28Days: round2(sumFlightHours(28)),
     last30Days: round2(sumFlightHours(30)),
+    last90Days: round2(sumFlightHours(90)),
     last365Days: round2(sumFlightHours(365)),
   };
 }

@@ -233,6 +233,7 @@ export interface ComplianceResult {
     last7Days: number;
     last28Days: number;
     last30Days: number;
+    last90Days: number;
     last365Days: number;
   };
   /** ISO timestamp of when this result was computed */
