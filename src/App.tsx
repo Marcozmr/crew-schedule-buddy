@@ -98,6 +98,7 @@ const App = () => (
       <AuthProvider>
         <TooltipProvider>
           <Sonner />
+          <PWAUpdatePrompt />
           <AppRoutes />
         </TooltipProvider>
       </AuthProvider>
