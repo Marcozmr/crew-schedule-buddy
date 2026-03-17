@@ -1,8 +1,9 @@
 /**
  * EscalaX — Premium Aviation Dashboard (Light Theme)
+ * Uses duty period grouping for correct operational ordering.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
@@ -10,65 +11,14 @@ import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
 import {
   Upload, Calendar, Shield, Clock, Plane, ChevronRight, BedDouble,
-  Settings, Gauge, ArrowRight
+  Settings, Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { formatDateBR } from '@/lib/date-utils';
-
-/**
- * Returns flights operationally active "today" — includes overnight/midnight-crossing duties.
- * A flight is considered "today" if:
- *  - Its calendar date is today, OR
- *  - Its calendar date is yesterday AND it crosses midnight (arrival after 00:00 today)
- */
-function getTodayFlights(schedule: ReturnType<typeof useScheduleData>['schedule'], todayStr: string) {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-
-  return schedule.filter(e => {
-    if (!e.is_flight) return false;
-    // Direct match: flight date is today
-    if (e.date === todayStr) return true;
-    // Midnight crossing: flight from yesterday that arrives today
-    if (e.date === yesterdayStr && e.crosses_midnight) return true;
-    // Check sort_datetime for entries that may span midnight
-    if (e.date === yesterdayStr && e.arrival_time) {
-      const arrH = parseInt(e.arrival_time.split(':')[0] || '99');
-      // If arrival is before departure, it crossed midnight
-      const depH = parseInt(e.departure_time.split(':')[0] || '0');
-      if (arrH < depH) return true;
-    }
-    return false;
-  });
-}
-
-/**
- * Find next flight considering timezone and midnight crossing correctly
- */
-function getNextFlight(schedule: ReturnType<typeof useScheduleData>['schedule'], todayStr: string) {
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  // Future dates
-  const future = schedule
-    .filter(e => e.is_flight && e.date > todayStr)
-    .sort((a, b) => (a.sort_datetime || a.date).localeCompare(b.sort_datetime || b.date));
-
-  // Today's flights that haven't departed yet
-  const todayUpcoming = schedule
-    .filter(e => {
-      if (!e.is_flight || e.date !== todayStr) return false;
-      const depMin = parseInt(e.departure_time?.split(':')[0] || '0') * 60 +
-                     parseInt(e.departure_time?.split(':')[1] || '0');
-      return depMin > nowMinutes;
-    })
-    .sort((a, b) => (a.departure_time || '').localeCompare(b.departure_time || ''));
-
-  return todayUpcoming[0] || future[0] || null;
-}
+import { groupIntoDutyPeriods, getTodayDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
+import { DutyPeriodCard } from '@/components/dashboard/DutyPeriodCard';
 
 export default function DashboardPage() {
   const { profile } = useAuth();
@@ -81,11 +31,14 @@ export default function DashboardPage() {
   const todayStr = now.toISOString().slice(0, 10);
   const monthStr = now.toISOString().slice(0, 7);
 
-  const todayFlights = useMemo(() => getTodayFlights(schedule, todayStr), [schedule, todayStr]);
+  // Group all flights into duty periods, ordered by presentation time
+  const allDutyPeriods = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
+  const todayDuties = useMemo(() => getTodayDutyPeriods(allDutyPeriods, todayStr), [allDutyPeriods, todayStr]);
+  const nextDuty = useMemo(() => getNextDutyPeriod(allDutyPeriods, todayStr), [allDutyPeriods, todayStr]);
+
   const monthFlights = schedule.filter(e => e.date?.startsWith(monthStr) && e.is_flight);
   const monthFlightHours = monthFlights.reduce((s, f) => s + (f.flight_hours || 0), 0);
   const monthDutyHours = monthFlights.reduce((s, f) => s + (f.duty_hours || 0), 0);
-  const nextFlight = useMemo(() => getNextFlight(schedule, todayStr), [schedule, todayStr]);
 
   const greeting = () => {
     const h = now.getHours();
@@ -213,7 +166,7 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Próximo voo</p>
                   <p className="text-sm font-semibold text-foreground truncate">
-                    {nextFlight ? `${nextFlight.flight_number}` : '—'}
+                    {nextDuty ? nextDuty.routeSummary : '—'}
                   </p>
                 </div>
               </div>
@@ -228,10 +181,10 @@ export default function DashboardPage() {
               </div>
             </motion.div>
 
-            {/* ═══ Today's Flights ═══ */}
+            {/* ═══ Today's Duty Periods ═══ */}
             <motion.div {...fade(0.1)}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-foreground">Voos de hoje</h2>
+                <h2 className="text-sm font-semibold text-foreground">Jornadas de hoje</h2>
                 <PdfImportDialog onImportComplete={reload} trigger={
                   <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary hover:bg-primary/8 gap-1.5 h-8">
                     <Upload className="w-3.5 h-3.5" /> Importar
@@ -239,62 +192,23 @@ export default function DashboardPage() {
                 } />
               </div>
 
-              {todayFlights.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {todayFlights.map((flight, i) => (
-                    <motion.div key={flight.id} {...fade(0.12 + i * 0.04)}
-                      className="glass p-5 hover-lift">
-                      {/* Flight number + report */}
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded-md">{flight.flight_number}</span>
-                        {flight.report_time && (
-                          <span className="text-[10px] font-mono text-muted-foreground">
-                            APR {flight.report_time}
-                          </span>
-                        )}
-                      </div>
-                      {/* Route */}
-                      <div className="flex items-center justify-between">
-                        <div className="text-center">
-                          <p className="text-2xl lg:text-3xl font-bold text-foreground">{flight.departure}</p>
-                          <p className="text-xs font-mono text-muted-foreground mt-1">{flight.departure_time}</p>
-                        </div>
-                        <div className="flex-1 mx-4 flex flex-col items-center">
-                          <div className="w-full h-px bg-border relative">
-                            <Plane className="w-4 h-4 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-90" />
-                          </div>
-                          {flight.crosses_midnight && (
-                            <span className="text-[9px] text-warning font-medium mt-1">+1 dia</span>
-                          )}
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl lg:text-3xl font-bold text-foreground">{flight.arrival}</p>
-                          <p className="text-xs font-mono text-muted-foreground mt-1">{flight.arrival_time}</p>
-                        </div>
-                      </div>
-                      {/* Flight meta */}
-                      {(flight.flight_hours || flight.duty_hours) && (
-                        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
-                          {flight.flight_hours != null && (
-                            <span className="text-[11px] text-muted-foreground">Voo: <span className="font-mono font-medium text-foreground">{flight.flight_hours}h</span></span>
-                          )}
-                          {flight.duty_hours != null && (
-                            <span className="text-[11px] text-muted-foreground">Jornada: <span className="font-mono font-medium text-foreground">{flight.duty_hours}h</span></span>
-                          )}
-                        </div>
-                      )}
-                    </motion.div>
+              {todayDuties.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                  {todayDuties.map((duty, i) => (
+                    <DutyPeriodCard key={duty.id} duty={duty} index={i} />
                   ))}
                 </div>
               ) : (
                 <div className="glass p-6 text-center">
                   <Plane className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground mb-1">Nenhum voo hoje</p>
-                  {nextFlight && (
+                  <p className="text-sm text-muted-foreground mb-1">Nenhuma jornada hoje</p>
+                  {nextDuty && (
                     <p className="text-xs text-muted-foreground">
-                      Próximo: <span className="text-foreground font-medium">{nextFlight.flight_number}</span> em{' '}
-                      <span className="text-foreground font-medium">{formatDateBR(nextFlight.date)}</span> ·{' '}
-                      {nextFlight.departure} → {nextFlight.arrival}
+                      Próxima: <span className="text-foreground font-medium">{nextDuty.routeSummary}</span> em{' '}
+                      <span className="text-foreground font-medium">{formatDateBR(nextDuty.dutyStartDate)}</span>
+                      {nextDuty.reportTime && (
+                        <> · APR <span className="font-mono text-foreground">{nextDuty.reportTime}</span></>
+                      )}
                     </p>
                   )}
                 </div>
