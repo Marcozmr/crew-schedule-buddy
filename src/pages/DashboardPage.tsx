@@ -7,6 +7,8 @@ import { useMemo } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
+import { useOperationalPreferences } from '@/hooks/useOperationalPreferences';
+import { useOperationalClock } from '@/hooks/useOperationalClock';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
 import {
@@ -24,24 +26,33 @@ export default function DashboardPage() {
   const { profile } = useAuth();
   const { schedule, loading, reload } = useScheduleData();
   const { shouldShow: showOnboarding, dismiss: dismissOnboarding } = useOnboardingModal();
+  const { homeBase, timezone } = useOperationalPreferences();
+  const { now, todayStr, monthStr } = useOperationalClock(timezone, reload);
 
   const hasSchedule = !loading && schedule.length > 0;
 
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const monthStr = now.toISOString().slice(0, 7);
-
   // Group all flights into duty periods, ordered by presentation time
   const allDutyPeriods = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
-  const todayDuties = useMemo(() => getTodayDutyPeriods(allDutyPeriods, todayStr), [allDutyPeriods, todayStr]);
-  const nextDuty = useMemo(() => getNextDutyPeriod(allDutyPeriods, todayStr), [allDutyPeriods, todayStr]);
+  const todayDuties = useMemo(
+    () => getTodayDutyPeriods(allDutyPeriods, todayStr, homeBase),
+    [allDutyPeriods, todayStr, homeBase],
+  );
+  const nextDuty = useMemo(
+    () => getNextDutyPeriod(allDutyPeriods, todayStr, now, timezone),
+    [allDutyPeriods, todayStr, now, timezone],
+  );
 
   const monthFlights = schedule.filter(e => e.date?.startsWith(monthStr) && e.is_flight);
   const monthFlightHours = monthFlights.reduce((s, f) => s + (f.flight_hours || 0), 0);
   const monthDutyHours = monthFlights.reduce((s, f) => s + (f.duty_hours || 0), 0);
 
   const greeting = () => {
-    const h = now.getHours();
+    const hourStr = new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      hour12: false,
+      timeZone: timezone,
+    }).format(now);
+    const h = Number(hourStr);
     if (h < 12) return 'Bom dia';
     if (h < 18) return 'Boa tarde';
     return 'Boa noite';
@@ -64,7 +75,13 @@ export default function DashboardPage() {
             {greeting()}, <span className="text-primary">{profile?.name?.split(' ')[0] || 'Tripulante'}</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            {now.toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+              timeZone: timezone,
+            })}
           </p>
         </motion.div>
 
