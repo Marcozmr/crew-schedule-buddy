@@ -1,5 +1,5 @@
 /**
- * EscalaX — Premium Aviation Dashboard
+ * EscalaX — Premium Aviation Dashboard (Responsive)
  */
 
 import { useEffect, useState } from 'react';
@@ -44,7 +44,6 @@ export default function DashboardPage() {
     window.location.href = '/';
   };
 
-  // Compute quick stats
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const monthStr = now.toISOString().slice(0, 7);
@@ -58,7 +57,6 @@ export default function DashboardPage() {
     .filter(e => e.date >= todayStr)
     .sort((a, b) => (a.sort_datetime || a.date).localeCompare(b.sort_datetime || b.date));
   const nextFlight = futureEntries.find(e => e.is_flight);
-  const nextDuty = futureEntries[0];
 
   const lastImportInfo = hasSchedule ? {
     count: schedule.length,
@@ -73,7 +71,7 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-lg mx-auto pb-10 px-4">
+      <div className="pb-10">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
         <DashboardHeader unreadCount={unreadCount} />
@@ -89,206 +87,230 @@ export default function DashboardPage() {
         )}
 
         {hasSchedule && (
-          <div className="space-y-5">
+          <div className="space-y-6">
 
-            {/* ═══ HERO: Next Flight / Duty ═══ */}
-            <motion.div {...fade(0.04)}>
-              {nextFlight ? (
-                <div className="glass-elevated rounded-2xl p-5 shadow-elevated relative overflow-hidden">
-                  {/* Subtle glow */}
-                  <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/5 blur-3xl" />
-                  <div className="relative">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-10 h-10 rounded-xl gradient-sky flex items-center justify-center shadow-glow-blue">
-                          <Plane className="w-5 h-5 text-primary-foreground" />
+            {/* ═══ TOP ROW: Hero + Stats (side-by-side on xl) ═══ */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+              {/* Hero: Next Flight — spans 2 cols on xl */}
+              <motion.div {...fade(0.04)} className="xl:col-span-2">
+                {nextFlight ? (
+                  <div className="glass-elevated rounded-2xl p-5 lg:p-7 shadow-elevated relative overflow-hidden h-full">
+                    <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/5 blur-3xl" />
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl gradient-sky flex items-center justify-center shadow-glow-blue">
+                            <Plane className="w-5 h-5 lg:w-6 lg:h-6 text-primary-foreground" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] lg:text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">Próximo Voo</p>
+                            <p className="text-xs lg:text-sm text-muted-foreground">{nextFlight.date}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Próximo Voo</p>
-                          <p className="text-xs text-muted-foreground">{nextFlight.date}</p>
+                        <span className="text-lg lg:text-2xl font-extrabold font-mono text-primary">{nextFlight.flight_number}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="text-center">
+                          <p className="text-2xl lg:text-4xl font-extrabold text-foreground">{nextFlight.departure}</p>
+                          <p className="text-xs lg:text-sm text-muted-foreground font-mono">{nextFlight.departure_time}</p>
+                        </div>
+                        <div className="flex-1 mx-4 lg:mx-8 flex flex-col items-center">
+                          <div className="w-full h-[1px] bg-gradient-to-r from-muted-foreground/20 via-primary/40 to-muted-foreground/20" />
+                          <Plane className="w-4 h-4 lg:w-5 lg:h-5 text-primary -mt-2 rotate-90" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl lg:text-4xl font-extrabold text-foreground">{nextFlight.arrival}</p>
+                          <p className="text-xs lg:text-sm text-muted-foreground font-mono">{nextFlight.arrival_time}</p>
                         </div>
                       </div>
-                      <span className="text-lg font-extrabold font-mono text-primary">{nextFlight.flight_number}</span>
-                    </div>
 
-                    <div className="flex items-center justify-between">
-                      <div className="text-center">
-                        <p className="text-2xl font-extrabold text-foreground">{nextFlight.departure}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{nextFlight.departure_time}</p>
-                      </div>
-                      <div className="flex-1 mx-4 flex flex-col items-center">
-                        <div className="w-full h-[1px] bg-gradient-to-r from-muted-foreground/20 via-primary/40 to-muted-foreground/20" />
-                        <Plane className="w-4 h-4 text-primary -mt-2 rotate-90" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-extrabold text-foreground">{nextFlight.arrival}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{nextFlight.arrival_time}</p>
-                      </div>
+                      {nextFlight.report_time && (
+                        <div className="mt-3 flex items-center gap-1.5 text-xs lg:text-sm text-muted-foreground">
+                          <Clock className="w-3 h-3 lg:w-4 lg:h-4" />
+                          <span>Apresentação: <span className="font-mono font-bold text-foreground">{nextFlight.report_time}</span></span>
+                        </div>
+                      )}
                     </div>
-
-                    {nextFlight.report_time && (
-                      <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        <span>Apresentação: <span className="font-mono font-bold text-foreground">{nextFlight.report_time}</span></span>
-                      </div>
-                    )}
                   </div>
-                </div>
-              ) : (
-                <div className="glass rounded-2xl p-5 text-center">
-                  <CheckCircle className="w-8 h-8 text-success mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-foreground">Nenhum voo pendente</p>
-                  <p className="text-xs text-muted-foreground">Escala atual sem próximos voos</p>
-                </div>
-              )}
-            </motion.div>
+                ) : (
+                  <div className="glass rounded-2xl p-5 lg:p-7 text-center h-full flex flex-col items-center justify-center">
+                    <CheckCircle className="w-8 h-8 text-success mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-foreground">Nenhum voo pendente</p>
+                    <p className="text-xs text-muted-foreground">Escala atual sem próximos voos</p>
+                  </div>
+                )}
+              </motion.div>
 
-            {/* ═══ Quick Stats Row ═══ */}
-            <motion.div {...fade(0.08)} className="grid grid-cols-3 gap-3">
-              <div className="glass rounded-xl p-3.5 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Hoje</p>
-                <p className="text-2xl font-extrabold font-mono text-foreground">{todayFlights.length}</p>
-                <p className="text-[10px] text-muted-foreground">voo{todayFlights.length !== 1 ? 's' : ''}</p>
-              </div>
-              <div className="glass rounded-xl p-3.5 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Mês</p>
-                <p className="text-2xl font-extrabold font-mono text-primary">{Math.round(monthFlightHours)}h</p>
-                <p className="text-[10px] text-muted-foreground">horas voo</p>
-              </div>
-              <div className="glass rounded-xl p-3.5 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Jornada</p>
-                <p className="text-2xl font-extrabold font-mono text-accent">{Math.round(monthDutyHours)}h</p>
-                <p className="text-[10px] text-muted-foreground">horas mês</p>
-              </div>
-            </motion.div>
-
-            {/* ═══ Module: Escala ═══ */}
-            <motion.div {...fade(0.12)} className="glass-elevated rounded-2xl overflow-hidden shadow-card">
-              <div className="px-5 py-4 flex items-center justify-between border-b border-border/30">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
-                    <Calendar className="w-4.5 h-4.5 text-primary" />
+              {/* Quick Stats — stacked on mobile, vertical column on xl */}
+              <motion.div {...fade(0.08)} className="grid grid-cols-3 xl:grid-cols-1 gap-3">
+                <div className="glass rounded-xl p-3.5 lg:p-5 text-center xl:flex xl:items-center xl:gap-4 xl:text-left">
+                  <div className="hidden xl:flex w-12 h-12 rounded-xl bg-primary/10 items-center justify-center shrink-0">
+                    <Plane className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-foreground">Escala</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {lastImportInfo?.count} registros · {lastImportInfo?.flights} voos
-                    </p>
+                    <p className="text-[10px] lg:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Hoje</p>
+                    <p className="text-2xl lg:text-3xl font-extrabold font-mono text-foreground">{todayFlights.length}</p>
+                    <p className="text-[10px] lg:text-xs text-muted-foreground">voo{todayFlights.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
-                <PdfImportDialog
-                  onImportComplete={reload}
-                  trigger={
-                    <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10">
-                      <Upload className="w-3.5 h-3.5" />
-                      Importar PDF
-                    </Button>
-                  }
-                />
-              </div>
-              <div className="p-2 space-y-0.5">
-                {[
-                  { label: 'Visualizar Escala', path: '/schedule', icon: Calendar },
-                  { label: 'Baixar Escala', path: '/download-roster', icon: Download },
-                  { label: 'Troca de Voo', path: '/flight-swap', icon: ArrowLeftRight },
-                  { label: 'Buscar Voos', path: '/search', icon: Search },
-                ].map(item => (
-                  <Link key={item.path} to={item.path}
-                    className="flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-colors group">
-                    <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                    <span className="text-sm font-medium text-secondary-foreground group-hover:text-foreground flex-1">{item.label}</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                  </Link>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* ═══ Module: Regulamentação ═══ */}
-            <motion.div {...fade(0.16)} className="glass-elevated rounded-2xl overflow-hidden shadow-card">
-              <div className="px-5 py-4 flex items-center gap-2.5 border-b border-border/30">
-                <div className="w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
-                  <Shield className="w-4.5 h-4.5 text-warning" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-foreground">Regulamentação</p>
-                  <p className="text-[10px] text-muted-foreground">Jornada, descanso e limites RBAC</p>
-                </div>
-              </div>
-              <div className="p-2 space-y-0.5">
-                {[
-                  { label: 'Cálculo de Jornada', path: '/duty-calc', icon: Gauge },
-                  { label: 'Cálculo de Descanso', path: '/rest-calc', icon: BedDouble },
-                  { label: 'Status Regulatório', path: '/regulation', icon: FileText },
-                ].map(item => (
-                  <Link key={item.path} to={item.path}
-                    className="flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-colors group">
-                    <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-warning transition-colors" />
-                    <span className="text-sm font-medium text-secondary-foreground group-hover:text-foreground flex-1">{item.label}</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                  </Link>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* ═══ Module: Operacional ═══ */}
-            <motion.div {...fade(0.2)} className="glass-elevated rounded-2xl overflow-hidden shadow-card">
-              <div className="px-5 py-4 flex items-center gap-2.5 border-b border-border/30">
-                <div className="w-9 h-9 rounded-xl bg-success/15 flex items-center justify-center">
-                  <Cloud className="w-4.5 h-4.5 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-foreground">Operacional</p>
-                  <p className="text-[10px] text-muted-foreground">Clima e informações de voo</p>
-                </div>
-              </div>
-              <div className="p-2">
-                <Link to="/weather"
-                  className="flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-colors group">
-                  <Cloud className="w-4 h-4 text-muted-foreground group-hover:text-success transition-colors" />
-                  <span className="text-sm font-medium text-secondary-foreground group-hover:text-foreground flex-1">Meteorologia</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* ═══ Module: Financeiro + Documentos ═══ */}
-            <motion.div {...fade(0.24)} className="grid grid-cols-2 gap-4">
-              <div className="glass rounded-2xl overflow-hidden shadow-card">
-                <div className="px-4 py-3 flex items-center gap-2 border-b border-border/30">
-                  <div className="w-7 h-7 rounded-lg bg-accent/15 flex items-center justify-center">
-                    <DollarSign className="w-3.5 h-3.5 text-accent" />
+                <div className="glass rounded-xl p-3.5 lg:p-5 text-center xl:flex xl:items-center xl:gap-4 xl:text-left">
+                  <div className="hidden xl:flex w-12 h-12 rounded-xl bg-primary/10 items-center justify-center shrink-0">
+                    <Clock className="w-5 h-5 text-primary" />
                   </div>
-                  <p className="text-xs font-bold text-foreground">Financeiro</p>
-                </div>
-                <div className="p-1.5 space-y-0.5">
-                  <Link to="/salary" className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors group">
-                    <DollarSign className="w-3.5 h-3.5 text-muted-foreground group-hover:text-accent" />
-                    <span className="text-xs text-secondary-foreground group-hover:text-foreground">Salário</span>
-                  </Link>
-                  <Link to="/perdiem" className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors group">
-                    <UtensilsCrossed className="w-3.5 h-3.5 text-muted-foreground group-hover:text-accent" />
-                    <span className="text-xs text-secondary-foreground group-hover:text-foreground">Diárias</span>
-                  </Link>
-                </div>
-              </div>
-              <div className="glass rounded-2xl overflow-hidden shadow-card">
-                <div className="px-4 py-3 flex items-center gap-2 border-b border-border/30">
-                  <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
-                    <FolderOpen className="w-3.5 h-3.5 text-primary" />
+                  <div>
+                    <p className="text-[10px] lg:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Mês</p>
+                    <p className="text-2xl lg:text-3xl font-extrabold font-mono text-primary">{Math.round(monthFlightHours)}h</p>
+                    <p className="text-[10px] lg:text-xs text-muted-foreground">horas voo</p>
                   </div>
-                  <p className="text-xs font-bold text-foreground">Documentos</p>
                 </div>
-                <div className="p-1.5">
-                  <Link to="/documents" className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors group">
-                    <FolderOpen className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
-                    <span className="text-xs text-secondary-foreground group-hover:text-foreground">Meus Docs</span>
-                  </Link>
+                <div className="glass rounded-xl p-3.5 lg:p-5 text-center xl:flex xl:items-center xl:gap-4 xl:text-left">
+                  <div className="hidden xl:flex w-12 h-12 rounded-xl bg-accent/10 items-center justify-center shrink-0">
+                    <Gauge className="w-5 h-5 text-accent" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] lg:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Jornada</p>
+                    <p className="text-2xl lg:text-3xl font-extrabold font-mono text-accent">{Math.round(monthDutyHours)}h</p>
+                    <p className="text-[10px] lg:text-xs text-muted-foreground">horas mês</p>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
 
-            {/* ═══ System Row ═══ */}
-            <motion.div {...fade(0.28)} className="flex gap-3">
+            {/* ═══ MODULES ROW: 2-col on md, 3-col on xl ═══ */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+              {/* Module: Escala */}
+              <motion.div {...fade(0.12)} className="glass-elevated rounded-2xl overflow-hidden shadow-card">
+                <div className="px-5 py-4 flex items-center justify-between border-b border-border/30">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                      <Calendar className="w-4.5 h-4.5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Escala</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {lastImportInfo?.count} registros · {lastImportInfo?.flights} voos
+                      </p>
+                    </div>
+                  </div>
+                  <PdfImportDialog
+                    onImportComplete={reload}
+                    trigger={
+                      <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10">
+                        <Upload className="w-3.5 h-3.5" />
+                        PDF
+                      </Button>
+                    }
+                  />
+                </div>
+                <div className="p-2 space-y-0.5">
+                  {[
+                    { label: 'Visualizar Escala', path: '/schedule', icon: Calendar },
+                    { label: 'Baixar Escala', path: '/download-roster', icon: Download },
+                    { label: 'Troca de Voo', path: '/flight-swap', icon: ArrowLeftRight },
+                    { label: 'Buscar Voos', path: '/search', icon: Search },
+                  ].map(item => (
+                    <Link key={item.path} to={item.path}
+                      className="flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-colors group">
+                      <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <span className="text-sm font-medium text-secondary-foreground group-hover:text-foreground flex-1">{item.label}</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </Link>
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Module: Regulamentação */}
+              <motion.div {...fade(0.16)} className="glass-elevated rounded-2xl overflow-hidden shadow-card">
+                <div className="px-5 py-4 flex items-center gap-2.5 border-b border-border/30">
+                  <div className="w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
+                    <Shield className="w-4.5 h-4.5 text-warning" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Regulamentação</p>
+                    <p className="text-[10px] text-muted-foreground">Jornada, descanso e limites RBAC</p>
+                  </div>
+                </div>
+                <div className="p-2 space-y-0.5">
+                  {[
+                    { label: 'Cálculo de Jornada', path: '/duty-calc', icon: Gauge },
+                    { label: 'Cálculo de Descanso', path: '/rest-calc', icon: BedDouble },
+                    { label: 'Status Regulatório', path: '/regulation', icon: FileText },
+                  ].map(item => (
+                    <Link key={item.path} to={item.path}
+                      className="flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-colors group">
+                      <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-warning transition-colors" />
+                      <span className="text-sm font-medium text-secondary-foreground group-hover:text-foreground flex-1">{item.label}</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </Link>
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Module: Operacional + Financeiro + Docs (combined on desktop) */}
+              <motion.div {...fade(0.2)} className="space-y-5 md:col-span-2 xl:col-span-1">
+                {/* Operacional */}
+                <div className="glass-elevated rounded-2xl overflow-hidden shadow-card">
+                  <div className="px-5 py-4 flex items-center gap-2.5 border-b border-border/30">
+                    <div className="w-9 h-9 rounded-xl bg-success/15 flex items-center justify-center">
+                      <Cloud className="w-4.5 h-4.5 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Operacional</p>
+                      <p className="text-[10px] text-muted-foreground">Clima e informações de voo</p>
+                    </div>
+                  </div>
+                  <div className="p-2">
+                    <Link to="/weather"
+                      className="flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-colors group">
+                      <Cloud className="w-4 h-4 text-muted-foreground group-hover:text-success transition-colors" />
+                      <span className="text-sm font-medium text-secondary-foreground group-hover:text-foreground flex-1">Meteorologia</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Financeiro + Documentos side-by-side */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="glass rounded-2xl overflow-hidden shadow-card">
+                    <div className="px-4 py-3 flex items-center gap-2 border-b border-border/30">
+                      <div className="w-7 h-7 rounded-lg bg-accent/15 flex items-center justify-center">
+                        <DollarSign className="w-3.5 h-3.5 text-accent" />
+                      </div>
+                      <p className="text-xs font-bold text-foreground">Financeiro</p>
+                    </div>
+                    <div className="p-1.5 space-y-0.5">
+                      <Link to="/salary" className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors group">
+                        <DollarSign className="w-3.5 h-3.5 text-muted-foreground group-hover:text-accent" />
+                        <span className="text-xs text-secondary-foreground group-hover:text-foreground">Salário</span>
+                      </Link>
+                      <Link to="/perdiem" className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors group">
+                        <UtensilsCrossed className="w-3.5 h-3.5 text-muted-foreground group-hover:text-accent" />
+                        <span className="text-xs text-secondary-foreground group-hover:text-foreground">Diárias</span>
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="glass rounded-2xl overflow-hidden shadow-card">
+                    <div className="px-4 py-3 flex items-center gap-2 border-b border-border/30">
+                      <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
+                        <FolderOpen className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                      <p className="text-xs font-bold text-foreground">Documentos</p>
+                    </div>
+                    <div className="p-1.5">
+                      <Link to="/documents" className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors group">
+                        <FolderOpen className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
+                        <span className="text-xs text-secondary-foreground group-hover:text-foreground">Meus Docs</span>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* ═══ System Row — visible on mobile/tablet, hidden on lg (sidebar has these) ═══ */}
+            <motion.div {...fade(0.28)} className="flex gap-3 lg:hidden">
               <Link to="/support" className="flex-1 glass rounded-xl px-4 py-3.5 flex items-center gap-2.5 hover:bg-secondary/30 transition-colors">
                 <HelpCircle className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs font-medium text-secondary-foreground">Suporte</span>
