@@ -1,7 +1,6 @@
 /**
  * EscalaX EFB Dashboard
  * Professional aviation dashboard with modular sections.
- * Hierarchy: Header → Stats → Hero (Next Duty) → Schedule Module → Operational → Regulation → Financial → Documents → System
  */
 
 import { useEffect, useState } from 'react';
@@ -17,7 +16,7 @@ import { OperationalPanel } from '@/components/dashboard/OperationalPanel';
 import { RegulationStatusPanel } from '@/components/dashboard/RegulationStatusPanel';
 import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState';
 import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
-import { Upload, Calendar, Shield, DollarSign, FolderOpen, Settings, LogOut, Download, ArrowLeftRight, Cloud, Clock, BedDouble, FileText, UtensilsCrossed, Search, ChevronRight, Plane } from 'lucide-react';
+import { Upload, Calendar, Shield, DollarSign, FolderOpen, Settings, LogOut, Download, ArrowLeftRight, Cloud, Clock, BedDouble, FileText, UtensilsCrossed, Search, ChevronRight, Plane, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
@@ -50,15 +49,6 @@ const moduleGroups: ModuleGroup[] = [
     ],
   },
   {
-    title: 'Operacional',
-    description: 'Clima e informações de voo',
-    icon: Cloud,
-    accentColor: 'success',
-    items: [
-      { label: 'Meteorologia', path: '/weather', icon: Cloud },
-    ],
-  },
-  {
     title: 'Regulamentação',
     description: 'Jornada, descanso e limites RBAC',
     icon: Shield,
@@ -67,6 +57,15 @@ const moduleGroups: ModuleGroup[] = [
       { label: 'Cálc. Jornada', path: '/duty-calc', icon: Clock },
       { label: 'Cálc. Descanso', path: '/rest-calc', icon: BedDouble },
       { label: 'Status Regulatório', path: '/regulation', icon: FileText },
+    ],
+  },
+  {
+    title: 'Operacional',
+    description: 'Clima e informações de voo',
+    icon: Cloud,
+    accentColor: 'success',
+    items: [
+      { label: 'Meteorologia', path: '/weather', icon: Cloud },
     ],
   },
   {
@@ -117,7 +116,6 @@ export default function DashboardPage() {
     window.location.href = '/';
   };
 
-  // Get last import info
   const lastImportInfo = hasSchedule ? {
     count: schedule.length,
     flights: schedule.filter(e => e.is_flight).length,
@@ -128,31 +126,24 @@ export default function DashboardPage() {
       <div className="max-w-lg mx-auto pb-8">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
-        {/* 1. User header */}
         <DashboardHeader unreadCount={unreadCount} />
 
-        {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
-        {/* Empty state */}
         {!loading && schedule.length === 0 && (
           <DashboardEmptyState onImportComplete={reload} />
         )}
 
-        {/* Dashboard with data */}
         {hasSchedule && (
           <div className="space-y-4">
-            {/* 2. Monthly stats */}
             <MonthlyStatsBar schedule={schedule} />
-
-            {/* 3. HERO: Next duty */}
             <NextDutyPanel schedule={schedule} />
 
-            {/* 4. Schedule module with import button */}
+            {/* Schedule module with import */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="glass rounded-2xl overflow-hidden">
               <div className="px-5 py-3 flex items-center justify-between border-b border-border/40">
                 <div className="flex items-center gap-2.5">
@@ -185,13 +176,10 @@ export default function DashboardPage() {
               </div>
             </motion.div>
 
-            {/* 5. Operational panel */}
             <OperationalPanel schedule={schedule} airline={profile?.airline} />
-
-            {/* 6. Regulation status */}
             <RegulationStatusPanel schedule={schedule} />
 
-            {/* 7. Remaining module groups */}
+            {/* Remaining modules */}
             {moduleGroups.slice(1).map((mod, idx) => (
               <motion.div
                 key={mod.title}
@@ -221,8 +209,12 @@ export default function DashboardPage() {
               </motion.div>
             ))}
 
-            {/* 8. System row */}
+            {/* System row */}
             <div className="flex gap-3">
+              <Link to="/support" className="flex-1 glass rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-secondary/30 transition-colors">
+                <HelpCircle className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-medium text-secondary-foreground">Suporte</span>
+              </Link>
               <Link to="/settings" className="flex-1 glass rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-secondary/30 transition-colors">
                 <Settings className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs font-medium text-secondary-foreground">Ajustes</span>
