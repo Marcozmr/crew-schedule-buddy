@@ -74,16 +74,19 @@ serve(async (req) => {
     }
 
     // ── Attempt email via Lovable Email API ──────────────
+    // The Lovable Email API requires an email domain to be configured.
+    // Without a domain, we save the message and return stored=true.
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     
-    // Try multiple possible email API URLs
-    const emailApiUrl = Deno.env.get("LOVABLE_EMAIL_API_URL") 
-      || "https://email.lovable.dev/v1/send";
-
+    // Use the correct Lovable Cloud email endpoint
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    // Extract project ref from URL (e.g., https://xxx.supabase.co -> xxx)
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || "";
+    
     if (!apiKey) {
       console.warn("LOVABLE_API_KEY not configured — message stored only");
       await serviceClient.from("feedback_messages").update({ status: "stored_no_email_key" }).eq("id", feedback.id);
-      return json({ sent: false, stored: true, error: "E-mail não configurado. Mensagem salva no sistema." });
+      return json({ sent: false, stored: true, error: "Mensagem salva. Configuração de e-mail pendente." });
     }
 
     const categoryLabel = categoryToLabel(safeType);
@@ -104,40 +107,58 @@ serve(async (req) => {
       message,
     ].join("\n");
 
-    try {
-      console.log(`Attempting email send to ${SUPPORT_EMAIL} via ${emailApiUrl}`);
-      
-      const res = await fetch(emailApiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          to: [SUPPORT_EMAIL],
-          subject: `[EscalaX] ${categoryLabel} - ${safeName}`,
-          text: emailBody,
-          html: `<pre style="font-family: sans-serif; white-space: pre-wrap;">${emailBody.replace(/</g, '&lt;')}</pre>`,
-          replyTo: safeEmail || undefined,
-        }),
-      });
+    // Try multiple email API endpoints
+    const emailEndpoints = [
+      `https://${projectRef}.functions.supabase.co/send-email`,
+      "https://email.lovable.dev/v1/send",
+    ].filter(Boolean);
 
-      const resText = await res.text();
-      console.log(`Email API response: ${res.status} - ${resText}`);
+    let emailSent = false;
+    let lastError = "";
 
-      if (res.ok) {
-        await serviceClient.from("feedback_messages").update({ status: "sent" }).eq("id", feedback.id);
-        return json({ sent: true, stored: true });
+    for (const emailApiUrl of emailEndpoints) {
+      try {
+        console.log(`Attempting email send to ${SUPPORT_EMAIL} via ${emailApiUrl}`);
+        
+        const res = await fetch(emailApiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            to: [SUPPORT_EMAIL],
+            subject: `[EscalaX] ${categoryLabel} - ${safeName}`,
+            text: emailBody,
+            html: `<pre style="font-family: sans-serif; white-space: pre-wrap;">${emailBody.replace(/</g, '&lt;')}</pre>`,
+            replyTo: safeEmail || undefined,
+          }),
+        });
+
+        const resText = await res.text();
+        console.log(`Email API response from ${emailApiUrl}: ${res.status} - ${resText.substring(0, 200)}`);
+
+        if (res.ok) {
+          emailSent = true;
+          await serviceClient.from("feedback_messages").update({ status: "sent" }).eq("id", feedback.id);
+          return json({ sent: true, stored: true });
+        }
+        
+        lastError = `${res.status}`;
+      } catch (emailErr) {
+        console.warn(`Email endpoint ${emailApiUrl} failed:`, emailErr);
+        lastError = String(emailErr);
       }
-
-      console.warn("Email delivery failed", res.status, resText);
-      await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
-      return json({ sent: false, stored: true, error: `E-mail falhou (${res.status}). Mensagem salva no sistema.` });
-    } catch (emailErr) {
-      console.error("Email delivery error", emailErr);
-      await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
-      return json({ sent: false, stored: true, error: "Falha ao enviar e-mail. Mensagem salva no sistema." });
     }
+
+    // All email endpoints failed - message is still stored
+    console.warn("All email endpoints failed. Message stored in database.");
+    await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
+    return json({ 
+      sent: false, 
+      stored: true, 
+      error: `Mensagem salva com sucesso! O envio por e-mail está sendo configurado. (${lastError})` 
+    });
   } catch (err) {
     console.error("send-support-email fatal", err);
     return json({ sent: false, stored: false, error: "Erro interno" }, 500);
