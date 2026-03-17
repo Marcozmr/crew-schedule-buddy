@@ -10,7 +10,6 @@ import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 const fullNav = [
-  { path: '/home', label: 'Menu Principal', icon: Home },
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/schedule', label: 'Escala', icon: Calendar },
   { path: '/download-roster', label: 'Baixar Escala', icon: Download },
@@ -58,7 +57,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <button onClick={() => navigate(-1)} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <button onClick={() => navigate('/home')} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
+          <button onClick={() => navigate('/dashboard')} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
             <Home className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 ml-1">

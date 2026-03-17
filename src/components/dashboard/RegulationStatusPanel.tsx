@@ -1,10 +1,10 @@
 /**
  * EFB Dashboard — Regulation Status Panel
- * Shows compliance gauges for duty, rest, and fatigue.
+ * Clean horizontal bar indicators (no gauges). Subtle, professional.
  */
 
 import { useMemo } from 'react';
-import { Shield, Clock, BedDouble, Activity, ChevronRight } from 'lucide-react';
+import { Shield, Clock, BedDouble, Activity, Plane, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
@@ -14,7 +14,7 @@ interface RegulationStatusPanelProps {
   schedule: ScheduleEntry[];
 }
 
-interface GaugeData {
+interface Indicator {
   label: string;
   value: number;
   max: number;
@@ -23,115 +23,90 @@ interface GaugeData {
   icon: React.ElementType;
 }
 
-function computeGauges(schedule: ScheduleEntry[]): GaugeData[] {
+function computeIndicators(schedule: ScheduleEntry[]): Indicator[] {
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+  const cm = now.getMonth();
+  const cy = now.getFullYear();
   const flights = schedule.filter(e => e.is_flight);
-  const monthFlights = flights.filter(e => {
+  const month = flights.filter(e => {
     const d = parseDateBRT(e.date);
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    return d.getMonth() === cm && d.getFullYear() === cy;
   });
+  const fh = month.reduce((s, e) => s + (e.flight_hours || 0), 0);
+  const dh = month.reduce((s, e) => s + (e.duty_hours || 0), 0);
+  const avgDuty = month.length > 0 ? dh / month.length : 0;
 
-  const totalFlightHours = monthFlights.reduce((s, e) => s + (e.flight_hours || 0), 0);
-  const totalDutyHours = monthFlights.reduce((s, e) => s + (e.duty_hours || 0), 0);
-  const avgDuty = monthFlights.length > 0 ? totalDutyHours / monthFlights.length : 0;
-
-  // Flight hours gauge
-  const fhStatus = totalFlightHours > 85 * 0.90 ? 'critical' : totalFlightHours > 85 * 0.75 ? 'warning' : 'ok';
-
-  // Duty gauge (average per day as proxy)
+  const fhRound = Math.round(fh * 10) / 10;
+  const fhStatus = fhRound > 85 * 0.90 ? 'critical' : fhRound > 85 * 0.75 ? 'warning' : 'ok';
   const dutyStatus = avgDuty > 11 ? 'critical' : avgDuty > 9 ? 'warning' : 'ok';
 
-  // Rest gauge (simplified — check if any short rest exists)
-  const restStatus: GaugeData['status'] = 'ok';
-
   return [
-    { label: 'Horas de Voo', value: Math.round(totalFlightHours * 10) / 10, max: 85, unit: 'h/mês', status: fhStatus, icon: Clock },
-    { label: 'Jornada Média', value: Math.round(avgDuty * 10) / 10, max: 14, unit: 'h/dia', status: dutyStatus, icon: Activity },
-    { label: 'Descanso', value: 12, max: 12, unit: 'h mín', status: restStatus, icon: BedDouble },
+    { label: 'Horas de Voo', value: fhRound, max: 85, unit: 'h / 85h', status: fhStatus as Indicator['status'], icon: Plane },
+    { label: 'Jornada Média', value: Math.round(avgDuty * 10) / 10, max: 14, unit: 'h / 14h', status: dutyStatus as Indicator['status'], icon: Clock },
+    { label: 'Descanso Mínimo', value: 12, max: 12, unit: 'h (mínimo)', status: 'ok', icon: BedDouble },
   ];
 }
 
-const statusColor = {
-  ok: { ring: 'stroke-success', text: 'text-success', bg: 'bg-success/10', label: 'REGULAR' },
-  warning: { ring: 'stroke-warning', text: 'text-warning', bg: 'bg-warning/10', label: 'ATENÇÃO' },
-  critical: { ring: 'stroke-destructive', text: 'text-destructive', bg: 'bg-destructive/10', label: 'IRREGULAR' },
+const statusMeta = {
+  ok: { color: 'bg-success', text: 'text-success', label: 'REGULAR', badge: 'bg-success/15 border-success/30 text-success' },
+  warning: { color: 'bg-warning', text: 'text-warning', label: 'ATENÇÃO', badge: 'bg-warning/15 border-warning/30 text-warning' },
+  critical: { color: 'bg-destructive', text: 'text-destructive', label: 'IRREGULAR', badge: 'bg-destructive/15 border-destructive/30 text-destructive' },
 };
 
-function GaugeRing({ value, max, status }: { value: number; max: number; status: GaugeData['status'] }) {
-  const pct = Math.min((value / max) * 100, 100);
-  const circumference = 2 * Math.PI * 28;
-  const offset = circumference - (pct / 100) * circumference;
-  const colors = statusColor[status];
-
-  return (
-    <svg width="72" height="72" viewBox="0 0 72 72" className="transform -rotate-90">
-      <circle cx="36" cy="36" r="28" fill="none" stroke="hsl(var(--muted))" strokeWidth="5" />
-      <motion.circle
-        cx="36" cy="36" r="28" fill="none"
-        className={colors.ring}
-        strokeWidth="5" strokeLinecap="round"
-        strokeDasharray={circumference}
-        initial={{ strokeDashoffset: circumference }}
-        animate={{ strokeDashoffset: offset }}
-        transition={{ duration: 1.2, ease: 'easeOut' }}
-      />
-    </svg>
-  );
-}
-
 export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) {
-  const gauges = useMemo(() => computeGauges(schedule), [schedule]);
-
-  const overallStatus = gauges.some(g => g.status === 'critical') ? 'critical'
-    : gauges.some(g => g.status === 'warning') ? 'warning' : 'ok';
+  const indicators = useMemo(() => computeIndicators(schedule), [schedule]);
+  const overall = indicators.some(i => i.status === 'critical') ? 'critical'
+    : indicators.some(i => i.status === 'warning') ? 'warning' : 'ok';
+  const meta = statusMeta[overall];
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass rounded-2xl overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-3 flex items-center justify-between border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${statusColor[overallStatus].bg}`}>
-            <Shield className={`w-4 h-4 ${statusColor[overallStatus].text}`} />
+      <div className="px-5 py-3 flex items-center justify-between border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-lg ${statusMeta[overall].color}/15 flex items-center justify-center`} style={{ background: `hsl(var(--${overall === 'ok' ? 'success' : overall === 'warning' ? 'warning' : 'destructive'}) / 0.15)` }}>
+            <Shield className={`w-4 h-4 ${meta.text}`} />
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Status Regulamentação</p>
-            <p className="text-xs text-efb-text-dim">RBAC 117 • Lei 13.475</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Regulamentação</p>
+            <p className="text-[10px] text-efb-text-dim">RBAC 117 • Lei 13.475</p>
           </div>
         </div>
-        <div className={`px-3 py-1 rounded-full border text-[11px] font-bold uppercase tracking-wider ${statusColor[overallStatus].bg} border-current/30 ${statusColor[overallStatus].text}`}>
-          {statusColor[overallStatus].label}
+        <div className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${meta.badge}`}>
+          {meta.label}
         </div>
       </div>
 
-      {/* Gauges */}
-      <div className="p-5">
-        <div className="grid grid-cols-3 gap-4">
-          {gauges.map(g => {
-            const colors = statusColor[g.status];
-            return (
-              <div key={g.label} className="flex flex-col items-center">
-                <div className="relative mb-2">
-                  <GaugeRing value={g.value} max={g.max} status={g.status} />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={`text-base font-bold font-mono ${colors.text}`}>{g.value}</span>
-                    <span className="text-[9px] text-muted-foreground">{g.unit}</span>
-                  </div>
-                </div>
+      {/* Horizontal bar indicators */}
+      <div className="px-5 py-4 space-y-3">
+        {indicators.map((ind, i) => {
+          const pct = Math.min((ind.value / ind.max) * 100, 100);
+          const sm = statusMeta[ind.status];
+          return (
+            <div key={ind.label}>
+              <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
-                  <g.icon className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-[10px] font-medium text-muted-foreground">{g.label}</span>
+                  <ind.icon className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{ind.label}</span>
                 </div>
+                <span className="text-xs font-bold font-mono text-foreground">{ind.value}<span className="text-muted-foreground font-normal text-[10px]"> {ind.unit}</span></span>
               </div>
-            );
-          })}
-        </div>
+              <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full ${sm.color}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 + i * 0.1 }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      <Link to="/regulation" className="flex items-center justify-between px-5 py-3 border-t border-border/50 hover:bg-secondary/30 transition-colors">
-        <span className="text-xs font-medium text-muted-foreground">Ver análise detalhada</span>
-        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+      <Link to="/regulation" className="flex items-center justify-between px-5 py-2.5 border-t border-border/40 hover:bg-secondary/30 transition-colors">
+        <span className="text-[10px] font-medium text-muted-foreground">Ver análise detalhada</span>
+        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
       </Link>
     </motion.div>
   );

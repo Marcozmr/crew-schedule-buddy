@@ -1,10 +1,10 @@
 /**
  * EFB Dashboard — Operational Panel
- * Shows current airport, flight status, and weather.
+ * Airport info, flight status, weather. Clean horizontal layout.
  */
 
-import { useState, useMemo } from 'react';
-import { MapPin, Cloud, Wind, Thermometer, Plane, ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
+import { MapPin, Cloud, Wind, Thermometer, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
@@ -15,114 +15,95 @@ interface OperationalPanelProps {
   airline?: string | null;
 }
 
-type FlightStatusType = 'NO HORÁRIO' | 'EMBARQUE' | 'ÚLTIMA CHAMADA' | 'ATRASADO' | 'DECOLADO' | 'DESCONHECIDO';
+type FlightStatus = 'NO HORÁRIO' | 'EMBARQUE' | 'ÚLTIMA CHAMADA' | 'ATRASADO' | 'DECOLADO';
 
-const statusStyles: Record<FlightStatusType, { bg: string; text: string; dot: string }> = {
-  'NO HORÁRIO': { bg: 'bg-success/10 border-success/30', text: 'text-success', dot: 'bg-success' },
-  'EMBARQUE': { bg: 'bg-primary/10 border-primary/30', text: 'text-primary', dot: 'bg-primary status-pulse' },
-  'ÚLTIMA CHAMADA': { bg: 'bg-warning/10 border-warning/30', text: 'text-warning', dot: 'bg-warning status-pulse' },
-  'ATRASADO': { bg: 'bg-destructive/10 border-destructive/30', text: 'text-destructive', dot: 'bg-destructive' },
-  'DECOLADO': { bg: 'bg-muted border-muted-foreground/20', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
-  'DESCONHECIDO': { bg: 'bg-secondary border-border', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
+const statusStyles: Record<FlightStatus, { bg: string; text: string; dot: string }> = {
+  'NO HORÁRIO': { bg: 'bg-success/15 border-success/30', text: 'text-success', dot: 'bg-success' },
+  'EMBARQUE': { bg: 'bg-primary/15 border-primary/30', text: 'text-primary', dot: 'bg-primary status-pulse' },
+  'ÚLTIMA CHAMADA': { bg: 'bg-warning/15 border-warning/30', text: 'text-warning', dot: 'bg-warning status-pulse' },
+  'ATRASADO': { bg: 'bg-destructive/15 border-destructive/30', text: 'text-destructive', dot: 'bg-destructive' },
+  'DECOLADO': { bg: 'bg-muted border-border', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 
-function inferCurrentAirport(schedule: ScheduleEntry[]): string {
+function inferAirport(schedule: ScheduleEntry[]): string {
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const flights = schedule.filter(e => e.is_flight);
-  const sorted = [...flights].sort((a, b) => parseDateBRT(a.date).getTime() - parseDateBRT(b.date).getTime());
+  const flights = [...schedule.filter(e => e.is_flight)].sort((a, b) => parseDateBRT(a.date).getTime() - parseDateBRT(b.date).getTime());
   
-  // Find today's or most recent flight
-  const todayFlight = sorted.find(e => parseDateBRT(e.date).getTime() === todayMs);
-  if (todayFlight) return todayFlight.departure_airport || todayFlight.departure || 'GRU';
+  const today = flights.find(e => parseDateBRT(e.date).getTime() === todayMs);
+  if (today) return (today.departure_airport || today.departure || 'GRU').substring(0, 3).toUpperCase();
   
-  // Find latest past flight
-  const past = sorted.filter(e => parseDateBRT(e.date).getTime() < todayMs);
-  if (past.length > 0) {
-    const last = past[past.length - 1];
-    return last.arrival_airport || last.arrival || 'GRU';
-  }
+  const past = flights.filter(e => parseDateBRT(e.date).getTime() < todayMs);
+  if (past.length > 0) return (past[past.length - 1].arrival_airport || past[past.length - 1].arrival || 'GRU').substring(0, 3).toUpperCase();
   
-  // Next flight departure
-  const future = sorted.find(e => parseDateBRT(e.date).getTime() > todayMs);
-  if (future) return future.departure_airport || future.departure || 'GRU';
+  const future = flights.find(e => parseDateBRT(e.date).getTime() > todayMs);
+  if (future) return (future.departure_airport || future.departure || 'GRU').substring(0, 3).toUpperCase();
   
   return 'GRU';
 }
 
-function inferFlightStatus(): FlightStatusType {
-  return 'NO HORÁRIO';
-}
-
 export function OperationalPanel({ schedule, airline }: OperationalPanelProps) {
-  const airport = useMemo(() => inferCurrentAirport(schedule), [schedule]);
-  const status = inferFlightStatus();
-  const style = statusStyles[status];
+  const airport = useMemo(() => inferAirport(schedule), [schedule]);
+  const status: FlightStatus = 'NO HORÁRIO';
+  const s = statusStyles[status];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass rounded-2xl overflow-hidden">
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="glass rounded-2xl overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-3 flex items-center justify-between border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-success/15 flex items-center justify-center">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-success/15 flex items-center justify-center">
             <MapPin className="w-4 h-4 text-success" />
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Painel Operacional</p>
-            <p className="text-xs text-efb-text-dim">Baseado na sua escala</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Painel Operacional</p>
+            <p className="text-[10px] text-efb-text-dim">Baseado na sua escala</p>
           </div>
         </div>
-        <div className={`px-3 py-1 rounded-full border text-[11px] font-bold uppercase tracking-wider ${style.bg} ${style.text}`}>
-          <span className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-            {status}
-          </span>
+        <div className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${s.bg} ${s.text} flex items-center gap-1.5`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+          {status}
         </div>
       </div>
 
       <div className="p-5">
-        {/* Airport info */}
-        <div className="flex items-start gap-4 mb-5">
+        {/* Airport + Gate row */}
+        <div className="flex items-end justify-between mb-4">
           <div>
-            <p className="text-4xl font-black font-mono text-foreground tracking-tight leading-none">{airport}</p>
-            <p className="text-xs text-muted-foreground mt-1">{airline || 'Aeroporto atual'}</p>
-          </div>
-          <div className="flex-1" />
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Portão</p>
-            <p className="text-lg font-bold font-mono text-foreground">—</p>
+            <p className="text-4xl font-black font-mono text-foreground tracking-tighter leading-none">{airport}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">{airline || 'Nacional'} • Portão —</p>
           </div>
         </div>
 
         {/* Weather strip */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-xl bg-secondary/50 p-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Thermometer className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Temp</span>
+        <div className="flex gap-3">
+          <div className="flex-1 rounded-xl bg-secondary/40 px-3 py-2.5 flex items-center gap-2">
+            <Thermometer className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Temp</p>
+              <p className="text-sm font-bold font-mono text-foreground">—°C</p>
             </div>
-            <p className="text-base font-bold font-mono text-foreground">—°C</p>
           </div>
-          <div className="rounded-xl bg-secondary/50 p-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Wind className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Vento</span>
+          <div className="flex-1 rounded-xl bg-secondary/40 px-3 py-2.5 flex items-center gap-2">
+            <Wind className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Vento</p>
+              <p className="text-sm font-bold font-mono text-foreground">— kt</p>
             </div>
-            <p className="text-base font-bold font-mono text-foreground">— kt</p>
           </div>
-          <div className="rounded-xl bg-secondary/50 p-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Cloud className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Condição</span>
+          <div className="flex-1 rounded-xl bg-secondary/40 px-3 py-2.5 flex items-center gap-2">
+            <Cloud className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Cond.</p>
+              <p className="text-sm font-bold text-foreground">—</p>
             </div>
-            <p className="text-sm font-bold text-foreground">—</p>
           </div>
         </div>
       </div>
 
-      <Link to="/weather" className="flex items-center justify-between px-5 py-3 border-t border-border/50 hover:bg-secondary/30 transition-colors">
-        <span className="text-xs font-medium text-muted-foreground">Ver meteorologia completa</span>
-        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+      <Link to="/weather" className="flex items-center justify-between px-5 py-2.5 border-t border-border/40 hover:bg-secondary/30 transition-colors">
+        <span className="text-[10px] font-medium text-muted-foreground">Ver meteorologia completa</span>
+        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
       </Link>
     </motion.div>
   );
