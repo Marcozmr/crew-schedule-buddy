@@ -189,7 +189,7 @@ export const rbac117FlightHours365Days: RegulationRule = {
   },
 };
 
-
+export const rbac117WeeklyRest: RegulationRule = {
   ruleId: 'RBAC117_WEEKLY_REST',
   ruleSource: 'RBAC_117',
   description: 'Repouso semanal mínimo de 36h consecutivas em cada 7 dias',
