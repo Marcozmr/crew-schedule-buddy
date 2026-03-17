@@ -78,7 +78,7 @@ const AppRoutes = () => (
       <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
       <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
       <Route path="/perdiem" element={<ProtectedRoute><PerDiemPage /></ProtectedRoute>} />
-      <Route path="/flight-swap" element={<ProtectedRoute><FlightSwapPage /></ProtectedRoute>} />
+      
       <Route path="/rest-calc" element={<ProtectedRoute><RestCalcPage /></ProtectedRoute>} />
       <Route path="/duty-calc" element={<ProtectedRoute><DutyCalcPage /></ProtectedRoute>} />
       <Route path="/weather" element={<ProtectedRoute><WeatherPage /></ProtectedRoute>} />

@@ -70,17 +70,6 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        efb: {
-          surface: "hsl(var(--efb-surface))",
-          "surface-elevated": "hsl(var(--efb-surface-elevated))",
-          glass: "hsl(var(--efb-glass))",
-          "glass-border": "hsl(var(--efb-glass-border))",
-          "glow-blue": "hsl(var(--efb-glow-blue))",
-          "glow-green": "hsl(var(--efb-glow-green))",
-          "glow-amber": "hsl(var(--efb-glow-amber))",
-          "glow-red": "hsl(var(--efb-glow-red))",
-          "text-dim": "hsl(var(--efb-text-dim))",
-        },
       },
       borderRadius: {
         lg: "var(--radius)",
