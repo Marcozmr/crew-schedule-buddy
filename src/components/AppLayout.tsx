@@ -53,12 +53,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const pageTitle = navItems.find(n => location.pathname === n.path)?.label || '';
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-background">
 
       {/* ═══ Desktop Sidebar ═══ */}
-      <aside className="hidden lg:flex flex-col w-[220px] shrink-0 sticky top-0 h-screen border-r border-border/50 bg-[hsl(222,47%,7%)]">
+      <aside className="hidden lg:flex flex-col w-[240px] shrink-0 sticky top-0 h-screen border-r border-border bg-card">
         {/* Brand */}
-        <div className="px-5 h-16 flex items-center gap-3 border-b border-border/30">
+        <div className="px-5 h-16 flex items-center gap-3 border-b border-border">
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
             <Plane className="w-4 h-4 text-primary-foreground" />
           </div>
@@ -71,12 +71,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
             const active = location.pathname === item.path;
             return (
               <Link key={item.path} to={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${
                   active
                     ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 }`}>
-                <item.icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : ''}`} />
+                <item.icon className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-primary' : ''}`} />
                 <span>{item.label}</span>
               </Link>
             );
@@ -84,12 +84,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </nav>
 
         {/* Profile + Logout */}
-        <div className="p-3 border-t border-border/30 space-y-2">
+        <div className="p-3 border-t border-border space-y-2">
           {profile && (
-            <Link to="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-secondary/40 transition-colors">
+            <Link to="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
               <Avatar className="w-7 h-7">
                 <AvatarImage src={profile.avatar_url || undefined} />
-                <AvatarFallback className="text-[10px] font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
+                <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
               </Avatar>
               <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground truncate">{profile.name}</p>
@@ -98,7 +98,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </Link>
           )}
           <button onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors w-full">
+            className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full">
             <LogOut className="w-4 h-4" /> Sair
           </button>
         </div>
@@ -108,7 +108,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* Mobile Header */}
-        <header className="sticky top-0 z-40 h-14 px-4 flex items-center justify-between bg-background/80 backdrop-blur-xl border-b border-border/30 lg:hidden">
+        <header className="sticky top-0 z-40 h-14 px-4 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate(-1)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
               <ChevronLeft className="w-5 h-5" />
@@ -137,7 +137,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Desktop top bar */}
-        <header className="hidden lg:flex h-14 px-6 items-center justify-between border-b border-border/30 bg-background/50 backdrop-blur-xl">
+        <header className="hidden lg:flex h-14 px-6 items-center justify-between border-b border-border bg-card/50 backdrop-blur-xl">
           <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
           <div className="flex items-center gap-3">
             <Link to="/support" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -154,16 +154,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         {/* Mobile Drawer */}
         <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <SheetContent side="right" className="w-72 bg-[hsl(222,47%,7%)] border-border/30 p-0">
-            <SheetHeader className="p-4 border-b border-border/30">
+          <SheetContent side="right" className="w-72 bg-card border-border p-0">
+            <SheetHeader className="p-4 border-b border-border">
               <SheetTitle className="text-foreground text-left text-sm">Menu</SheetTitle>
             </SheetHeader>
             {profile && (
               <Link to="/profile" onClick={() => setDrawerOpen(false)}
-                className="flex items-center gap-3 mx-3 mt-3 mb-2 p-3 rounded-lg bg-secondary/30">
+                className="flex items-center gap-3 mx-3 mt-3 mb-2 p-3 rounded-xl bg-secondary">
                 <Avatar className="w-8 h-8">
                   <AvatarImage src={profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
+                  <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{profile.name}</p>
@@ -176,8 +176,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 const active = location.pathname === item.path;
                 return (
                   <Link key={item.path} to={item.path} onClick={() => setDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                      active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                      active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     }`}>
                     <item.icon className="w-4 h-4" />
                     {item.label}
@@ -185,13 +185,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 );
               })}
               <Link to="/support" onClick={() => setDrawerOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground">
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary hover:text-foreground">
                 <HelpCircle className="w-4 h-4" /> Suporte
               </Link>
             </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border/30">
+            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border">
               <button onClick={handleLogout}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 w-full">
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary w-full">
                 <LogOut className="w-4 h-4" /> Sair
               </button>
             </div>
