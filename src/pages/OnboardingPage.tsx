@@ -14,13 +14,13 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (profile?.onboarding_completed) {
-      navigate('/home', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   }, [profile?.onboarding_completed]);
 
   const handleClose = () => {
     setOpen(false);
-    navigate('/home', { replace: true });
+    navigate('/dashboard', { replace: true });
   };
 
   return (

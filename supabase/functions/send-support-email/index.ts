@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 const SUPPORT_EMAIL = "support@escalax.app.br";
-const EMAIL_API_URL = Deno.env.get("LOVABLE_EMAIL_API_URL") || "https://email.lovable.dev/v1/send";
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -74,18 +73,41 @@ serve(async (req) => {
       return json({ sent: false, stored: false, error: "Não foi possível registrar sua solicitação." }, 500);
     }
 
-    // ── Attempt email (best-effort) ──────────────────────
+    // ── Attempt email via Lovable Email API ──────────────
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    
+    // Try multiple possible email API URLs
+    const emailApiUrl = Deno.env.get("LOVABLE_EMAIL_API_URL") 
+      || "https://email.lovable.dev/v1/send";
+
     if (!apiKey) {
-      console.warn("Email API key not configured — message stored only");
-      return json({ sent: false, stored: true });
+      console.warn("LOVABLE_API_KEY not configured — message stored only");
+      await serviceClient.from("feedback_messages").update({ status: "stored_no_email_key" }).eq("id", feedback.id);
+      return json({ sent: false, stored: true, error: "E-mail não configurado. Mensagem salva no sistema." });
     }
 
     const categoryLabel = categoryToLabel(safeType);
     const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
+    const emailBody = [
+      `Nova mensagem de feedback do EscalaX`,
+      ``,
+      `Categoria: ${categoryLabel}`,
+      `Nome: ${safeName}`,
+      `E-mail: ${safeEmail || "Não informado"}`,
+      `Assunto: ${safeSubject || "Sem assunto"}`,
+      `Rota: ${route || "/"}`,
+      `Data/Hora: ${now}`,
+      `ID Feedback: ${feedback.id}`,
+      ``,
+      `Mensagem:`,
+      message,
+    ].join("\n");
+
     try {
-      const res = await fetch(EMAIL_API_URL, {
+      console.log(`Attempting email send to ${SUPPORT_EMAIL} via ${emailApiUrl}`);
+      
+      const res = await fetch(emailApiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -94,37 +116,28 @@ serve(async (req) => {
         body: JSON.stringify({
           to: [SUPPORT_EMAIL],
           subject: `[EscalaX] ${categoryLabel} - ${safeName}`,
-          text: [
-            `Nova mensagem de feedback do EscalaX`,
-            ``,
-            `Categoria: ${categoryLabel}`,
-            `Nome: ${safeName}`,
-            `E-mail: ${safeEmail || "Não informado"}`,
-            `Assunto: ${safeSubject || "Sem assunto"}`,
-            `Rota: ${route || "/"}`,
-            `Data/Hora: ${now}`,
-            ``,
-            `Mensagem:`,
-            message,
-          ].join("\n"),
+          text: emailBody,
+          html: `<pre style="font-family: sans-serif; white-space: pre-wrap;">${emailBody.replace(/</g, '&lt;')}</pre>`,
           replyTo: safeEmail || undefined,
         }),
       });
+
+      const resText = await res.text();
+      console.log(`Email API response: ${res.status} - ${resText}`);
 
       if (res.ok) {
         await serviceClient.from("feedback_messages").update({ status: "sent" }).eq("id", feedback.id);
         return json({ sent: true, stored: true });
       }
 
-      console.warn("Email delivery failed", res.status, await res.text());
+      console.warn("Email delivery failed", res.status, resText);
       await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
+      return json({ sent: false, stored: true, error: `E-mail falhou (${res.status}). Mensagem salva no sistema.` });
     } catch (emailErr) {
-      console.warn("Email delivery error", emailErr);
+      console.error("Email delivery error", emailErr);
       await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
+      return json({ sent: false, stored: true, error: "Falha ao enviar e-mail. Mensagem salva no sistema." });
     }
-
-    // Message stored even though email failed — still a success for the user
-    return json({ sent: false, stored: true });
   } catch (err) {
     console.error("send-support-email fatal", err);
     return json({ sent: false, stored: false, error: "Erro interno" }, 500);

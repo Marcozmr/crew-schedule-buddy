@@ -42,10 +42,16 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
     return { success: false, stored: false, error: 'Serviço indisponível. Tente novamente.' };
   }
 
-  // Edge function returned a response — check if message was stored
-  if (data?.stored) {
-    // Message persisted in DB.  Email may or may not have been sent.
+  // Edge function returned a response — check results
+  if (data?.stored && data?.sent) {
+    // Full success: stored + email sent
     return { success: true, stored: true };
+  }
+
+  if (data?.stored && !data?.sent) {
+    // Stored but email failed — still treat as success but warn
+    console.warn('[support-service] Message stored but email delivery failed:', data?.error);
+    return { success: true, stored: true, error: data?.error };
   }
 
   // Neither stored nor sent
