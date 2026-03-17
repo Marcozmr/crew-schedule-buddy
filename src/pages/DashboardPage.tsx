@@ -1,17 +1,16 @@
 /**
  * EscalaX EFB Dashboard
  * 
- * Professional aviation Electronic Flight Bag-inspired dashboard.
- * Hierarchy: Status → Next Duty → Operational → Regulation → Modules
+ * Professional aviation dashboard — NOT a menu grid.
+ * Hierarchy: Header → Stats → Next Duty (HERO) → Operational → Regulation → Modules
  */
 
-import { useMemo, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { supabase } from '@/integrations/supabase/client';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
-import { ImportHistoryCard } from '@/components/ImportHistoryCard';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { MonthlyStatsBar } from '@/components/dashboard/MonthlyStatsBar';
 import { NextDutyPanel } from '@/components/dashboard/NextDutyPanel';
@@ -44,50 +43,45 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto">
-        {/* Header with user info */}
+      <div className="max-w-lg mx-auto pb-8">
+        {/* 1. User header */}
         <DashboardHeader unreadCount={unreadCount} />
-
-        {/* Import button when schedule exists */}
-        {hasSchedule && (
-          <div className="flex items-center gap-2 mb-4">
-            <PdfImportDialog
-              onImportComplete={reload}
-              trigger={
-                <Button variant="outline" size="sm" className="text-xs">
-                  <Upload className="w-3.5 h-3.5 mr-1.5" />
-                  Importar Escala
-                </Button>
-              }
-            />
-          </div>
-        )}
 
         {/* Empty state */}
         {!loading && schedule.length === 0 && (
           <DashboardEmptyState onImportComplete={reload} />
         )}
 
-        {/* Main dashboard sections */}
+        {/* Dashboard with data */}
         {hasSchedule && (
           <div className="space-y-4">
-            {/* 1. Monthly stats strip */}
+            {/* Quick import */}
+            <div className="flex justify-end">
+              <PdfImportDialog
+                onImportComplete={reload}
+                trigger={
+                  <Button variant="ghost" size="sm" className="text-[10px] text-muted-foreground hover:text-foreground h-7 px-2">
+                    <Upload className="w-3 h-3 mr-1" />
+                    Importar
+                  </Button>
+                }
+              />
+            </div>
+
+            {/* 2. Monthly stats — compact strip */}
             <MonthlyStatsBar schedule={schedule} />
 
-            {/* 2. Next duty — primary info */}
+            {/* 3. HERO: Next duty — largest, most prominent element */}
             <NextDutyPanel schedule={schedule} />
 
-            {/* 3. Operational panel */}
+            {/* 4. Operational panel */}
             <OperationalPanel schedule={schedule} airline={profile?.airline} />
 
-            {/* 4. Regulation status */}
+            {/* 5. Regulation status */}
             <RegulationStatusPanel schedule={schedule} />
 
-            {/* 5. Module navigation */}
+            {/* 6. Module navigation — BELOW all operational data */}
             <ModuleNavigation />
-
-            {/* 6. Import history */}
-            <ImportHistoryCard onRosterChanged={reload} />
           </div>
         )}
       </div>
