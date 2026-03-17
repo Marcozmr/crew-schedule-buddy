@@ -97,6 +97,27 @@ export interface ScheduleWindow {
   crew: CrewContext;
 }
 
+// ─── Time segmentation ───
+
+export interface TimeBreakdown {
+  totalMinutes: number;
+  diurnoMinutes: number;
+  noturnoMinutes: number;
+  madrugadaMinutes: number;
+  woclMinutes: number;
+}
+
+export interface GroundGapDetail {
+  gapIndex: number;
+  startUtc: string;
+  endUtc: string;
+  totalMinutes: number;
+  isDayGap: boolean;
+  isNightGap: boolean;
+  diurnoMinutes: number;
+  noturnoMinutes: number;
+}
+
 // ─── Calculated output types ───
 
 export interface DutyCalculation {
@@ -110,6 +131,8 @@ export interface DutyCalculation {
   sectorCount: number;
   /** Ground time between consecutive legs (ms per gap) */
   groundTimesBetweenLegs: number[];
+  /** Classified ground gaps with day/night breakdown */
+  groundGapDetails: GroundGapDetail[];
   /** Total ground time between legs (ms) */
   totalGroundTimeMs: number;
   /** Report time hour in local tz (0-23) */
@@ -125,6 +148,10 @@ export interface DutyCalculation {
   endTimeUtc: string;
   reportTimeLocal: string;
   endTimeLocal: string;
+  /** Time breakdown of duty period */
+  dutyTimeBreakdown: TimeBreakdown;
+  /** Whether this duty touches madrugada (00:00-06:00 local) */
+  isMadrugadaDuty: boolean;
 }
 
 export interface RestCalculation {
@@ -138,6 +165,8 @@ export interface RestCalculation {
   minRequiredRestHours: number;
   /** Whether rest augmentation applies (out-of-base) */
   augmentedRest: boolean;
+  /** Time breakdown of rest-before period */
+  restBeforeBreakdown: TimeBreakdown | null;
 }
 
 export interface WoclExposure {
@@ -155,6 +184,8 @@ export interface FatigueCalculation {
   woclExposure: WoclExposure;
   consecutiveEarlyStarts: number;
   consecutiveNightDuties: number;
+  /** Madrugada count in last 168h */
+  madrugadasIn168h: number;
 }
 
 export interface FatigueFactor {
@@ -177,6 +208,10 @@ export interface RuleResult {
   alertCode?: AlertCode;
   /** Raw values that triggered the rule, for audit trail */
   context?: Record<string, unknown>;
+  /** The calculated value that was checked */
+  calculatedValue?: number;
+  /** The limit/threshold used */
+  limitUsed?: number;
 }
 
 // ─── Compliance result ───

@@ -3,15 +3,13 @@
  * 
  * Composite fatigue risk score (0-100) based on:
  * - Duty duration
- * - WOCL exposure (02:00-06:00 local)
+ * - WOCL exposure (02:00-06:00 local) — now from time segmentation
  * - Number of sectors
  * - Early report penalty
  * - Consecutive patterns
- * 
- * Designed to align with FRMS (Fatigue Risk Management System) principles.
+ * - Madrugada count in 168h window (real count, not proxy)
  */
 
-import { TZDate } from '@date-fns/tz';
 import type {
   DutyCalculation,
   FatigueCalculation,
@@ -19,55 +17,29 @@ import type {
   WoclExposure,
   ScheduleWindow,
 } from './types';
-import { calculateDuty } from './dutyCalculator';
 
-// ─── WOCL: Window of Circadian Low (02:00-06:00 local) ───
-
-const WOCL_START_HOUR = 2;
-const WOCL_END_HOUR = 6;
+// ─── WOCL from duty time breakdown ───
 
 /**
- * Calculate WOCL exposure for a duty period.
- * Checks overlap between duty [reportUtc, endUtc] and each 02:00-06:00 local window.
+ * Calculate WOCL exposure from pre-computed duty time breakdown.
+ * The duty calculator already segments time — we just extract WOCL data.
  */
 export function calculateWoclExposure(
   duty: DutyCalculation,
-  timezone: string
+  _timezone: string
 ): WoclExposure {
-  const reportMs = new Date(duty.reportTimeUtc).getTime();
-  const endMs = new Date(duty.endTimeUtc).getTime();
+  // WOCL minutes come from the duty time breakdown (already segmented)
+  const totalMinutes = duty.dutyTimeBreakdown.woclMinutes;
 
-  // Generate WOCL windows for each day the duty spans
-  const reportLocal = new TZDate(reportMs, timezone);
-  const endLocal = new TZDate(endMs, timezone);
-
+  // Build windows from segments for audit trail
   const windows: WoclExposure['windows'] = [];
-
-  // Check up to 3 days (duty should never span more)
-  for (let dayOffset = -1; dayOffset <= 2; dayOffset++) {
-    const woclStart = new TZDate(
-      reportLocal.getFullYear(), reportLocal.getMonth(), reportLocal.getDate() + dayOffset,
-      WOCL_START_HOUR, 0, 0, timezone
-    ).getTime();
-    const woclEnd = new TZDate(
-      reportLocal.getFullYear(), reportLocal.getMonth(), reportLocal.getDate() + dayOffset,
-      WOCL_END_HOUR, 0, 0, timezone
-    ).getTime();
-
-    // Overlap: max(start1, start2) < min(end1, end2)
-    const overlapStart = Math.max(reportMs, woclStart);
-    const overlapEnd = Math.min(endMs, woclEnd);
-
-    if (overlapStart < overlapEnd) {
-      windows.push({
-        startUtc: new Date(overlapStart).toISOString(),
-        endUtc: new Date(overlapEnd).toISOString(),
-        durationMinutes: Math.round((overlapEnd - overlapStart) / 60000),
-      });
-    }
+  if (totalMinutes > 0) {
+    windows.push({
+      startUtc: duty.reportTimeUtc,
+      endUtc: duty.endTimeUtc,
+      durationMinutes: totalMinutes,
+    });
   }
-
-  const totalMinutes = windows.reduce((s, w) => s + w.durationMinutes, 0);
 
   return { totalMinutes, windows };
 }
@@ -91,17 +63,16 @@ export function countConsecutiveEarlyStarts(
 }
 
 /**
- * Count consecutive night duties (any part of duty in WOCL) ending at current duty.
+ * Count consecutive madrugada duties (touching 00:00-06:00 local) ending at current duty.
+ * Uses isMadrugadaDuty from duty calculator (based on real time segmentation).
  */
-export function countConsecutiveNightDuties(
+export function countConsecutiveMadrugadaDuties(
   allDuties: DutyCalculation[],
-  currentIndex: number,
-  timezone: string
+  currentIndex: number
 ): number {
   let count = 0;
   for (let i = currentIndex; i >= 0; i--) {
-    const wocl = calculateWoclExposure(allDuties[i], timezone);
-    if (wocl.totalMinutes > 0) {
+    if (allDuties[i].isMadrugadaDuty) {
       count++;
     } else {
       break;
@@ -110,14 +81,35 @@ export function countConsecutiveNightDuties(
   return count;
 }
 
+/**
+ * Count madrugada duties in the last 168h (7 days) from the current duty.
+ * This is the REAL count, not a proxy based on consecutive nights.
+ */
+export function countMadrugadasIn168h(
+  allDuties: DutyCalculation[],
+  currentIndex: number
+): number {
+  const currentReportMs = new Date(allDuties[currentIndex].reportTimeUtc).getTime();
+  const windowStartMs = currentReportMs - 168 * 3600000; // 168h = 7 days
+
+  let count = 0;
+  for (let i = currentIndex; i >= 0; i--) {
+    const dutyReportMs = new Date(allDuties[i].reportTimeUtc).getTime();
+    if (dutyReportMs < windowStartMs) break;
+    if (allDuties[i].isMadrugadaDuty) count++;
+  }
+  return count;
+}
+
 // ─── Fatigue scoring weights ───
 
 const WEIGHTS = {
-  dutyHours: 0.30,
-  woclExposure: 0.25,
-  sectors: 0.15,
+  dutyHours: 0.25,
+  woclExposure: 0.20,
+  sectors: 0.10,
   earlyReport: 0.15,
   consecutiveNight: 0.15,
+  madrugadas168h: 0.15,
 };
 
 /**
@@ -131,7 +123,8 @@ export function calculateFatigue(
 ): FatigueCalculation {
   const woclExposure = calculateWoclExposure(duty, timezone);
   const consecutiveEarlyStarts = countConsecutiveEarlyStarts(allDuties, dutyIndex);
-  const consecutiveNightDuties = countConsecutiveNightDuties(allDuties, dutyIndex, timezone);
+  const consecutiveNightDuties = countConsecutiveMadrugadaDuties(allDuties, dutyIndex);
+  const madrugadasIn168h = countMadrugadasIn168h(allDuties, dutyIndex);
 
   const factors: FatigueFactor[] = [];
 
@@ -177,14 +170,24 @@ export function calculateFatigue(
     description: `Apresentação às ${duty.reportTimeLocal.slice(11, 16)} local`,
   });
 
-  // 5. Consecutive night duties
+  // 5. Consecutive madrugada duties
   const nightScore = Math.min(100, (consecutiveNightDuties / 3) * 100);
   factors.push({
-    name: 'consecutive_night',
+    name: 'consecutive_madrugada',
     weight: WEIGHTS.consecutiveNight,
     rawValue: consecutiveNightDuties,
     contribution: round2(nightScore * WEIGHTS.consecutiveNight),
-    description: `${consecutiveNightDuties} noites consecutivas`,
+    description: `${consecutiveNightDuties} madrugada(s) consecutiva(s)`,
+  });
+
+  // 6. Madrugadas in 168h window
+  const mad168Score = Math.min(100, (madrugadasIn168h / 4) * 100);
+  factors.push({
+    name: 'madrugadas_168h',
+    weight: WEIGHTS.madrugadas168h,
+    rawValue: madrugadasIn168h,
+    contribution: round2(mad168Score * WEIGHTS.madrugadas168h),
+    description: `${madrugadasIn168h} madrugada(s) em 168h (limite: 4)`,
   });
 
   const riskScore = Math.round(factors.reduce((s, f) => s + f.contribution, 0));
@@ -195,6 +198,7 @@ export function calculateFatigue(
     woclExposure,
     consecutiveEarlyStarts,
     consecutiveNightDuties,
+    madrugadasIn168h,
   };
 }
 

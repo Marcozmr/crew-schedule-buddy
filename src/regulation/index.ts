@@ -1,6 +1,5 @@
 /**
  * EscalaX Regulation Engine
- * 
  * Public API barrel export.
  */
 
@@ -40,8 +39,26 @@ export type {
   CrewRole,
   AircraftCategory,
   ActivityType,
+  TimeBreakdown,
+  GroundGapDetail,
 } from './types';
 
 export type { StructuredAlert } from './alertsEngine';
-
 export type { StructuredAlert as Alert } from './alertsEngine';
+
+// Time segmentation utilities
+export {
+  splitIntervalByTimeWindows,
+  calculateNightMinutes,
+  calculateWOCLMinutes,
+  calculateMadrugadaMinutes,
+  classifyGroundTimes,
+  classifyDutySegments,
+  isMadrugadaDuty,
+} from '@/lib/time-segments';
+
+export type {
+  TimeSegment,
+  IntervalBreakdown,
+  GroundTimeClassification,
+} from '@/lib/time-segments';

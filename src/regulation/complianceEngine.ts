@@ -1,13 +1,9 @@
 /**
  * EscalaX Regulation Engine — Compliance Engine
  * 
- * Orchestrates all calculators and rules to produce a full compliance result.
- * Designed like Jeppesen Crew Manager architecture:
- * - Deterministic calculations
- * - Auditable rule results
- * - Extensible rule registry
+ * Orchestrates calculators and rules. Precedence: ACT LATAM > Lei 13.475 > RBAC 117.
  * 
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 import type {
@@ -17,8 +13,6 @@ import type {
   RegulationRule,
   RuleResult,
   DutyCalculation,
-  RestCalculation,
-  FatigueCalculation,
 } from './types';
 import { calculateDuty } from './dutyCalculator';
 import { calculateRest } from './restCalculator';
@@ -28,11 +22,15 @@ import { aeronautaLawRules } from './aeronautaLawRules';
 import { latamAgreementRules } from './latamAgreementRules';
 import { buildAlerts, determineComplianceStatus } from './alertsEngine';
 
-export const ENGINE_VERSION = '1.0.0';
+export const ENGINE_VERSION = '2.0.0';
 
 /**
- * Default rule registry: LATAM ACT > RBAC 117 > Lei 13.475
- * LATAM ACT rules take priority (evaluated first, more specific).
+ * Default rule registry with precedence order:
+ * 1. ACT LATAM (most specific, airline-level)
+ * 2. Lei 13.475 (national law)
+ * 3. RBAC 117 (ANAC regulation)
+ * 
+ * When rules conflict, the MOST RESTRICTIVE result applies.
  */
 function getDefaultRules(airline: string): RegulationRule[] {
   const rules: RegulationRule[] = [
@@ -40,7 +38,6 @@ function getDefaultRules(airline: string): RegulationRule[] {
     ...rbac117Rules,          // ANAC regulation (RBAC 117)
   ];
 
-  // Add airline-specific rules
   if (airline.toUpperCase().includes('LATAM') || airline.toUpperCase().includes('TAM') || airline.toUpperCase() === 'LA' || airline.toUpperCase() === 'JJ') {
     rules.push(...latamAgreementRules);
   }
@@ -48,9 +45,6 @@ function getDefaultRules(airline: string): RegulationRule[] {
   return rules;
 }
 
-/**
- * Calculate accumulated flight hours across sliding windows.
- */
 function calculateAccumulatedHours(
   allDuties: DutyCalculation[],
   referenceDate: string
@@ -73,9 +67,6 @@ function calculateAccumulatedHours(
   };
 }
 
-/**
- * Evaluate a single duty period against all applicable rules.
- */
 export function evaluateDutyPeriod(
   dutyIndex: number,
   allDuties: DutyCalculation[],
@@ -88,15 +79,13 @@ export function evaluateDutyPeriod(
   const fatigue = calculateFatigue(duty, allDuties, dutyIndex, tz);
   const accumulatedHours = calculateAccumulatedHours(allDuties, window.referenceDate);
 
-  // Determine applicable rules
   const rules = customRules || getDefaultRules(window.crew.airline);
 
-  // Evaluate every rule
   const ruleResults: RuleResult[] = rules.map(rule =>
     rule.evaluate(duty, rest, fatigue, window, accumulatedHours)
   );
 
-  // Add fatigue score rule
+  // Add fatigue composite score rule
   const fatigueRule: RuleResult = {
     ruleId: 'FATIGUE_COMPOSITE_SCORE',
     ruleSource: 'INTERNAL',
@@ -104,6 +93,8 @@ export function evaluateDutyPeriod(
     severity: fatigue.riskScore >= 80 ? 'critical' : fatigue.riskScore >= 60 ? 'warning' : 'info',
     message: `Score de fadiga: ${fatigue.riskScore}/100`,
     alertCode: fatigue.riskScore >= 60 ? 'FATIGUE_RISK' : undefined,
+    calculatedValue: fatigue.riskScore,
+    limitUsed: 70,
     context: { score: fatigue.riskScore, factors: fatigue.factors },
   };
   ruleResults.push(fatigueRule);
@@ -112,42 +103,22 @@ export function evaluateDutyPeriod(
   const status = determineComplianceStatus(ruleResults, fatigue.riskScore);
 
   return {
-    status,
-    rules: ruleResults,
-    alerts,
-    duty,
-    rest,
-    fatigue,
+    status, rules: ruleResults, alerts, duty, rest, fatigue,
     accumulatedHours,
     computedAt: new Date().toISOString(),
     engineVersion: ENGINE_VERSION,
   };
 }
 
-/**
- * Evaluate all duty periods in a schedule window.
- * Returns compliance results per duty period.
- */
 export function evaluateSchedule(
   window: ScheduleWindow,
   customRules?: RegulationRule[]
 ): ComplianceResult[] {
   const tz = window.crew.timezone || 'America/Sao_Paulo';
-
-  // Calculate all duties first
-  const allDuties: DutyCalculation[] = window.dutyPeriods.map(dp =>
-    calculateDuty(dp, tz)
-  );
-
-  // Evaluate each duty period
-  return allDuties.map((_, index) =>
-    evaluateDutyPeriod(index, allDuties, window, customRules)
-  );
+  const allDuties: DutyCalculation[] = window.dutyPeriods.map(dp => calculateDuty(dp, tz));
+  return allDuties.map((_, index) => evaluateDutyPeriod(index, allDuties, window, customRules));
 }
 
-/**
- * Quick compliance check for a single duty period (most common use case).
- */
 export function checkSingleDuty(
   dutyPeriod: DutyPeriodInput,
   previousDuties: DutyPeriodInput[],
@@ -171,7 +142,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-// Re-export types and calculators for external use
+// Re-export
 export { calculateDuty } from './dutyCalculator';
 export { calculateRest } from './restCalculator';
 export { calculateFatigue, calculateWoclExposure } from './fatigueCalculator';

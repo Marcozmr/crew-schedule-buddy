@@ -2,12 +2,12 @@
  * EscalaX Regulation Engine — RBAC 117 Rules
  * 
  * Brazilian ANAC RBAC 117 fatigue regulation rules.
- * Each rule is independent and returns a deterministic RuleResult.
+ * Each rule is independent and returns a deterministic RuleResult with
+ * calculatedValue and limitUsed for auditability.
  */
 
 import type {
   RegulationRule,
-  RuleResult,
   DutyCalculation,
   RestCalculation,
   FatigueCalculation,
@@ -16,6 +16,7 @@ import type {
 } from './types';
 
 // ─── RBAC 117 Duty Time Table (Appendix B, Table 4) ───
+// Format: [maxDutyHours, maxFlightHours]
 
 const DUTY_TABLE: Record<string, Record<string, [number, number]>> = {
   '06-06': { '1-2': [11, 9], '3-4': [11, 9], '5': [10, 8], '6': [9, 8], '7+': [9, 8] },
@@ -57,18 +58,17 @@ export const rbac117MaxDutyHours: RegulationRule = {
   ruleId: 'RBAC117_MAX_DUTY',
   ruleSource: 'RBAC_117',
   description: 'Jornada máxima conforme Tabela 4, Apêndice B do RBAC 117',
-  evaluate(duty, rest, fatigue, context) {
+  evaluate(duty) {
     const { maxDuty } = getDutyLimits(duty.reportHourLocal, duty.sectorCount);
     const passed = duty.totalDutyHours <= maxDuty;
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed,
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
       severity: passed ? 'info' : 'critical',
       message: passed
         ? `Jornada ${duty.totalDutyHours}h dentro do limite de ${maxDuty}h`
         : `Jornada ${duty.totalDutyHours}h excede o limite de ${maxDuty}h`,
       alertCode: passed ? undefined : 'DUTY_EXCEEDED',
+      calculatedValue: duty.totalDutyHours, limitUsed: maxDuty,
       context: { actualHours: duty.totalDutyHours, maxHours: maxDuty, reportHour: duty.reportHourLocal, sectors: duty.sectorCount },
     };
   },
@@ -82,14 +82,13 @@ export const rbac117MaxFlightHours: RegulationRule = {
     const { maxFlight } = getDutyLimits(duty.reportHourLocal, duty.sectorCount);
     const passed = duty.totalFlightHours <= maxFlight;
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed,
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
       severity: passed ? 'info' : 'critical',
       message: passed
         ? `Voo ${duty.totalFlightHours}h dentro do limite de ${maxFlight}h`
         : `Voo ${duty.totalFlightHours}h excede o limite de ${maxFlight}h`,
       alertCode: passed ? undefined : 'FLIGHT_HOURS_EXCEEDED',
+      calculatedValue: duty.totalFlightHours, limitUsed: maxFlight,
       context: { actualHours: duty.totalFlightHours, maxHours: maxFlight },
     };
   },
@@ -105,14 +104,13 @@ export const rbac117MinRest: RegulationRule = {
     }
     const passed = rest.restBeforeDutyHours >= rest.minRequiredRestHours;
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed,
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
       severity: passed ? 'info' : 'critical',
       message: passed
         ? `Repouso ${rest.restBeforeDutyHours}h ≥ mínimo ${rest.minRequiredRestHours}h`
         : `Repouso ${rest.restBeforeDutyHours}h < mínimo ${rest.minRequiredRestHours}h`,
       alertCode: passed ? undefined : 'REST_INSUFFICIENT',
+      calculatedValue: rest.restBeforeDutyHours, limitUsed: rest.minRequiredRestHours,
       context: { restHours: rest.restBeforeDutyHours, minRequired: rest.minRequiredRestHours, augmented: rest.augmentedRest },
     };
   },
@@ -122,16 +120,15 @@ export const rbac117FlightHoursMonth: RegulationRule = {
   ruleId: 'RBAC117_FH_MONTH',
   ruleSource: 'RBAC_117',
   description: 'Limite de 85h de voo em 30 dias (Tabela 5, Apêndice B)',
-  evaluate(duty, rest, fatigue, context, accHours) {
+  evaluate(_duty, _rest, _fatigue, _context, accHours) {
     const limit = 85;
     const passed = accHours.last30Days <= limit;
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed,
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
       severity: !passed ? 'critical' : accHours.last30Days > limit * 0.85 ? 'warning' : 'info',
       message: `${accHours.last30Days}h de voo em 30 dias (limite: ${limit}h)`,
       alertCode: passed ? undefined : 'FLIGHT_HOURS_EXCEEDED',
+      calculatedValue: accHours.last30Days, limitUsed: limit,
       context: { hours: accHours.last30Days, limit },
     };
   },
@@ -141,16 +138,15 @@ export const rbac117FlightHours7Days: RegulationRule = {
   ruleId: 'RBAC117_FH_7D',
   ruleSource: 'RBAC_117',
   description: 'Limite de 44h de voo em 7 dias consecutivos (Tabela 5)',
-  evaluate(duty, rest, fatigue, context, accHours) {
+  evaluate(_duty, _rest, _fatigue, _context, accHours) {
     const limit = 44;
     const passed = accHours.last7Days <= limit;
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed,
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
       severity: passed ? (accHours.last7Days > limit * 0.85 ? 'warning' : 'info') : 'critical',
       message: `${accHours.last7Days}h de voo em 7 dias (limite: ${limit}h)`,
       alertCode: passed ? undefined : 'FLIGHT_HOURS_EXCEEDED',
+      calculatedValue: accHours.last7Days, limitUsed: limit,
       context: { hours: accHours.last7Days, limit },
     };
   },
@@ -159,18 +155,46 @@ export const rbac117FlightHours7Days: RegulationRule = {
 export const rbac117WeeklyRest: RegulationRule = {
   ruleId: 'RBAC117_WEEKLY_REST',
   ruleSource: 'RBAC_117',
-  description: 'Repouso semanal mínimo de 36h consecutivas',
-  evaluate(duty, rest) {
-    // This rule requires schedule-level analysis; simplified check
-    if (rest.restBeforeDutyHours !== null && rest.restBeforeDutyHours >= 36) {
-      return { ruleId: this.ruleId, ruleSource: this.ruleSource, passed: true, severity: 'info', message: 'Repouso semanal de 36h atendido' };
+  description: 'Repouso semanal mínimo de 36h consecutivas em cada 7 dias',
+  evaluate(_duty, _rest, _fatigue, context) {
+    // Scan all duty periods in the window to find max consecutive rest gap
+    const tz = context.crew.timezone || 'America/Sao_Paulo';
+    const dutyPeriods = context.dutyPeriods;
+
+    if (dutyPeriods.length < 2) {
+      return { ruleId: this.ruleId, ruleSource: this.ruleSource, passed: true, severity: 'info', message: 'Dados insuficientes para verificar repouso semanal' };
     }
+
+    // Sort duties by report time
+    const sorted = [...dutyPeriods].sort((a, b) =>
+      new Date(a.reportTimeUtc).getTime() - new Date(b.reportTimeUtc).getTime()
+    );
+
+    // Calculate end times (last leg arrival + 30min debrief)
+    let maxRestHours = 0;
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const legs = sorted[i].legs.filter(l => l.activityType === 'flight' || l.activityType === 'positioning');
+      const lastArrival = legs.length > 0
+        ? Math.max(...legs.map(l => new Date(l.actualArrivalUtc || l.scheduledArrivalUtc).getTime()))
+        : new Date(sorted[i].reportTimeUtc).getTime() + 3600000;
+      const endMs = lastArrival + 30 * 60000;
+      const nextReportMs = new Date(sorted[i + 1].reportTimeUtc).getTime();
+      const restHours = (nextReportMs - endMs) / 3600000;
+      if (restHours > maxRestHours) maxRestHours = restHours;
+    }
+
+    const limit = 36;
+    const passed = maxRestHours >= limit;
+
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed: true, // Can't determine from single duty, default pass
-      severity: 'info',
-      message: 'Verificação de repouso semanal requer análise de janela completa',
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
+      severity: passed ? 'info' : 'critical',
+      message: passed
+        ? `Repouso semanal máximo encontrado: ${Math.round(maxRestHours * 10) / 10}h ≥ ${limit}h`
+        : `Nenhum repouso ≥ ${limit}h encontrado na janela (máx: ${Math.round(maxRestHours * 10) / 10}h)`,
+      alertCode: passed ? undefined : 'WEEKLY_REST_INSUFFICIENT',
+      calculatedValue: Math.round(maxRestHours * 10) / 10, limitUsed: limit,
+      context: { maxRestHours: Math.round(maxRestHours * 10) / 10, required: limit },
     };
   },
 };
@@ -179,19 +203,18 @@ export const rbac117WoclExposure: RegulationRule = {
   ruleId: 'RBAC117_WOCL',
   ruleSource: 'RBAC_117',
   description: 'Exposição ao WOCL (02:00-06:00) — gestão de fadiga',
-  evaluate(duty, rest, fatigue) {
+  evaluate(duty, _rest, fatigue) {
     const minutes = fatigue.woclExposure.totalMinutes;
-    const passed = minutes <= 120; // 2h threshold for warning
+    const passed = minutes <= 120;
     return {
-      ruleId: this.ruleId,
-      ruleSource: this.ruleSource,
-      passed,
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
       severity: minutes === 0 ? 'info' : minutes <= 120 ? 'warning' : 'critical',
       message: minutes === 0
         ? 'Sem exposição ao WOCL'
         : `${minutes}min de exposição ao WOCL (02:00-06:00)`,
       alertCode: minutes > 0 ? 'WOCL_EXPOSURE' : undefined,
-      context: { woclMinutes: minutes, windows: fatigue.woclExposure.windows },
+      calculatedValue: minutes, limitUsed: 120,
+      context: { woclMinutes: minutes, dutyDiurno: duty.dutyTimeBreakdown.diurnoMinutes, dutyNoturno: duty.dutyTimeBreakdown.noturnoMinutes },
     };
   },
 };
