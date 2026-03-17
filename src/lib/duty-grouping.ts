@@ -1,11 +1,10 @@
 /**
- * Duty Period Grouping Engine v3
- * 
- * Groups flight legs into operational duty periods with:
- * - Airport continuity validation (prev.arrival === next.departure)
- * - Ordering by presentation time (APR) not just departure
- * - Correct midnight-crossing handling
- * - Absolute-minute based sorting for duty period ordering
+ * Duty Period Grouping Engine v4
+ *
+ * - Agrupa pernas por continuidade real de aeroporto + tempo de conexão plausível
+ * - Resolve casos com ordenação inconsistente no roster (ex: trecho madrugada antes do trecho de saída)
+ * - Ordena jornadas por início operacional (APR/report_time)
+ * - Permite priorização visual por home base no Dashboard
  */
 
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
@@ -27,6 +26,7 @@ export interface DutyPeriod {
   hasMadrugada: boolean;
   connectionTimes: number[];
   debriefTime: string | null;
+  homeBasePriority: boolean;
 }
 
 // ── Time helpers ──
@@ -49,71 +49,139 @@ function didCrossMidnight(depTime: string, arrTime: string): boolean {
   return d >= 0 && a >= 0 && a < d;
 }
 
+function normalizeAirport(code: string | null | undefined): string {
+  return (code || '').trim().toUpperCase();
+}
+
 /** Absolute minutes from a fixed epoch (2020-01-01) for cross-date sorting */
 const EPOCH = new Date('2020-01-01T00:00:00').getTime();
 function dateTimeToAbsMin(date: string, time: string | null | undefined): number {
   const mins = timeToMinutes(time);
   if (mins < 0) return -1;
-  const dayMs = new Date(date + 'T00:00:00').getTime() - EPOCH;
+  const dayMs = new Date(`${date}T00:00:00`).getTime() - EPOCH;
   return Math.round(dayMs / 60000) + mins;
 }
 
+function toDateStartMs(date: string): number {
+  return new Date(`${date}T00:00:00`).getTime();
+}
+
+function shiftDateStr(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
- * Effective sort key: sort_datetime > date+report_time > date+departure_time.
+ * Prioriza APR/report_time; sort_datetime fica como fallback apenas.
  */
 function getEffectiveSortKey(e: ScheduleEntry): string {
-  if (e.sort_datetime) return e.sort_datetime;
-  const time = e.report_time || e.departure_time || '00:00';
-  return `${e.date}T${time}`;
+  const aprOrDep = e.report_time || e.departure_time || '00:00';
+  if (e.date) return `${e.date}T${aprOrDep}`;
+  return e.sort_datetime || '';
 }
 
 function absoluteMinutes(date: string, time: string | null | undefined, refDate: string): number {
   const mins = timeToMinutes(time);
   if (mins < 0) return -1;
-  const d = new Date(date + 'T00:00:00');
-  const r = new Date(refDate + 'T00:00:00');
+  const d = new Date(`${date}T00:00:00`);
+  const r = new Date(`${refDate}T00:00:00`);
   const dayOffset = Math.round((d.getTime() - r.getTime()) / 86400000);
   return dayOffset * 1440 + mins;
 }
 
 // ── Chaining validation ──
 
-function canChainLegs(
+function getConnectionGapMinutes(
   prevLeg: ScheduleEntry,
   nextLeg: ScheduleEntry,
-  maxConnectionMinutes: number
-): boolean {
-  // Rule 1: Airport continuity
-  const prevDest = (prevLeg.arrival || '').toUpperCase().trim();
-  const nextOrig = (nextLeg.departure || '').toUpperCase().trim();
-  if (!prevDest || !nextOrig || prevDest !== nextOrig) return false;
+  maxConnectionMinutes: number,
+): number | null {
+  // Rule 1: Airport continuity is mandatory
+  const prevDest = normalizeAirport(prevLeg.arrival);
+  const nextOrig = normalizeAirport(nextLeg.departure);
+  if (!prevDest || !nextOrig || prevDest !== nextOrig) return null;
 
-  // Rule 2 & 3: Temporal gap
+  // Rule 2: Temporal continuity with midnight handling
   const refDate = prevLeg.date;
+
   let prevArrAbs = absoluteMinutes(prevLeg.date, prevLeg.arrival_time, refDate);
   const prevDepAbs = absoluteMinutes(prevLeg.date, prevLeg.departure_time, refDate);
   if (prevArrAbs >= 0 && prevDepAbs >= 0 && prevArrAbs < prevDepAbs) {
-    prevArrAbs += 1440; // crossed midnight
+    prevArrAbs += 1440; // previous leg crossed midnight
   }
 
   let nextDepAbs = absoluteMinutes(nextLeg.date, nextLeg.departure_time, refDate);
-  if (nextDepAbs >= 0 && prevArrAbs >= 0 && nextDepAbs < prevArrAbs) {
-    const dayDiff = Math.round(
-      (new Date(nextLeg.date + 'T00:00:00').getTime() - new Date(prevLeg.date + 'T00:00:00').getTime()) / 86400000
-    );
-    if (dayDiff === 0) nextDepAbs += 1440;
+  if (nextDepAbs < 0 || prevArrAbs < 0) return null;
+
+  if (nextDepAbs < prevArrAbs) {
+    const dayDiff = Math.round((toDateStartMs(nextLeg.date) - toDateStartMs(prevLeg.date)) / 86400000);
+    if (dayDiff === 0 || dayDiff === 1) {
+      nextDepAbs += 1440;
+    }
   }
 
-  if (prevArrAbs < 0 || nextDepAbs < 0) return false;
   const gap = nextDepAbs - prevArrAbs;
-  return gap >= 0 && gap < maxConnectionMinutes;
+  if (gap < 0 || gap >= maxConnectionMinutes) return null;
+
+  return gap;
+}
+
+function canChainLegs(
+  prevLeg: ScheduleEntry,
+  nextLeg: ScheduleEntry,
+  maxConnectionMinutes: number,
+): boolean {
+  return getConnectionGapMinutes(prevLeg, nextLeg, maxConnectionMinutes) !== null;
+}
+
+function findBestBackwardCandidateIndex(
+  pool: ScheduleEntry[],
+  firstLeg: ScheduleEntry,
+  maxConnectionMinutes: number,
+): number {
+  let selectedIdx = -1;
+  let bestGap = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < pool.length; i++) {
+    const gap = getConnectionGapMinutes(pool[i], firstLeg, maxConnectionMinutes);
+    if (gap == null) continue;
+
+    if (gap < bestGap) {
+      bestGap = gap;
+      selectedIdx = i;
+    }
+  }
+
+  return selectedIdx;
+}
+
+function findBestForwardCandidateIndex(
+  pool: ScheduleEntry[],
+  lastLeg: ScheduleEntry,
+  maxConnectionMinutes: number,
+): number {
+  let selectedIdx = -1;
+  let bestGap = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < pool.length; i++) {
+    const gap = getConnectionGapMinutes(lastLeg, pool[i], maxConnectionMinutes);
+    if (gap == null) continue;
+
+    if (gap < bestGap) {
+      bestGap = gap;
+      selectedIdx = i;
+    }
+  }
+
+  return selectedIdx;
 }
 
 // ── Main grouping ──
 
 export function groupIntoDutyPeriods(
   entries: ScheduleEntry[],
-  gapThresholdMinutes = 600
+  gapThresholdMinutes = 600,
 ): DutyPeriod[] {
   const flights = entries
     .filter(e => e.is_flight)
@@ -121,20 +189,34 @@ export function groupIntoDutyPeriods(
 
   if (flights.length === 0) return [];
 
+  // Build groups by expanding both directions to recover correct operational sequence
+  // even when input order is inconsistent around midnight.
+  const pool = [...flights];
   const groups: ScheduleEntry[][] = [];
-  let currentGroup: ScheduleEntry[] = [flights[0]];
 
-  for (let i = 1; i < flights.length; i++) {
-    const prev = currentGroup[currentGroup.length - 1];
-    const curr = flights[i];
-    if (canChainLegs(prev, curr, gapThresholdMinutes)) {
-      currentGroup.push(curr);
-    } else {
-      groups.push(currentGroup);
-      currentGroup = [curr];
+  while (pool.length > 0) {
+    const seed = pool.shift()!;
+    const group: ScheduleEntry[] = [seed];
+
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+
+      const backwardIdx = findBestBackwardCandidateIndex(pool, group[0], gapThresholdMinutes);
+      if (backwardIdx >= 0) {
+        group.unshift(pool.splice(backwardIdx, 1)[0]);
+        expanded = true;
+      }
+
+      const forwardIdx = findBestForwardCandidateIndex(pool, group[group.length - 1], gapThresholdMinutes);
+      if (forwardIdx >= 0) {
+        group.push(pool.splice(forwardIdx, 1)[0]);
+        expanded = true;
+      }
     }
+
+    groups.push(group);
   }
-  groups.push(currentGroup);
 
   // Build duty periods and sort by absolute start time
   const duties = groups.map(legs => buildDutyPeriod(legs));
@@ -154,15 +236,8 @@ function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
 
   const connectionTimes: number[] = [];
   for (let i = 1; i < legs.length; i++) {
-    const prevArr = timeToMinutes(legs[i - 1].arrival_time);
-    const currDep = timeToMinutes(legs[i].departure_time);
-    if (prevArr >= 0 && currDep >= 0) {
-      let conn = currDep - prevArr;
-      if (conn < 0) conn += 1440;
-      connectionTimes.push(conn);
-    } else {
-      connectionTimes.push(0);
-    }
+    const gap = getConnectionGapMinutes(legs[i - 1], legs[i], 24 * 60);
+    connectionTimes.push(gap ?? 0);
   }
 
   const totalBlockHours = legs.reduce((s, l) => s + (l.flight_hours || 0), 0);
@@ -178,15 +253,14 @@ function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
     : legs.reduce((s, l) => s + (l.duty_hours || 0) * 60, 0);
   const totalDutyHours = Math.round((rawDutyMins / 60) * 100) / 100;
 
-  const crossesMidnight = legs.some(l => l.crosses_midnight) ||
-    legs.some(l => didCrossMidnight(l.departure_time, l.arrival_time)) ||
-    (first.date !== last.date);
+  const crossesMidnight = legs.some(l => l.crosses_midnight)
+    || legs.some(l => didCrossMidnight(l.departure_time, l.arrival_time))
+    || (first.date !== last.date);
 
   const hasMadrugada = legs.some(l =>
-    isMadrugada(l.departure_time) || isMadrugada(l.arrival_time)
+    isMadrugada(l.departure_time) || isMadrugada(l.arrival_time),
   );
 
-  // Absolute start for cross-date sorting
   const dutyStartAbsoluteMin = dateTimeToAbsMin(first.date, dutyStartTime);
 
   return {
@@ -205,32 +279,69 @@ function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
     hasMadrugada,
     connectionTimes,
     debriefTime: last.debrief_time || null,
+    homeBasePriority: false,
   };
 }
 
 // ── Query helpers ──
 
-export function getTodayDutyPeriods(dutyPeriods: DutyPeriod[], todayStr: string): DutyPeriod[] {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+export function getTodayDutyPeriods(
+  dutyPeriods: DutyPeriod[],
+  todayStr: string,
+  homeBase?: string | null,
+): DutyPeriod[] {
+  const yesterdayStr = shiftDateStr(todayStr, -1);
+  const normalizedBase = normalizeAirport(homeBase);
 
-  const result = dutyPeriods.filter(dp => {
-    if (dp.legs.some(l => l.date === todayStr)) return true;
-    if (dp.dutyStartDate === yesterdayStr && dp.crossesMidnight) return true;
-    return false;
+  const result = dutyPeriods
+    .filter(dp => {
+      if (dp.legs.some(l => l.date === todayStr)) return true;
+      if (dp.dutyStartDate === yesterdayStr && dp.crossesMidnight) return true;
+      return false;
+    })
+    .map(dp => {
+      const startsFromBase = normalizedBase.length > 0
+        && normalizeAirport(dp.legs[0]?.departure) === normalizedBase;
+
+      return {
+        ...dp,
+        homeBasePriority: startsFromBase,
+      };
+    });
+
+  // Visual priority in Dashboard:
+  // 1) Journeys starting from home base
+  // 2) Operational start (APR/duty start)
+  result.sort((a, b) => {
+    const baseDiff = Number(b.homeBasePriority) - Number(a.homeBasePriority);
+    if (baseDiff !== 0) return baseDiff;
+    return a.dutyStartAbsoluteMin - b.dutyStartAbsoluteMin;
   });
 
-  // Sort by absolute start time (earliest duty first at top)
-  result.sort((a, b) => a.dutyStartAbsoluteMin - b.dutyStartAbsoluteMin);
   return result;
 }
 
-export function getNextDutyPeriod(dutyPeriods: DutyPeriod[], todayStr: string): DutyPeriod | null {
-  const now = new Date();
-  const nowAbsMin = dateTimeToAbsMin(todayStr, `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
+function getTimeInTimeZone(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
 
-  // Find first duty that starts after now
+  const hour = parts.find(p => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find(p => p.type === 'minute')?.value ?? '00';
+  return `${hour}:${minute}`;
+}
+
+export function getNextDutyPeriod(
+  dutyPeriods: DutyPeriod[],
+  todayStr: string,
+  now: Date = new Date(),
+  timeZone = 'America/Sao_Paulo',
+): DutyPeriod | null {
+  const nowAbsMin = dateTimeToAbsMin(todayStr, getTimeInTimeZone(now, timeZone));
+
   const upcoming = dutyPeriods
     .filter(dp => dp.dutyStartAbsoluteMin > nowAbsMin)
     .sort((a, b) => a.dutyStartAbsoluteMin - b.dutyStartAbsoluteMin);

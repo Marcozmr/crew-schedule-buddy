@@ -5,6 +5,20 @@ import { TZDate } from '@date-fns/tz';
 
 const BRAZIL_TZ = 'America/Sao_Paulo';
 
+function getDatePartsInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find(p => p.type === 'year')?.value ?? '1970';
+  const month = parts.find(p => p.type === 'month')?.value ?? '01';
+  const day = parts.find(p => p.type === 'day')?.value ?? '01';
+  return { year, month, day };
+}
+
 /** Parse a date string (YYYY-MM-DD or DD/MM/YYYY) into a TZDate in BRT */
 export function parseDateBRT(dateStr: string): TZDate {
   if (!dateStr) return new TZDate(new Date(), BRAZIL_TZ);
@@ -21,6 +35,18 @@ export function parseDateBRT(dateStr: string): TZDate {
 /** Convert any date string to a JS Date in local BRT context */
 export function toBrazilTZ(dateStr: string): Date {
   return new Date(parseDateBRT(dateStr).getTime());
+}
+
+/** Returns YYYY-MM-DD for a given timezone */
+export function getISODateInTimeZone(date: Date, timeZone = BRAZIL_TZ): string {
+  const { year, month, day } = getDatePartsInTimeZone(date, timeZone);
+  return `${year}-${month}-${day}`;
+}
+
+/** Returns YYYY-MM for a given timezone */
+export function getISOMonthInTimeZone(date: Date, timeZone = BRAZIL_TZ): string {
+  const { year, month } = getDatePartsInTimeZone(date, timeZone);
+  return `${year}-${month}`;
 }
 
 /** Format date as dd/MM/yyyy */
