@@ -3,11 +3,11 @@ import { AppLayout } from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NumericInput } from '@/components/ui/numeric-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// Configurable limits (can be moved to DB later)
 const DUTY_LIMITS: Record<string, Record<string, number>> = {
   simples: { '1-2': 12, '3-4': 12, '5': 11, '6': 10, '7+': 9 },
   composta: { '1-2': 14, '3-4': 14, '5': 13, '6': 12, '7+': 11 },
@@ -16,7 +16,7 @@ const DUTY_LIMITS: Record<string, Record<string, number>> = {
 
 export default function DutyCalcPage() {
   const [report, setReport] = useState('');
-  const [stages, setStages] = useState(1);
+  const [stages, setStages] = useState<number | null>(1);
   const [crewType, setCrewType] = useState('simples');
   const [period, setPeriod] = useState('diurno');
   const [takeoff, setTakeoff] = useState('');
@@ -27,6 +27,7 @@ export default function DutyCalcPage() {
 
   const calculate = () => {
     if (!report || !takeoff || !landing) return;
+    const stageCount = stages ?? 1;
     const repDate = new Date(`2026-01-01T${report}`);
     const tkDate = new Date(`2026-01-01T${takeoff}`);
     let ldDate = new Date(`2026-01-01T${landing}`);
@@ -35,11 +36,10 @@ export default function DutyCalcPage() {
     const flightMs = ldDate.getTime() - tkDate.getTime();
     const flightH = flightMs / 3600000;
 
-    // Duty = report to landing + 30min debrief
     const dutyMs = ldDate.getTime() - repDate.getTime() + 30 * 60000;
     const dutyH = dutyMs / 3600000;
 
-    const limit = DUTY_LIMITS[crewType]?.[getLegsKey(stages)] || 12;
+    const limit = DUTY_LIMITS[crewType]?.[getLegsKey(stageCount)] || 12;
 
     setResult({
       flightHours: Math.round(flightH * 10) / 10,
@@ -60,7 +60,7 @@ export default function DutyCalcPage() {
         <p className="text-xs text-muted-foreground mb-4">Horários em America/Sao_Paulo (BRT)</p>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div><Label className="text-xs">Apresentação</Label><Input type="time" value={report} onChange={e => setReport(e.target.value)} /></div>
-          <div><Label className="text-xs">Etapas</Label><Input type="number" min={1} value={stages} onChange={e => setStages(parseInt(e.target.value) || 1)} /></div>
+          <div><Label className="text-xs">Etapas</Label><NumericInput value={stages} onValueChange={setStages} min={1} max={20} decimals={0} blurDefault={1} /></div>
           <div><Label className="text-xs">Decolagem</Label><Input type="time" value={takeoff} onChange={e => setTakeoff(e.target.value)} /></div>
           <div><Label className="text-xs">Pouso</Label><Input type="time" value={landing} onChange={e => setLanding(e.target.value)} /></div>
           <div>
