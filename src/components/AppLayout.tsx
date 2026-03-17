@@ -10,7 +10,6 @@ import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 const fullNav = [
-  { path: '/home', label: 'Menu Principal', icon: Home },
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/schedule', label: 'Escala', icon: Calendar },
   { path: '/download-roster', label: 'Baixar Escala', icon: Download },
