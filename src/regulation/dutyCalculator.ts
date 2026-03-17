@@ -2,24 +2,19 @@
  * EscalaX Regulation Engine — Duty Calculator
  * 
  * Calculates duty period metrics from report time to 30min after last block-on.
- * All timestamps processed in UTC, local conversions via crew timezone.
+ * Now with full time segmentation: day/night/madrugada/WOCL breakdown.
  */
 
 import { TZDate } from '@date-fns/tz';
-import type { DutyPeriodInput, DutyCalculation } from './types';
+import type { DutyPeriodInput, DutyCalculation, GroundGapDetail } from './types';
+import { splitIntervalByTimeWindows, classifyGroundTimes } from '@/lib/time-segments';
 
 const DEBRIEF_MS = 30 * 60 * 1000; // 30 minutes
 
-/**
- * Get effective departure UTC (actual or scheduled)
- */
 function getBlockOff(leg: DutyPeriodInput['legs'][0]): number {
   return new Date(leg.actualDepartureUtc || leg.scheduledDepartureUtc).getTime();
 }
 
-/**
- * Get effective arrival UTC (actual or scheduled)
- */
 function getBlockOn(leg: DutyPeriodInput['legs'][0]): number {
   return new Date(leg.actualArrivalUtc || leg.scheduledArrivalUtc).getTime();
 }
@@ -29,6 +24,8 @@ function getBlockOn(leg: DutyPeriodInput['legs'][0]): number {
  * 
  * Duty = reportTime → lastBlockOn + 30min debrief
  * Flight time = sum of (blockOn - blockOff) per leg
+ * 
+ * Now includes: time segmentation, ground gap classification, madrugada detection.
  */
 export function calculateDuty(
   input: DutyPeriodInput,
@@ -53,11 +50,20 @@ export function calculateDuty(
 
   // Ground times between consecutive legs
   const groundTimesBetweenLegs: number[] = [];
+  const gapStartUtcs: string[] = [];
+  const gapEndUtcs: string[] = [];
+
   for (let i = 1; i < flightSegments.length; i++) {
-    const gap = flightSegments[i].blockOff - flightSegments[i - 1].blockOn;
-    groundTimesBetweenLegs.push(Math.max(0, gap));
+    const gapMs = Math.max(0, flightSegments[i].blockOff - flightSegments[i - 1].blockOn);
+    groundTimesBetweenLegs.push(gapMs);
+    gapStartUtcs.push(new Date(flightSegments[i - 1].blockOn).toISOString());
+    gapEndUtcs.push(new Date(flightSegments[i].blockOff).toISOString());
   }
+
   const totalGroundTimeMs = groundTimesBetweenLegs.reduce((s, g) => s + g, 0);
+
+  // Classify each ground gap as day/night
+  const groundGapDetails: GroundGapDetail[] = classifyGroundTimes(gapStartUtcs, gapEndUtcs, timezone);
 
   // End of duty: last block-on + 30min debrief
   const lastBlockOn = flightSegments.length > 0
@@ -75,6 +81,11 @@ export function calculateDuty(
   const firstDep = sortedLegs.length > 0 ? sortedLegs[0].departureAirport : input.baseAirport;
   const lastArr = sortedLegs.length > 0 ? sortedLegs[sortedLegs.length - 1].arrivalAirport : input.baseAirport;
 
+  // Full duty time breakdown
+  const reportUtcStr = new Date(reportMs).toISOString();
+  const endUtcStr = new Date(endMs).toISOString();
+  const dutyBreakdown = splitIntervalByTimeWindows(reportUtcStr, endUtcStr, timezone);
+
   return {
     totalDutyMs,
     totalDutyHours: round2(totalDutyMs / 3600000),
@@ -82,15 +93,24 @@ export function calculateDuty(
     totalFlightHours: round2(totalFlightMs / 3600000),
     sectorCount,
     groundTimesBetweenLegs,
+    groundGapDetails,
     totalGroundTimeMs,
     reportHourLocal: reportLocal.getHours(),
     endHourLocal: endLocal.getHours(),
     startsOutsideBase: firstDep !== input.baseAirport,
     endsOutsideBase: lastArr !== input.baseAirport,
-    reportTimeUtc: new Date(reportMs).toISOString(),
-    endTimeUtc: new Date(endMs).toISOString(),
+    reportTimeUtc: reportUtcStr,
+    endTimeUtc: endUtcStr,
     reportTimeLocal: formatLocal(reportLocal),
     endTimeLocal: formatLocal(endLocal),
+    dutyTimeBreakdown: {
+      totalMinutes: dutyBreakdown.totalMinutes,
+      diurnoMinutes: dutyBreakdown.diurnoMinutes,
+      noturnoMinutes: dutyBreakdown.noturnoMinutes,
+      madrugadaMinutes: dutyBreakdown.madrugadaMinutes,
+      woclMinutes: dutyBreakdown.woclMinutes,
+    },
+    isMadrugadaDuty: dutyBreakdown.madrugadaMinutes > 0,
   };
 }
 

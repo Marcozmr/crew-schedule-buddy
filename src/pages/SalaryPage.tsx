@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { NumericInput, safeParseNumber } from '@/components/ui/numeric-input';
 import { toast } from 'sonner';
 import { DollarSign, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -13,20 +14,37 @@ import { motion } from 'framer-motion';
 const now = new Date();
 const defaultMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
 
+type SalaryForm = {
+  base_salary: number | null;
+  per_diem_total: number | null;
+  overnight_total: number | null;
+  night_additional: number | null;
+  productivity_bonus: number | null;
+  other_additions: number | null;
+  inss: number | null;
+  irrf: number | null;
+  health_plan: number | null;
+  other_discounts: number | null;
+  notes: string;
+};
+
+const emptyForm: SalaryForm = {
+  base_salary: null, per_diem_total: null, overnight_total: null, night_additional: null,
+  productivity_bonus: null, other_additions: null, inss: null, irrf: null,
+  health_plan: null, other_discounts: null, notes: '',
+};
+
 export default function SalaryPage() {
   const { user } = useAuth();
   const [month, setMonth] = useState(defaultMonth);
-  const [form, setForm] = useState({
-    base_salary: 0, per_diem_total: 0, overnight_total: 0, night_additional: 0,
-    productivity_bonus: 0, other_additions: 0, inss: 0, irrf: 0,
-    health_plan: 0, other_discounts: 0, notes: '',
-  });
+  const [form, setForm] = useState<SalaryForm>({ ...emptyForm });
   const [entryId, setEntryId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
 
-  const gross = form.base_salary + form.per_diem_total + form.overnight_total + form.night_additional + form.productivity_bonus + form.other_additions;
-  const deductions = form.inss + form.irrf + form.health_plan + form.other_discounts;
+  const v = (key: keyof SalaryForm): number => safeParseNumber(form[key] as number | null);
+  const gross = v('base_salary') + v('per_diem_total') + v('overnight_total') + v('night_additional') + v('productivity_bonus') + v('other_additions');
+  const deductions = v('inss') + v('irrf') + v('health_plan') + v('other_discounts');
   const net = gross - deductions;
 
   const loadMonth = async () => {
@@ -35,16 +53,16 @@ export default function SalaryPage() {
     if (data) {
       setEntryId(data.id);
       setForm({
-        base_salary: Number(data.base_salary) || 0, per_diem_total: Number(data.per_diem_total) || 0,
-        overnight_total: Number(data.overnight_total) || 0, night_additional: Number(data.night_additional) || 0,
-        productivity_bonus: Number(data.productivity_bonus) || 0, other_additions: Number(data.other_additions) || 0,
-        inss: Number(data.inss) || 0, irrf: Number(data.irrf) || 0,
-        health_plan: Number(data.health_plan) || 0, other_discounts: Number(data.other_discounts) || 0,
+        base_salary: data.base_salary, per_diem_total: data.per_diem_total,
+        overnight_total: data.overnight_total, night_additional: data.night_additional,
+        productivity_bonus: data.productivity_bonus, other_additions: data.other_additions,
+        inss: data.inss, irrf: data.irrf,
+        health_plan: data.health_plan, other_discounts: data.other_discounts,
         notes: data.notes || '',
       });
     } else {
       setEntryId(null);
-      setForm({ base_salary: 0, per_diem_total: 0, overnight_total: 0, night_additional: 0, productivity_bonus: 0, other_additions: 0, inss: 0, irrf: 0, health_plan: 0, other_discounts: 0, notes: '' });
+      setForm({ ...emptyForm });
     }
   };
 
@@ -60,7 +78,15 @@ export default function SalaryPage() {
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
-    const payload = { ...form, user_id: user.id, reference_month: month, gross_total: gross, net_total: net };
+    const payload = {
+      base_salary: v('base_salary'), per_diem_total: v('per_diem_total'),
+      overnight_total: v('overnight_total'), night_additional: v('night_additional'),
+      productivity_bonus: v('productivity_bonus'), other_additions: v('other_additions'),
+      inss: v('inss'), irrf: v('irrf'),
+      health_plan: v('health_plan'), other_discounts: v('other_discounts'),
+      notes: form.notes, user_id: user.id, reference_month: month,
+      gross_total: gross, net_total: net,
+    };
     if (entryId) {
       await supabase.from('salary_entries').update(payload).eq('id', entryId);
     } else {
@@ -72,10 +98,16 @@ export default function SalaryPage() {
     loadHistory();
   };
 
-  const field = (label: string, key: keyof typeof form, positive = true) => (
+  const field = (label: string, key: keyof SalaryForm, positive = true) => (
     <div>
       <Label className="text-xs">{label}</Label>
-      <Input type="number" value={form[key] as number} onChange={e => setForm(f => ({ ...f, [key]: parseFloat(e.target.value) || 0 }))} className={positive ? '' : 'border-destructive/30'} />
+      <NumericInput
+        value={form[key] as number | null}
+        onValueChange={(val) => setForm(f => ({ ...f, [key]: val }))}
+        decimals={2}
+        allowNegative={false}
+        className={positive ? '' : 'border-destructive/30'}
+      />
     </div>
   );
 
