@@ -8,7 +8,7 @@ import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 import { submitSupport, type SupportPayload } from '@/lib/services/support-service';
 
 const TYPES = [
-  { value: 'suggestion' as const, label: 'Sugerir melhoria', icon: Lightbulb, color: 'text-yellow-500' },
+  { value: 'suggestion' as const, label: 'Sugerir melhoria', icon: Lightbulb, color: 'text-warning' },
   { value: 'bug' as const, label: 'Relatar problema', icon: Bug, color: 'text-destructive' },
   { value: 'contact' as const, label: 'Entrar em contato', icon: Mail, color: 'text-primary' },
 ];
@@ -74,8 +74,13 @@ export function FeedbackFAB() {
         route: location.pathname,
       });
 
-      if (result.success) {
-        toast.success('Mensagem enviada! Nosso time responderá o mais breve possível.');
+      if (result.success && result.emailSent) {
+        toast.success('Mensagem enviada com sucesso!');
+        close();
+      } else if (result.success && !result.emailSent) {
+        toast.success('Mensagem recebida e salva.', {
+          description: 'O envio por e-mail está sendo configurado.',
+        });
         close();
       } else {
         toast.error(result.error || 'Erro ao enviar. Tente novamente.');
@@ -110,7 +115,6 @@ export function FeedbackFAB() {
               exit={{ y: 50, opacity: 0 }}
               className="w-full max-w-md overflow-hidden rounded-2xl bg-card shadow-elevated"
             >
-              {/* Header */}
               <div className="flex items-center justify-between border-b border-border p-4">
                 <h3 className="font-semibold text-foreground">
                   {step === 'choose' ? 'Como podemos ajudar?' : categoryLabel}
@@ -151,7 +155,7 @@ export function FeedbackFAB() {
                     className="w-full resize-none rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
 
                   <p className="text-center text-xs text-muted-foreground">
-                    Nosso time responderá o mais breve possível
+                    Resposta em até 24h
                     {' · '}
                     <button type="button" onClick={() => { navigator.clipboard.writeText(SUPPORT_EMAIL); toast.success('E-mail copiado!'); }}
                       className="underline hover:text-foreground">{SUPPORT_EMAIL}</button>

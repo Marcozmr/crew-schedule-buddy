@@ -1,13 +1,9 @@
 /**
  * Support Service — abstraction layer for support form submission.
  *
- * Current implementation: Supabase Edge Function (send-support-email).
- * The edge function persists to `feedback_messages` first, then attempts
- * email delivery.  Persistence is the source of truth — if the message is
- * saved, we treat it as success even when email delivery fails.
- *
- * To swap providers later (Resend, SMTP, etc.), replace the `submitSupport`
- * implementation without touching UI components.
+ * Backend: Supabase Edge Function (send-support-email).
+ * Persistence is the source of truth — stored first, email is best-effort.
+ * Uses Resend API for email delivery (requires RESEND_API_KEY secret).
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -24,40 +20,46 @@ export interface SupportPayload {
 export interface SupportResult {
   success: boolean;
   stored: boolean;
+  emailSent: boolean;
   error?: string;
 }
 
 /**
  * Submit a support message.
- * Returns `{ success: true }` when the message was persisted (email is best-effort).
+ * Returns detailed status: stored + emailSent independently.
  */
 export async function submitSupport(payload: SupportPayload): Promise<SupportResult> {
   const { data, error } = await supabase.functions.invoke('send-support-email', {
     body: payload,
   });
 
-  // Network-level failure (edge function unreachable)
+  // Network-level failure
   if (error) {
-    console.error('[support-service] invoke error', error.message);
-    return { success: false, stored: false, error: 'Serviço indisponível. Tente novamente.' };
+    console.error('[support-service] invoke error:', error.message);
+    return { success: false, stored: false, emailSent: false, error: 'Serviço indisponível. Tente novamente.' };
   }
 
-  // Edge function returned a response — check results
-  if (data?.stored && data?.sent) {
-    // Full success: stored + email sent
-    return { success: true, stored: true };
+  const stored = !!data?.stored;
+  const sent = !!data?.sent;
+
+  if (stored && sent) {
+    return { success: true, stored: true, emailSent: true };
   }
 
-  if (data?.stored && !data?.sent) {
-    // Stored but email failed — still treat as success but warn
-    console.warn('[support-service] Message stored but email delivery failed:', data?.error);
-    return { success: true, stored: true, error: data?.error };
+  if (stored && !sent) {
+    console.warn('[support-service] Stored but email failed:', data?.error);
+    return {
+      success: true,
+      stored: true,
+      emailSent: false,
+      error: data?.error || 'Mensagem salva, mas o e-mail não foi enviado.',
+    };
   }
 
-  // Neither stored nor sent
   return {
     success: false,
     stored: false,
+    emailSent: false,
     error: data?.error || 'Não foi possível enviar sua mensagem. Tente novamente.',
   };
 }
