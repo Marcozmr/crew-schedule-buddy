@@ -49,7 +49,7 @@ export default function DashboardPage() {
   const fade = (delay: number) => ({
     initial: { opacity: 0, y: 8 },
     animate: { opacity: 1, y: 0 },
-    transition: { delay, duration: 0.35, ease: 'easeOut' },
+    transition: { delay, duration: 0.35, ease: 'easeOut' as const },
   });
 
   return (
