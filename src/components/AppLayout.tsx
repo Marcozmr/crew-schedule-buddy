@@ -1,11 +1,9 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User, Home,
-  Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight,
-  BedDouble, Clock, Cloud, Settings, ChevronLeft
+  Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings,
+  LogOut, Bell, Menu, ChevronLeft, Home, HelpCircle
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,22 +11,13 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
-const fullNav = [
+const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/schedule', label: 'Escala', icon: Calendar },
-  { path: '/download-roster', label: 'Baixar Escala', icon: Download },
-  { path: '/documents', label: 'Documentos', icon: FolderOpen },
-  { path: '/salary', label: 'Salário', icon: DollarSign },
-  { path: '/perdiem', label: 'Diárias', icon: UtensilsCrossed },
-  { path: '/flight-swap', label: 'Troca de Voo', icon: ArrowLeftRight },
-  { path: '/rest-calc', label: 'Cálc. Descanso', icon: BedDouble },
-  { path: '/duty-calc', label: 'Cálc. Jornada', icon: Clock },
-  { path: '/weather', label: 'Clima', icon: Cloud },
-  { path: '/search', label: 'Buscar Voos', icon: Search },
-  { path: '/notifications', label: 'Notificações', icon: Bell },
-  { path: '/regulation', label: 'Regulamentação', icon: FileText },
-  { path: '/profile', label: 'Meu Perfil', icon: User },
-  { path: '/settings', label: 'Ajustes', icon: Settings },
+  { path: '/duty-calc', label: 'Jornada', icon: Clock },
+  { path: '/rest-calc', label: 'Descanso', icon: BedDouble },
+  { path: '/regulation', label: 'Regulamentação', icon: Shield },
+  { path: '/settings', label: 'Configurações', icon: Settings },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -41,158 +30,177 @@ export function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false);
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false);
       setUnreadCount(count || 0);
     };
     load();
-    const channel = supabase.channel('notif-badge').on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => load()).subscribe();
+    const channel = supabase
+      .channel('notif-badge')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'notifications',
+        filter: `user_id=eq.${user.id}`
+      }, () => load())
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const handleLogout = async () => { await signOut(); window.location.href = '/'; };
   const initials = profile?.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
-  const pageTitle = fullNav.find(n => location.pathname === n.path)?.label || '';
+  const pageTitle = navItems.find(n => location.pathname === n.path)?.label || '';
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex">
 
-      {/* ═══ Desktop Sidebar — hidden below lg ═══ */}
-      <aside className="hidden lg:flex flex-col w-60 shrink-0 sticky top-0 h-screen gradient-dark border-r border-sidebar-border overflow-y-auto">
+      {/* ═══ Desktop Sidebar ═══ */}
+      <aside className="hidden lg:flex flex-col w-[220px] shrink-0 sticky top-0 h-screen border-r border-border/50 bg-[hsl(222,47%,7%)]">
         {/* Brand */}
-        <div className="px-5 py-5 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl gradient-sky flex items-center justify-center shadow-glow-blue">
-            <Plane className="w-5 h-5 text-primary-foreground" />
+        <div className="px-5 h-16 flex items-center gap-3 border-b border-border/30">
+          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
+            <Plane className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="text-lg font-extrabold text-primary-foreground tracking-tight">EscalaX</span>
+          <span className="text-base font-bold text-foreground tracking-tight">EscalaX</span>
         </div>
 
-        {/* Profile mini */}
-        {profile && (
-          <Link to="/profile" className="mx-3 mb-3 flex items-center gap-2.5 p-2.5 rounded-xl bg-sidebar-accent/40 hover:bg-sidebar-accent transition-colors">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={profile.avatar_url || undefined} />
-              <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary-foreground">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
-              <p className="text-[10px] text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
-            </div>
-          </Link>
-        )}
-
-        {/* Nav links */}
-        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-          {fullNav.map(item => {
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItems.map(item => {
             const active = location.pathname === item.path;
             return (
               <Link key={item.path} to={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${
                   active
-                    ? 'bg-primary/20 text-primary-foreground shadow-glow-blue'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
                 }`}>
-                <item.icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
-                {item.path === '/notifications' && unreadCount > 0 && (
-                  <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
-                )}
+                <item.icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : ''}`} />
+                <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-3 border-t border-sidebar-border mt-auto">
-          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full">
+        {/* Profile + Logout */}
+        <div className="p-3 border-t border-border/30 space-y-2">
+          {profile && (
+            <Link to="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-secondary/40 transition-colors">
+              <Avatar className="w-7 h-7">
+                <AvatarImage src={profile.avatar_url || undefined} />
+                <AvatarFallback className="text-[10px] font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{profile.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{profile.airline || profile.email}</p>
+              </div>
+            </Link>
+          )}
+          <button onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-colors w-full">
             <LogOut className="w-4 h-4" /> Sair
           </button>
-          <p className="px-3 text-[10px] text-sidebar-foreground/40 mt-2">© {new Date().getFullYear()} EscalaX</p>
         </div>
       </aside>
 
       {/* ═══ Main Column ═══ */}
       <div className="flex-1 flex flex-col min-w-0">
 
-        {/* Mobile/Tablet Header — hidden on lg+ */}
-        <header className="sticky top-0 z-40 gradient-dark px-4 py-3 flex items-center justify-between lg:hidden">
+        {/* Mobile Header */}
+        <header className="sticky top-0 z-40 h-14 px-4 flex items-center justify-between bg-background/80 backdrop-blur-xl border-b border-border/30 lg:hidden">
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate(-1)} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
+            <button onClick={() => navigate(-1)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <button onClick={() => navigate('/dashboard')} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
+            <button onClick={() => navigate('/dashboard')} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
               <Home className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2 ml-1">
-              <div className="w-7 h-7 rounded-lg gradient-sky flex items-center justify-center">
-                <Plane className="w-3.5 h-3.5 text-primary-foreground" />
+              <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center">
+                <Plane className="w-3 h-3 text-primary-foreground" />
               </div>
-              <span className="text-sm font-bold text-primary-foreground hidden sm:inline">EscalaX</span>
-              {pageTitle && <span className="text-sm text-primary-foreground/60 hidden sm:inline">/ {pageTitle}</span>}
+              {pageTitle && <span className="text-sm font-semibold text-foreground">{pageTitle}</span>}
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <Link to="/notifications" className="relative p-2 text-primary-foreground hover:bg-white/10 rounded-lg transition-colors">
+            <Link to="/notifications" className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
               <Bell className="w-5 h-5" />
-              {unreadCount > 0 && <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>}
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>
+              )}
             </Link>
-            <button onClick={() => setDrawerOpen(true)} className="text-primary-foreground p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <button onClick={() => setDrawerOpen(true)} className="p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
               <Menu className="w-5 h-5" />
             </button>
           </div>
         </header>
 
-        {/* Mobile page title */}
-        {pageTitle && (
-          <div className="lg:hidden px-4 pt-3 pb-1">
-            <h1 className="text-lg font-bold text-foreground">{pageTitle}</h1>
+        {/* Desktop top bar */}
+        <header className="hidden lg:flex h-14 px-6 items-center justify-between border-b border-border/30 bg-background/50 backdrop-blur-xl">
+          <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
+          <div className="flex items-center gap-3">
+            <Link to="/support" className="text-muted-foreground hover:text-foreground transition-colors">
+              <HelpCircle className="w-4 h-4" />
+            </Link>
+            <Link to="/notifications" className="relative text-muted-foreground hover:text-foreground transition-colors">
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{unreadCount}</span>
+              )}
+            </Link>
           </div>
-        )}
+        </header>
 
-        {/* Navigation Drawer (mobile/tablet) */}
+        {/* Mobile Drawer */}
         <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <SheetContent side="right" className="w-80 gradient-dark border-sidebar-border p-0">
-            <SheetHeader className="p-4 border-b border-sidebar-border">
-              <SheetTitle className="text-primary-foreground text-left">Navegação</SheetTitle>
+          <SheetContent side="right" className="w-72 bg-[hsl(222,47%,7%)] border-border/30 p-0">
+            <SheetHeader className="p-4 border-b border-border/30">
+              <SheetTitle className="text-foreground text-left text-sm">Menu</SheetTitle>
             </SheetHeader>
             {profile && (
-              <Link to="/profile" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 mx-4 mt-4 mb-2 p-3 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors">
+              <Link to="/profile" onClick={() => setDrawerOpen(false)}
+                className="flex items-center gap-3 mx-3 mt-3 mb-2 p-3 rounded-lg bg-secondary/30">
                 <Avatar className="w-8 h-8">
                   <AvatarImage src={profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary-foreground">{initials}</AvatarFallback>
+                  <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
-                  <p className="text-xs text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{profile.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
                 </div>
               </Link>
             )}
-            <nav className="p-4 space-y-0.5 overflow-y-auto max-h-[calc(100vh-220px)]">
-              {fullNav.map(item => {
+            <nav className="p-3 space-y-0.5">
+              {navItems.map(item => {
                 const active = location.pathname === item.path;
                 return (
                   <Link key={item.path} to={item.path} onClick={() => setDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${active ? 'bg-primary/20 text-primary-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                      active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                    }`}>
                     <item.icon className="w-4 h-4" />
                     {item.label}
-                    {item.path === '/notifications' && unreadCount > 0 && (
-                      <span className="ml-auto bg-destructive text-destructive-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
-                    )}
                   </Link>
                 );
               })}
+              <Link to="/support" onClick={() => setDrawerOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground">
+                <HelpCircle className="w-4 h-4" /> Suporte
+              </Link>
             </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-sidebar-border">
-              <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full">
-                <LogOut className="w-4 h-4" />Sair
+            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border/30">
+              <button onClick={handleLogout}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 w-full">
+                <LogOut className="w-4 h-4" /> Sair
               </button>
-              <p className="px-3 text-xs text-sidebar-foreground/50 mt-2">© {new Date().getFullYear()} EscalaX</p>
             </div>
           </SheetContent>
         </Sheet>
 
-        {/* Main Content — full width, responsive padding */}
+        {/* Content */}
         <main className="flex-1">
-          <div className="px-4 py-4 md:px-8 md:py-6 lg:px-10 lg:py-8 max-w-7xl mx-auto w-full">
+          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-6xl mx-auto w-full">
             {children}
           </div>
         </main>
