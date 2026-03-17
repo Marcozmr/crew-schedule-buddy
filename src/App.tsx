@@ -24,7 +24,7 @@ const RegulationPage = lazy(() => import("./pages/RegulationPage"));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
 const SalaryPage = lazy(() => import("./pages/SalaryPage"));
 const PerDiemPage = lazy(() => import("./pages/PerDiemPage"));
-const FlightSwapPage = lazy(() => import("./pages/FlightSwapPage"));
+
 const RestCalcPage = lazy(() => import("./pages/RestCalcPage"));
 const DutyCalcPage = lazy(() => import("./pages/DutyCalcPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
