@@ -152,6 +152,43 @@ export const rbac117FlightHours7Days: RegulationRule = {
   },
 };
 
+export const rbac117FlightHours90Days: RegulationRule = {
+  ruleId: 'RBAC117_FH_90D',
+  ruleSource: 'RBAC_117',
+  description: 'Limite de 230h de voo em 90 dias consecutivos (Tabela 5)',
+  evaluate(_duty, _rest, _fatigue, _context, accHours) {
+    const limit = 230;
+    const val = accHours.last90Days ?? 0;
+    const passed = val <= limit;
+    return {
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
+      severity: !passed ? 'critical' : val > limit * 0.85 ? 'warning' : 'info',
+      message: `${val}h de voo em 90 dias (limite: ${limit}h)`,
+      alertCode: passed ? undefined : 'FLIGHT_HOURS_EXCEEDED',
+      calculatedValue: val, limitUsed: limit,
+      context: { hours: val, limit },
+    };
+  },
+};
+
+export const rbac117FlightHours365Days: RegulationRule = {
+  ruleId: 'RBAC117_FH_365D',
+  ruleSource: 'RBAC_117',
+  description: 'Limite de 850h de voo em 365 dias (Tabela 5, RBAC 117)',
+  evaluate(_duty, _rest, _fatigue, _context, accHours) {
+    const limit = 850;
+    const passed = accHours.last365Days <= limit;
+    return {
+      ruleId: this.ruleId, ruleSource: this.ruleSource, passed,
+      severity: !passed ? 'critical' : accHours.last365Days > limit * 0.90 ? 'warning' : 'info',
+      message: `${accHours.last365Days}h de voo em 365 dias (limite RBAC: ${limit}h)`,
+      alertCode: passed ? undefined : 'FLIGHT_HOURS_EXCEEDED',
+      calculatedValue: accHours.last365Days, limitUsed: limit,
+      context: { hours: accHours.last365Days, limit },
+    };
+  },
+};
+
 export const rbac117WeeklyRest: RegulationRule = {
   ruleId: 'RBAC117_WEEKLY_REST',
   ruleSource: 'RBAC_117',
@@ -224,8 +261,10 @@ export const rbac117Rules: RegulationRule[] = [
   rbac117MaxDutyHours,
   rbac117MaxFlightHours,
   rbac117MinRest,
-  rbac117FlightHoursMonth,
   rbac117FlightHours7Days,
+  rbac117FlightHoursMonth,
+  rbac117FlightHours90Days,
+  rbac117FlightHours365Days,
   rbac117WeeklyRest,
   rbac117WoclExposure,
 ];

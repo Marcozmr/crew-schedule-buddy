@@ -105,15 +105,19 @@ async function sendSmtpEmail(options: {
   ehlo = await sendCommand(writer, reader, decoder, encoder, `EHLO escalax.app.br`);
   console.log(`[SMTP] TLS EHLO OK`);
 
-  // AUTH LOGIN
-  const authResp = await sendCommand(writer, reader, decoder, encoder, "AUTH LOGIN");
-  if (!authResp.startsWith("334")) throw new Error(`AUTH failed: ${authResp}`);
-
-  const userResp = await sendCommand(writer, reader, decoder, encoder, btoa(username));
-  if (!userResp.startsWith("334")) throw new Error(`AUTH user failed: ${userResp}`);
-
-  const passResp = await sendCommand(writer, reader, decoder, encoder, btoa(password));
-  if (!passResp.startsWith("235")) throw new Error(`AUTH pass failed: ${passResp}`);
+  // AUTH PLAIN (more compatible than AUTH LOGIN with Titan/Hostgator)
+  const credentials = btoa(`\x00${username}\x00${password}`);
+  const authResp = await sendCommand(writer, reader, decoder, encoder, `AUTH PLAIN ${credentials}`);
+  if (!authResp.startsWith("235")) {
+    // Fallback to AUTH LOGIN
+    console.log(`[SMTP] AUTH PLAIN failed (${authResp.substring(0, 40)}), trying AUTH LOGIN...`);
+    const loginResp = await sendCommand(writer, reader, decoder, encoder, "AUTH LOGIN");
+    if (!loginResp.startsWith("334")) throw new Error(`AUTH failed: ${loginResp}`);
+    const userResp = await sendCommand(writer, reader, decoder, encoder, btoa(username));
+    if (!userResp.startsWith("334")) throw new Error(`AUTH user failed: ${userResp}`);
+    const passResp = await sendCommand(writer, reader, decoder, encoder, btoa(password));
+    if (!passResp.startsWith("235")) throw new Error(`AUTH pass failed: ${passResp}`);
+  }
   console.log(`[SMTP] Authenticated`);
 
   // MAIL FROM
