@@ -40,7 +40,8 @@ export type {
   CrewRole,
   AircraftCategory,
   ActivityType,
-  StructuredAlert,
-} from './complianceEngine';
+} from './types';
+
+export type { StructuredAlert } from './alertsEngine';
 
 export type { StructuredAlert as Alert } from './alertsEngine';
