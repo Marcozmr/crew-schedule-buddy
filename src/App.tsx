@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
 import { lazy, Suspense } from "react";
+import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 
 // Eager-load auth pages (first paint)
 import LoginPage from "./pages/LoginPage";
