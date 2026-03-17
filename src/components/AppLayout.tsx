@@ -1,6 +1,10 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User, Home, Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight, BedDouble, Clock, Cloud, Settings, ChevronLeft } from 'lucide-react';
+import {
+  Plane, LayoutDashboard, Calendar, Search, Menu, X, LogOut, Bell, User, Home,
+  Download, FileText, FolderOpen, DollarSign, UtensilsCrossed, ArrowLeftRight,
+  BedDouble, Clock, Cloud, Settings, ChevronLeft
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -50,91 +54,152 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const pageTitle = fullNav.find(n => location.pathname === n.path)?.label || '';
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 gradient-dark px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate(-1)} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <button onClick={() => navigate('/dashboard')} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
-            <Home className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2 ml-1">
-            <div className="w-7 h-7 rounded-lg gradient-sky flex items-center justify-center">
-              <Plane className="w-3.5 h-3.5 text-primary-foreground" />
+    <div className="min-h-screen flex bg-background">
+
+      {/* ═══ Desktop Sidebar — hidden below lg ═══ */}
+      <aside className="hidden lg:flex flex-col w-60 shrink-0 sticky top-0 h-screen gradient-dark border-r border-sidebar-border overflow-y-auto">
+        {/* Brand */}
+        <div className="px-5 py-5 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl gradient-sky flex items-center justify-center shadow-glow-blue">
+            <Plane className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="text-lg font-extrabold text-primary-foreground tracking-tight">EscalaX</span>
+        </div>
+
+        {/* Profile mini */}
+        {profile && (
+          <Link to="/profile" className="mx-3 mb-3 flex items-center gap-2.5 p-2.5 rounded-xl bg-sidebar-accent/40 hover:bg-sidebar-accent transition-colors">
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={profile.avatar_url || undefined} />
+              <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary-foreground">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
+              <p className="text-[10px] text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
             </div>
-            <span className="text-sm font-bold text-primary-foreground hidden sm:inline">EscalaX</span>
-            {pageTitle && <span className="text-sm text-primary-foreground/60 hidden sm:inline">/ {pageTitle}</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <Link to="/notifications" className="relative p-2 text-primary-foreground hover:bg-white/10 rounded-lg transition-colors">
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>}
           </Link>
-          <button onClick={() => setDrawerOpen(true)} className="text-primary-foreground p-2 hover:bg-white/10 rounded-lg transition-colors">
-            <Menu className="w-5 h-5" />
+        )}
+
+        {/* Nav links */}
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
+          {fullNav.map(item => {
+            const active = location.pathname === item.path;
+            return (
+              <Link key={item.path} to={item.path}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  active
+                    ? 'bg-primary/20 text-primary-foreground shadow-glow-blue'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                }`}>
+                <item.icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+                {item.path === '/notifications' && unreadCount > 0 && (
+                  <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Logout */}
+        <div className="p-3 border-t border-sidebar-border mt-auto">
+          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full">
+            <LogOut className="w-4 h-4" /> Sair
           </button>
+          <p className="px-3 text-[10px] text-sidebar-foreground/40 mt-2">© {new Date().getFullYear()} EscalaX</p>
         </div>
-      </header>
+      </aside>
 
-      {/* Mobile page title */}
-      {pageTitle && (
-        <div className="sm:hidden px-4 pt-3 pb-1">
-          <h1 className="text-lg font-bold text-foreground">{pageTitle}</h1>
-        </div>
-      )}
+      {/* ═══ Main Column ═══ */}
+      <div className="flex-1 flex flex-col min-w-0">
 
-      {/* Navigation Drawer */}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-80 gradient-dark border-sidebar-border p-0">
-          <SheetHeader className="p-4 border-b border-sidebar-border">
-            <SheetTitle className="text-primary-foreground text-left">Navegação</SheetTitle>
-          </SheetHeader>
-          {profile && (
-            <Link to="/profile" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 mx-4 mt-4 mb-2 p-3 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={profile.avatar_url || undefined} />
-                <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary-foreground">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
-                <p className="text-xs text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
-              </div>
-            </Link>
-          )}
-          <nav className="p-4 space-y-0.5 overflow-y-auto max-h-[calc(100vh-220px)]">
-            {fullNav.map(item => {
-              const active = location.pathname === item.path;
-              return (
-                <Link key={item.path} to={item.path} onClick={() => setDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${active ? 'bg-primary/20 text-primary-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                  {item.path === '/notifications' && unreadCount > 0 && (
-                    <span className="ml-auto bg-destructive text-destructive-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-sidebar-border">
-            <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full">
-              <LogOut className="w-4 h-4" />Sair
+        {/* Mobile/Tablet Header — hidden on lg+ */}
+        <header className="sticky top-0 z-40 gradient-dark px-4 py-3 flex items-center justify-between lg:hidden">
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate(-1)} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
+              <ChevronLeft className="w-5 h-5" />
             </button>
-            <p className="px-3 text-xs text-sidebar-foreground/50 mt-2">© {new Date().getFullYear()} EscalaX. Desenvolvido por Marcos Vinicius.</p>
+            <button onClick={() => navigate('/dashboard')} className="text-primary-foreground p-1 hover:bg-white/10 rounded-lg transition-colors">
+              <Home className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 ml-1">
+              <div className="w-7 h-7 rounded-lg gradient-sky flex items-center justify-center">
+                <Plane className="w-3.5 h-3.5 text-primary-foreground" />
+              </div>
+              <span className="text-sm font-bold text-primary-foreground hidden sm:inline">EscalaX</span>
+              {pageTitle && <span className="text-sm text-primary-foreground/60 hidden sm:inline">/ {pageTitle}</span>}
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+          <div className="flex items-center gap-1">
+            <Link to="/notifications" className="relative p-2 text-primary-foreground hover:bg-white/10 rounded-lg transition-colors">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>}
+            </Link>
+            <button onClick={() => setDrawerOpen(true)} className="text-primary-foreground p-2 hover:bg-white/10 rounded-lg transition-colors">
+              <Menu className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
 
-      {/* Main Content */}
-      <main className="flex-1">
-        <div className="p-4 md:p-8 max-w-7xl mx-auto">{children}</div>
-      </main>
+        {/* Mobile page title */}
+        {pageTitle && (
+          <div className="lg:hidden px-4 pt-3 pb-1">
+            <h1 className="text-lg font-bold text-foreground">{pageTitle}</h1>
+          </div>
+        )}
 
-      <FeedbackFAB />
-      <PWAInstallPrompt />
+        {/* Navigation Drawer (mobile/tablet) */}
+        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <SheetContent side="right" className="w-80 gradient-dark border-sidebar-border p-0">
+            <SheetHeader className="p-4 border-b border-sidebar-border">
+              <SheetTitle className="text-primary-foreground text-left">Navegação</SheetTitle>
+            </SheetHeader>
+            {profile && (
+              <Link to="/profile" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 mx-4 mt-4 mb-2 p-3 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors">
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary-foreground">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-primary-foreground truncate">{profile.name}</p>
+                  <p className="text-xs text-sidebar-foreground truncate">{profile.airline || profile.email}</p>
+                </div>
+              </Link>
+            )}
+            <nav className="p-4 space-y-0.5 overflow-y-auto max-h-[calc(100vh-220px)]">
+              {fullNav.map(item => {
+                const active = location.pathname === item.path;
+                return (
+                  <Link key={item.path} to={item.path} onClick={() => setDrawerOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${active ? 'bg-primary/20 text-primary-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
+                    {item.path === '/notifications' && unreadCount > 0 && (
+                      <span className="ml-auto bg-destructive text-destructive-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-sidebar-border">
+              <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full">
+                <LogOut className="w-4 h-4" />Sair
+              </button>
+              <p className="px-3 text-xs text-sidebar-foreground/50 mt-2">© {new Date().getFullYear()} EscalaX</p>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Main Content — full width, responsive padding */}
+        <main className="flex-1">
+          <div className="px-4 py-4 md:px-8 md:py-6 lg:px-10 lg:py-8 max-w-7xl mx-auto w-full">
+            {children}
+          </div>
+        </main>
+
+        <FeedbackFAB />
+        <PWAInstallPrompt />
+      </div>
     </div>
   );
 }
