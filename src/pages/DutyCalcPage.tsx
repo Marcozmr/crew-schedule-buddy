@@ -1,5 +1,5 @@
 /**
- * EscalaX — Cálculo de Jornada (Clean SaaS UI)
+ * EscalaX — Cálculo de Jornada (Premium Light)
  */
 
 import { useState } from 'react';
@@ -46,16 +46,13 @@ export default function DutyCalcPage() {
   return (
     <AppLayout>
       <div className="pb-12">
-
-        {/* ═══ Two-column on desktop ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
 
           {/* LEFT: Form */}
           <div className="lg:col-span-5 space-y-5">
 
-            {/* Dados da Operação */}
             <motion.section
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.04, duration: 0.3 }}
               className="glass p-5 lg:p-6"
@@ -68,36 +65,35 @@ export default function DutyCalcPage() {
                 <div className="space-y-1.5">
                   <Label className="text-[11px] text-muted-foreground">Apresentação</Label>
                   <Input type="time" value={report} onChange={e => setReport(e.target.value)}
-                    className="font-mono text-sm h-10 bg-secondary/40 border-border/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                    className="font-mono text-sm h-10 bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/20" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] text-muted-foreground">Decolagem</Label>
                   <Input type="time" value={takeoff} onChange={e => setTakeoff(e.target.value)}
-                    className="font-mono text-sm h-10 bg-secondary/40 border-border/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                    className="font-mono text-sm h-10 bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/20" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] text-muted-foreground">Pouso</Label>
                   <Input type="time" value={landing} onChange={e => setLanding(e.target.value)}
-                    className="font-mono text-sm h-10 bg-secondary/40 border-border/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                    className="font-mono text-sm h-10 bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/20" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] text-muted-foreground">Etapas</Label>
                   <NumericInput value={stages} onValueChange={setStages} min={1} max={20} decimals={0} blurDefault={1}
-                    className="h-10 bg-secondary/40 border-border/50" />
+                    className="h-10 bg-secondary/50 border-border" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <Label className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                     <Timer className="w-3 h-3" /> Pós-voo (min)
                   </Label>
                   <NumericInput value={postFlight} onValueChange={setPostFlight} min={0} max={120} decimals={0} blurDefault={30}
-                    className="h-10 bg-secondary/40 border-border/50" />
+                    className="h-10 bg-secondary/50 border-border" />
                 </div>
               </div>
             </motion.section>
 
-            {/* Classificação */}
             <motion.section
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08, duration: 0.3 }}
               className="glass p-5 lg:p-6"
@@ -107,7 +103,6 @@ export default function DutyCalcPage() {
               </h2>
 
               <div className="space-y-4">
-                {/* Função */}
                 <div className="space-y-2">
                   <Label className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                     <User className="w-3 h-3" /> Função
@@ -117,8 +112,8 @@ export default function DutyCalcPage() {
                       <button key={role} onClick={() => setCrewRole(role)}
                         className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                           crewRole === role
-                            ? 'gradient-primary text-primary-foreground shadow-glow-blue'
-                            : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
+                            ? 'bg-primary text-primary-foreground shadow-glow-blue'
+                            : 'bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground'
                         }`}>
                         {role === 'piloto' ? 'Piloto' : 'Comissário(a)'}
                       </button>
@@ -126,7 +121,6 @@ export default function DutyCalcPage() {
                   </div>
                 </div>
 
-                {/* Tripulação */}
                 <div className="space-y-2">
                   <Label className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                     <Users className="w-3 h-3" /> Tripulação
@@ -140,8 +134,8 @@ export default function DutyCalcPage() {
                       <button key={ct.v} onClick={() => setCrewType(ct.v)}
                         className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                           crewType === ct.v
-                            ? 'gradient-primary text-primary-foreground shadow-glow-blue'
-                            : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
+                            ? 'bg-primary text-primary-foreground shadow-glow-blue'
+                            : 'bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground'
                         }`}>
                         {ct.l}
                       </button>
@@ -151,7 +145,6 @@ export default function DutyCalcPage() {
               </div>
             </motion.section>
 
-            {/* Error */}
             {error && (
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="text-sm text-destructive flex items-center gap-1.5">
@@ -159,9 +152,8 @@ export default function DutyCalcPage() {
               </motion.p>
             )}
 
-            {/* CTA */}
             <Button onClick={calculate} size="lg"
-              className="w-full h-12 text-sm font-semibold gradient-primary text-primary-foreground rounded-xl shadow-glow-blue hover:scale-[1.02] transition-all duration-200">
+              className="w-full h-12 text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-glow-blue hover:scale-[1.01] transition-all duration-200">
               <Shield className="w-4 h-4 mr-2" /> Calcular Jornada
             </Button>
           </div>
@@ -172,7 +164,7 @@ export default function DutyCalcPage() {
               {result ? (
                 <motion.div
                   key="result"
-                  initial={{ opacity: 0, y: 12 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   className="space-y-4 lg:sticky lg:top-24"
@@ -213,8 +205,7 @@ export default function DutyCalcPage() {
                         <ArrowRight className="w-2.5 h-2.5" />
                         <span className="font-medium text-foreground">{result.effectiveDutyLimit}h</span>
                       </div>
-                      {/* Progress */}
-                      <div className="mt-3 h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="mt-3 h-2 rounded-full bg-secondary overflow-hidden">
                         <motion.div
                           className={`h-full rounded-full ${
                             !result.dutyWithinLimit ? 'bg-destructive' :
@@ -240,7 +231,7 @@ export default function DutyCalcPage() {
                         <ArrowRight className="w-2.5 h-2.5" />
                         <span className="font-medium text-foreground">{result.effectiveFlightLimit}h</span>
                       </div>
-                      <div className="mt-3 h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="mt-3 h-2 rounded-full bg-secondary overflow-hidden">
                         <motion.div
                           className={`h-full rounded-full ${
                             !result.flightWithinLimit ? 'bg-destructive' :
@@ -273,7 +264,9 @@ export default function DutyCalcPage() {
                   animate={{ opacity: 1 }}
                   className="hidden lg:flex flex-col items-center justify-center h-full min-h-[300px] text-center"
                 >
-                  <Clock className="w-12 h-12 text-muted-foreground/20 mb-4" />
+                  <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mb-4">
+                    <Clock className="w-8 h-8 text-muted-foreground/40" />
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Preencha os dados e clique em Calcular
                   </p>
