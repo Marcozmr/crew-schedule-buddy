@@ -20,7 +20,7 @@ export default function OnboardingPage() {
 
   const handleClose = () => {
     setOpen(false);
-    navigate('/home', { replace: true });
+    navigate('/dashboard', { replace: true });
   };
 
   return (

@@ -18,6 +18,7 @@ import { OperationalPanel } from '@/components/dashboard/OperationalPanel';
 import { RegulationStatusPanel } from '@/components/dashboard/RegulationStatusPanel';
 import { ModuleNavigation } from '@/components/dashboard/ModuleNavigation';
 import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState';
+import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
 import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const { profile, user } = useAuth();
   const { schedule, loading, reload } = useScheduleData();
   const [unreadCount, setUnreadCount] = useState(0);
+  const { shouldShow: showOnboarding, dismiss: dismissOnboarding } = useOnboardingModal();
 
   useEffect(() => {
     if (!user) return;
@@ -44,8 +46,18 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="max-w-lg mx-auto pb-8">
+        {/* Onboarding modal for new users */}
+        <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
+
         {/* 1. User header */}
         <DashboardHeader unreadCount={unreadCount} />
+
+        {/* Loading state */}
+        {loading && (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
 
         {/* Empty state */}
         {!loading && schedule.length === 0 && (
