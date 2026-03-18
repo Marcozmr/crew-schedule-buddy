@@ -192,7 +192,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
 
         <Button onClick={handleCalculate} className="w-full h-11">
           <ShieldCheck className="w-4 h-4 mr-2" />
-          Calcular operação
+          Calcular jornada
         </Button>
       </section>
 
