@@ -60,13 +60,43 @@
     @apply border-border;
   }
 
+  html {
+    min-height: 100%;
+    height: 100%;
+    background: hsl(var(--background));
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  #root {
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
   }
 }
 
 @layer utilities {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-bottom-6 {
+    bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
+
   /* ─── Card styles ─── */
   .glass {
     background: hsl(0 0% 100%);
@@ -82,7 +112,6 @@
     box-shadow: 0 4px 6px -1px hsl(0 0% 0% / 0.05), 0 10px 15px -3px hsl(0 0% 0% / 0.05);
   }
 
-  /* ─── Gradients ─── */
   .gradient-primary {
     background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(221, 83%, 45%));
   }
@@ -95,7 +124,6 @@
     background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(200, 95%, 50%));
   }
 
-  /* ─── Shadows ─── */
   .shadow-card {
     box-shadow: 0 1px 3px hsl(0 0% 0% / 0.04), 0 1px 2px hsl(0 0% 0% / 0.06);
   }
@@ -108,13 +136,11 @@
     box-shadow: 0 0 16px hsl(221 83% 53% / 0.15);
   }
 
-  /* ─── Text gradient ─── */
   .text-gradient {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(200, 95%, 55%));
   }
 
-  /* ─── Hover lift ─── */
   .hover-lift {
     @apply transition-all duration-200;
   }
@@ -123,7 +149,6 @@
     box-shadow: 0 4px 12px hsl(0 0% 0% / 0.08);
   }
 
-  /* ─── Skeleton shimmer ─── */
   @keyframes shimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
@@ -135,7 +160,6 @@
     border-radius: 8px;
   }
 
-  /* Hide scrollbar */
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
