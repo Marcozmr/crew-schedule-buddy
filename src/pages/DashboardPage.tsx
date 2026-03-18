@@ -164,7 +164,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Horas 28 dias</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{Math.round(monthFlightHours)}h</p>
+                  <p className="text-lg font-semibold font-mono text-foreground">{formatHoursMinutes(monthFlightHours)}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
