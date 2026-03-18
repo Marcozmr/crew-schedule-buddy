@@ -65,12 +65,13 @@ export function calculateDuty(
   // Classify each ground gap as day/night
   const groundGapDetails: GroundGapDetail[] = classifyGroundTimes(gapStartUtcs, gapEndUtcs, timezone);
 
-  // End of duty: last block-on + 30min debrief
+  // End of duty: last block-on + pós-voo configurável
   const lastBlockOn = flightSegments.length > 0
     ? Math.max(...flightSegments.map(s => s.blockOn))
     : reportMs + 3600000; // fallback: 1h duty for non-flight duties
 
-  const endMs = lastBlockOn + DEBRIEF_MS;
+  const postFlightMinutes = input.postFlightMinutes ?? DEFAULT_POST_FLIGHT_MINUTES;
+  const endMs = lastBlockOn + postFlightMinutes * 60 * 1000;
   const totalDutyMs = endMs - reportMs;
 
   // Local time conversions
