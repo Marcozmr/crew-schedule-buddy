@@ -87,7 +87,7 @@ export default function RegulationPage() {
           scheduledDepartureUtc: depUtc,
           scheduledArrivalUtc: arrUtc,
           aircraftCategory: mapAircraftCategory(leg.aircraft_type),
-          activityType: (leg.is_flight ? 'flight' : 'ground_duty') as const,
+          activityType: (leg.is_flight ? 'flight' : 'ground_duty') as 'flight' | 'ground_duty',
           crossesMidnight: !!leg.crosses_midnight,
         };
       });
