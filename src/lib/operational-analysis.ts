@@ -203,9 +203,14 @@ export function buildOperationalWindow(
   };
 }
 
-function selectRelevantResult(results: ComplianceResult[], referenceDate: string): ComplianceResult | null {
+function selectRelevantResult(
+  results: ComplianceResult[],
+  referenceDate: string,
+  options?: { includePast?: boolean },
+): ComplianceResult | null {
   if (results.length === 0) return null;
 
+  const includePast = options?.includePast ?? true;
   const referenceMs = new Date(referenceDate).getTime();
 
   const current = results.find((result) => {
@@ -221,6 +226,7 @@ function selectRelevantResult(results: ComplianceResult[], referenceDate: string
     .sort((a, b) => new Date(a.duty.reportTimeUtc).getTime() - new Date(b.duty.reportTimeUtc).getTime())[0];
 
   if (next) return next;
+  if (!includePast) return null;
 
   return [...results]
     .filter((result) => new Date(result.duty.endTimeUtc).getTime() <= referenceMs)
