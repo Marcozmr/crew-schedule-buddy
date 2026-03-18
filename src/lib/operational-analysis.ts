@@ -37,8 +37,8 @@ export interface OperationalScheduleEntry {
   assignment: string | null;
   comments: string | null;
   sort_datetime: string | null;
-  hotel_name?: string | null;
-  raw_line?: string | null;
+  hotel_name: string | null;
+  raw_line: string | null;
 }
 
 export interface OperationalAnalysis {
