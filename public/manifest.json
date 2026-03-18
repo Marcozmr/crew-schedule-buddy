@@ -1,11 +1,12 @@
 {
   "name": "EscalaX",
   "short_name": "EscalaX",
-  "description": "EscalaX",
+  "description": "EscalaX — Gestão operacional e de escala para tripulantes",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B5ED7",
-  "theme_color": "#0B5ED7",
+  "background_color": "#F8FAFC",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/escalax-icon.png",

@@ -16,15 +16,13 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
       includeAssets: ["escalax-icon.png", "favicon.ico"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallbackDenylist: [/^\/~oauth/],
-        // Clean old caches on activate
         cleanupOutdatedCaches: true,
-        // Skip waiting so new SW activates immediately
-        skipWaiting: false,
+        skipWaiting: true,
         clientsClaim: true,
         runtimeCaching: [
           {
@@ -49,7 +47,7 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: "EscalaX",
         short_name: "EscalaX",
-        description: "EscalaX — Gestão de escala para tripulantes",
+        description: "EscalaX — Gestão operacional e de escala para tripulantes",
         start_url: "/",
         display: "standalone",
         background_color: "#F8FAFC",

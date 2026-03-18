@@ -6,44 +6,31 @@
 
 @layer base {
   :root {
-    /* ─── Premium Light Theme ─── */
     --background: 210 20% 98%;
     --foreground: 222 47% 11%;
-
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
-
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-
     --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
     --primary-glow: 221 83% 63%;
-
     --secondary: 210 18% 95%;
     --secondary-foreground: 215 20% 40%;
-
     --muted: 210 16% 93%;
     --muted-foreground: 215 16% 47%;
-
     --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
-
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
-
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 221 83% 53%;
-
     --radius: 0.75rem;
-
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 215 16% 47%;
     --sidebar-primary: 221 83% 53%;
@@ -64,6 +51,7 @@
     min-height: 100%;
     height: 100%;
     background: hsl(var(--background));
+    overflow-x: hidden;
   }
 
   body {
@@ -75,12 +63,14 @@
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+    overflow-x: hidden;
   }
 
   #root {
     min-height: 100vh;
     min-height: 100svh;
     min-height: 100dvh;
+    overflow-x: clip;
   }
 }
 
@@ -97,7 +87,10 @@
     bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }
 
-  /* ─── Card styles ─── */
+  .pb-safe-content {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
+
   .glass {
     background: hsl(0 0% 100%);
     border: 1px solid hsl(220 13% 91%);
@@ -144,6 +137,7 @@
   .hover-lift {
     @apply transition-all duration-200;
   }
+
   .hover-lift:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px hsl(0 0% 0% / 0.08);
@@ -153,6 +147,7 @@
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
   }
+
   .skeleton {
     background: linear-gradient(90deg, hsl(210 16% 93%) 25%, hsl(210 18% 96%) 50%, hsl(210 16% 93%) 75%);
     background-size: 200% 100%;
