@@ -207,14 +207,15 @@ export const rbac117WeeklyRest: RegulationRule = {
       new Date(a.reportTimeUtc).getTime() - new Date(b.reportTimeUtc).getTime()
     );
 
-    // Calculate end times (last leg arrival + 30min debrief)
+    // Calculate end times (last leg arrival + pós-voo configurável)
     let maxRestHours = 0;
     for (let i = 0; i < sorted.length - 1; i++) {
       const legs = sorted[i].legs.filter(l => l.activityType === 'flight' || l.activityType === 'positioning');
       const lastArrival = legs.length > 0
         ? Math.max(...legs.map(l => new Date(l.actualArrivalUtc || l.scheduledArrivalUtc).getTime()))
         : new Date(sorted[i].reportTimeUtc).getTime() + 3600000;
-      const endMs = lastArrival + 30 * 60000;
+      const postFlightMinutes = sorted[i].postFlightMinutes ?? 30;
+      const endMs = lastArrival + postFlightMinutes * 60000;
       const nextReportMs = new Date(sorted[i + 1].reportTimeUtc).getTime();
       const restHours = (nextReportMs - endMs) / 3600000;
       if (restHours > maxRestHours) maxRestHours = restHours;

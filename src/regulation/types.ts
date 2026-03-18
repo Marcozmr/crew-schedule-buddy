@@ -154,6 +154,8 @@ export interface DutyCalculation {
   dutyTimeBreakdown: TimeBreakdown;
   /** Whether this duty touches madrugada (00:00-06:00 local) */
   isMadrugadaDuty: boolean;
+  /** Pós-voo usado neste cálculo */
+  postFlightMinutes: number;
 }
 
 export interface RestCalculation {

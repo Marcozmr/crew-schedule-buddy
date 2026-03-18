@@ -112,6 +112,7 @@ export function calculateDuty(
       woclMinutes: dutyBreakdown.woclMinutes,
     },
     isMadrugadaDuty: dutyBreakdown.madrugadaMinutes > 0,
+    postFlightMinutes,
   };
 }
 
