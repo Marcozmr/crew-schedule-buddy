@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { formatDateBR } from '@/lib/date-utils';
+import { formatDateBR, formatHoursMinutes } from '@/lib/date-utils';
 import { groupIntoDutyPeriods, getTodayDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
 import { DutyPeriodCard } from '@/components/dashboard/DutyPeriodCard';
 
@@ -125,7 +125,7 @@ export default function DashboardPage() {
                   { title: 'Importar Escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
                   { title: 'Simular Jornada', desc: 'Limites RBAC 117', icon: Clock, path: '/duty-calc' },
                   { title: 'Cálc. Descanso', desc: 'Período mínimo', icon: BedDouble, path: '/rest-calc' },
-                  { title: 'Regulamentação', desc: 'Conformidade', icon: Shield, path: '/regulation' },
+                  { title: 'Simulador operacional', desc: 'Conformidade', icon: Shield, path: '/regulation' },
                   { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
                 ].map((card, i) => (
                   card.action === 'import' ? (
@@ -164,7 +164,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Horas 28 dias</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{Math.round(monthFlightHours)}h</p>
+                  <p className="text-lg font-semibold font-mono text-foreground">{formatHoursMinutes(monthFlightHours)}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
@@ -173,7 +173,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Jornada mês</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{Math.round(monthDutyHours)}h</p>
+                  <p className="text-lg font-semibold font-mono text-foreground">{formatHoursMinutes(monthDutyHours)}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
@@ -193,7 +193,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Status</p>
-                  <p className="text-sm font-semibold text-success">Regular</p>
+                  <p className="text-sm font-semibold text-success">Situação normal</p>
                 </div>
               </div>
             </motion.div>
@@ -201,7 +201,7 @@ export default function DashboardPage() {
             {/* ═══ Today's Duty Periods ═══ */}
             <motion.div {...fade(0.1)}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-foreground">Jornadas de hoje</h2>
+                <h2 className="text-sm font-semibold text-foreground">Operações de hoje</h2>
                 <PdfImportDialog onImportComplete={reload} trigger={
                   <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary hover:bg-primary/8 gap-1.5 h-8">
                     <Upload className="w-3.5 h-3.5" /> Importar
@@ -224,7 +224,7 @@ export default function DashboardPage() {
                       Próxima: <span className="text-foreground font-medium">{nextDuty.routeSummary}</span> em{' '}
                       <span className="text-foreground font-medium">{formatDateBR(nextDuty.dutyStartDate)}</span>
                       {nextDuty.reportTime && (
-                        <> · APR <span className="font-mono text-foreground">{nextDuty.reportTime}</span></>
+                        <> · Apresentação <span className="font-mono text-foreground">{nextDuty.reportTime}</span></>
                       )}
                     </p>
                   )}
@@ -235,10 +235,10 @@ export default function DashboardPage() {
             {/* ═══ Quick Actions ═══ */}
             <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
-                { label: 'Ver Escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
+                { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
                 { label: 'Calcular Jornada', path: '/duty-calc', icon: Clock, desc: 'Limites RBAC 117' },
                 { label: 'Calcular Descanso', path: '/rest-calc', icon: BedDouble, desc: 'Período mínimo' },
-                { label: 'Regulamentação', path: '/regulation', icon: Shield, desc: 'Status de conformidade' },
+                { label: 'Simulador operacional', path: '/regulation', icon: Shield, desc: 'Status de conformidade' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
               ].map(item => (
                 <Link key={item.path} to={item.path}

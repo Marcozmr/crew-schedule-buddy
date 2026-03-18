@@ -77,6 +77,8 @@ export interface DutyPeriodInput {
   baseAirport: string;
   crewRole: CrewRole;
   aircraftCategory: AircraftCategory;
+  /** Pós-voo configurável (min), default 30 */
+  postFlightMinutes?: number;
 }
 
 export interface CrewContext {
@@ -121,7 +123,7 @@ export interface GroundGapDetail {
 // ─── Calculated output types ───
 
 export interface DutyCalculation {
-  /** Report time → 30min after last block-on (ms) */
+  /** Report time → último block-on + pós-voo (ms) */
   totalDutyMs: number;
   totalDutyHours: number;
   /** Sum of block-off → block-on across all legs (ms) */
@@ -152,6 +154,8 @@ export interface DutyCalculation {
   dutyTimeBreakdown: TimeBreakdown;
   /** Whether this duty touches madrugada (00:00-06:00 local) */
   isMadrugadaDuty: boolean;
+  /** Pós-voo usado neste cálculo */
+  postFlightMinutes: number;
 }
 
 export interface RestCalculation {
