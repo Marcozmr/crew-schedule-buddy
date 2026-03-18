@@ -93,7 +93,7 @@ export default function DashboardPage() {
   });
 
   const statusResult = analysis?.focus ?? null;
-  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Situação normal';
+  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Dentro dos limites';
 
   return (
     <AppLayout>
