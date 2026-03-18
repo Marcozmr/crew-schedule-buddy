@@ -50,21 +50,21 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
     return [
       {
         label: 'Jornada',
-        value: formatHoursMinutes(latest.duty.totalDutyHours),
+        value: formatHoursMinutes(focus.duty.totalDutyHours),
         ratio: dutyRule?.limitUsed ? Math.min(((dutyRule.calculatedValue ?? 0) / dutyRule.limitUsed) * 100, 100) : 0,
         status: mapRuleStatus(dutyRule?.severity),
         icon: Clock,
       },
       {
         label: 'Tempo de voo',
-        value: formatHoursMinutes(latest.duty.totalFlightHours),
+        value: formatHoursMinutes(focus.duty.totalFlightHours),
         ratio: flightRule?.limitUsed ? Math.min(((flightRule.calculatedValue ?? 0) / flightRule.limitUsed) * 100, 100) : 0,
         status: mapRuleStatus(flightRule?.severity),
         icon: Plane,
       },
       {
         label: 'Descanso',
-        value: latest.rest.restBeforeDutyHours == null ? '—' : formatHoursMinutes(latest.rest.restBeforeDutyHours),
+        value: focus.rest.restBeforeDutyHours == null ? '—' : formatHoursMinutes(focus.rest.restBeforeDutyHours),
         ratio: restRule?.limitUsed && restRule.calculatedValue != null ? Math.min((restRule.calculatedValue / restRule.limitUsed) * 100, 100) : 0,
         status: mapRuleStatus(restRule?.severity),
         icon: BedDouble,
