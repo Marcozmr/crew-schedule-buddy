@@ -193,7 +193,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Status</p>
-                  <p className="text-sm font-semibold text-success">Regular</p>
+                  <p className="text-sm font-semibold text-success">Situação normal</p>
                 </div>
               </div>
             </motion.div>
