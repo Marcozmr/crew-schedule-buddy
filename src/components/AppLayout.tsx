@@ -202,7 +202,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
         </Sheet>
 
         <main className="flex-1 overflow-x-hidden overflow-y-visible">
-          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-6xl mx-auto w-full safe-area-bottom pb-safe-content">
+          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-screen-2xl mx-auto w-full safe-area-bottom pb-safe-content">
             {children}
           </div>
         </main>
@@ -396,7 +396,7 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
         </Sheet>
 
         <main className="flex-1 overflow-x-hidden overflow-y-visible">
-          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-6xl mx-auto w-full safe-area-bottom pb-safe-content">
+          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-screen-2xl mx-auto w-full safe-area-bottom pb-safe-content">
             {children}
           </div>
         </main>

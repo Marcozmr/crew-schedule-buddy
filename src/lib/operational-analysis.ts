@@ -59,6 +59,13 @@ export interface DashboardStatusSummary {
   reason?: string;
 }
 
+export interface MonthlyStatusSummary extends DashboardStatusSummary {
+  usedHours: number;
+  limitHours: number;
+  metricLabel: string;
+  windowLabel: string;
+}
+
 const CURRENT_OPERATION_RULE_IDS = new Set([
   'RBAC117_MAX_DUTY',
   'RBAC117_MAX_FLIGHT',
@@ -180,39 +187,47 @@ export function getOperationalStatusSummary(result: ComplianceResult | null): Da
   };
 }
 
-export function getMonthlyStatusSummary(result: ComplianceResult | null): DashboardStatusSummary {
+export function getMonthlyStatusSummary(result: ComplianceResult | null): MonthlyStatusSummary {
   const monthlyRule = result?.rules.find((rule) => rule.ruleId === 'RBAC117_FH_MONTH');
-
-  if (!monthlyRule) {
-    return {
-      tone: 'regular',
-      label: 'Regular',
-      subtitle: 'Dentro do esperado',
-    };
-  }
-
+  const usedHours = monthlyRule?.calculatedValue ?? result?.accumulatedHours.last30Days ?? 0;
+  const limitHours = monthlyRule?.limitUsed ?? 85;
   const ratio = usageRatio(monthlyRule);
 
-  if (!monthlyRule.passed) {
+  if (!monthlyRule || !monthlyRule.passed) {
     return {
-      tone: 'critical',
-      label: 'Crítico',
-      subtitle: 'Limite mensal atingido',
+      tone: monthlyRule ? 'critical' : 'regular',
+      label: monthlyRule ? 'Crítico' : 'Regular',
+      subtitle: monthlyRule ? 'Limite mensal excedido' : 'Dentro do limite mensal',
+      reason: 'Horas de voo acumuladas nos últimos 30 dias.',
+      usedHours,
+      limitHours,
+      metricLabel: 'Horas de voo',
+      windowLabel: 'Últimos 30 dias',
     };
   }
 
-  if (ratio >= 0.85) {
+  if (ratio >= 0.85 || monthlyRule.severity === 'warning') {
     return {
       tone: 'attention',
       label: 'Atenção',
       subtitle: 'Próximo do limite mensal',
+      reason: 'Horas de voo acumuladas nos últimos 30 dias.',
+      usedHours,
+      limitHours,
+      metricLabel: 'Horas de voo',
+      windowLabel: 'Últimos 30 dias',
     };
   }
 
   return {
     tone: 'regular',
     label: 'Regular',
-    subtitle: 'Dentro do esperado',
+    subtitle: 'Dentro do limite mensal',
+    reason: 'Horas de voo acumuladas nos últimos 30 dias.',
+    usedHours,
+    limitHours,
+    metricLabel: 'Horas de voo',
+    windowLabel: 'Últimos 30 dias',
   };
 }
 

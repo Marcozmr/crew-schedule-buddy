@@ -35,7 +35,7 @@ export default function SettingsPage() {
           theme: data.theme || 'system',
         });
       } else {
-        setForm(f => ({ ...f, name: profile?.name || '', company_name: profile?.airline || '' }));
+        setForm((current) => ({ ...current, name: profile?.name || '', company_name: profile?.airline || '' }));
       }
     });
   }, [user, profile]);
@@ -68,53 +68,75 @@ export default function SettingsPage() {
 
   return (
     <AppLayout>
-      <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
-        <Settings className="w-6 h-6 text-primary" />Configurações
-      </motion.h1>
-      <div className="max-w-lg space-y-6">
-        <div className="bg-card rounded-xl p-6 shadow-card border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Perfil</h3>
-          <div className="space-y-3">
-            <div><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><Label className="text-xs">Base</Label><Input value={form.base_airport} onChange={e => setForm(f => ({ ...f, base_airport: e.target.value }))} placeholder="BSB" /></div>
-            <div><Label className="text-xs">Função</Label><Input value={form.crew_role} onChange={e => setForm(f => ({ ...f, crew_role: e.target.value }))} placeholder="Comandante, Copiloto, Comissário..." /></div>
-            <div><Label className="text-xs">Empresa</Label><Input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="LATAM" /></div>
-          </div>
-        </div>
-        <div className="bg-card rounded-xl p-6 shadow-card border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Preferências</h3>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-xs">Fuso horário</Label>
-              <Select value={form.timezone} onValueChange={v => setForm(f => ({ ...f, timezone: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="America/Sao_Paulo">America/Sao_Paulo (BRT)</SelectItem>
-                  <SelectItem value="America/Manaus">America/Manaus (AMT)</SelectItem>
-                  <SelectItem value="America/Belem">America/Belem (BRT)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Tema</Label>
-              <Select value={form.theme} onValueChange={v => setForm(f => ({ ...f, theme: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="system">Sistema</SelectItem>
-                  <SelectItem value="light">Claro</SelectItem>
-                  <SelectItem value="dark">Escuro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center justify-between">
-              <Label>Notificações</Label>
-              <Switch checked={form.notifications_enabled} onCheckedChange={v => setForm(f => ({ ...f, notifications_enabled: v }))} />
+      <div className="max-w-4xl space-y-6 pb-10 min-w-0">
+        <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-foreground flex items-center gap-2 break-words">
+          <Settings className="w-6 h-6 text-primary shrink-0" /> Configurações
+        </motion.h1>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
+          <div className="glass p-5 sm:p-6 min-w-0">
+            <h3 className="font-semibold text-foreground mb-4">Perfil</h3>
+            <div className="space-y-3 min-w-0">
+              <div className="space-y-1.5 min-w-0">
+                <Label className="text-xs">Nome</Label>
+                <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+              </div>
+              <div className="space-y-1.5 min-w-0">
+                <Label className="text-xs">Base</Label>
+                <Input value={form.base_airport} onChange={(event) => setForm((current) => ({ ...current, base_airport: event.target.value }))} placeholder="BSB" />
+              </div>
+              <div className="space-y-1.5 min-w-0">
+                <Label className="text-xs">Função</Label>
+                <Input value={form.crew_role} onChange={(event) => setForm((current) => ({ ...current, crew_role: event.target.value }))} placeholder="Comandante, Copiloto, Comissário..." />
+              </div>
+              <div className="space-y-1.5 min-w-0">
+                <Label className="text-xs">Empresa</Label>
+                <Input value={form.company_name} onChange={(event) => setForm((current) => ({ ...current, company_name: event.target.value }))} placeholder="LATAM" />
+              </div>
             </div>
           </div>
+
+          <div className="glass p-5 sm:p-6 min-w-0">
+            <h3 className="font-semibold text-foreground mb-4">Preferências</h3>
+            <div className="space-y-4 min-w-0">
+              <div className="space-y-1.5 min-w-0">
+                <Label className="text-xs">Fuso horário</Label>
+                <Select value={form.timezone} onValueChange={(value) => setForm((current) => ({ ...current, timezone: value }))}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/Sao_Paulo">America/Sao_Paulo (BRT)</SelectItem>
+                    <SelectItem value="America/Manaus">America/Manaus (AMT)</SelectItem>
+                    <SelectItem value="America/Belem">America/Belem (BRT)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 min-w-0">
+                <Label className="text-xs">Tema</Label>
+                <Select value={form.theme} onValueChange={(value) => setForm((current) => ({ ...current, theme: value }))}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">Sistema</SelectItem>
+                    <SelectItem value="light">Claro</SelectItem>
+                    <SelectItem value="dark">Escuro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <Label className="break-words">Notificações</Label>
+                <Switch checked={form.notifications_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, notifications_enabled: value }))} />
+              </div>
+            </div>
+          </div>
         </div>
-        <Button onClick={handleSave} disabled={saving} className="w-full"><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar configurações'}</Button>
-        <div className="pt-4 border-t border-border">
-          <Button variant="outline" className="w-full text-destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sair da conta</Button>
+
+        <div className="flex flex-col gap-3 sm:flex-row min-w-0">
+          <Button onClick={handleSave} disabled={saving} className="w-full sm:flex-1">
+            <Save className="w-4 h-4 mr-2 shrink-0" />
+            {saving ? 'Salvando...' : 'Salvar configurações'}
+          </Button>
+          <Button variant="outline" className="w-full sm:w-auto text-destructive" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 mr-2 shrink-0" /> Sair da conta
+          </Button>
         </div>
       </div>
     </AppLayout>
