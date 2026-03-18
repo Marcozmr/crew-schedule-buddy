@@ -21,7 +21,7 @@ interface ScenarioResult {
 }
 
 function formatStatus(status: string): string {
-  if (status === 'COMPLIANT') return 'Regular';
+  if (status === 'COMPLIANT') return 'Dentro dos limites';
   if (status === 'WARNING') return 'Atenção';
   return 'Crítico';
 }
@@ -114,7 +114,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
         <div>
           <h2 className="text-lg font-semibold text-foreground">Cálculo operacional avançado</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Usa o mesmo motor operacional do dashboard, da análise e dos alertas.
+            Simule a jornada com a mesma base usada no painel, nos alertas e no descanso.
           </p>
         </div>
 
@@ -192,7 +192,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
 
         <Button onClick={handleCalculate} className="w-full h-11">
           <ShieldCheck className="w-4 h-4 mr-2" />
-          Calcular operação
+          Calcular jornada
         </Button>
       </section>
 
@@ -201,7 +201,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
           <div className="glass p-8 min-h-[320px] flex items-center justify-center text-center">
             <div>
               <ShieldAlert className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">Preencha os horários para calcular jornada, descanso e status operacional.</p>
+              <p className="text-sm text-muted-foreground">Preencha os horários para calcular jornada, descanso e situação operacional.</p>
             </div>
           </div>
         ) : (
@@ -209,8 +209,9 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Status operacional</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Situação operacional</p>
                   <h3 className="text-xl font-semibold text-foreground mt-1">{formatStatus(result.compliance.status)}</h3>
+                  <p className="text-[11px] text-muted-foreground mt-1">{result.compliance.alerts[0]?.message || 'Baseado na jornada atual e acumulados recentes.'}</p>
                 </div>
                 <div className={`rounded-full px-3 py-1 text-xs font-semibold ${result.compliance.status === 'COMPLIANT' ? 'bg-success/10 text-success' : result.compliance.status === 'WARNING' ? 'bg-warning/10 text-warning' : 'bg-destructive/10 text-destructive'}`}>
                   {result.compliance.status === 'COMPLIANT' ? 'Dentro do limite' : result.compliance.status === 'WARNING' ? 'Próximo do limite' : 'Limite violado'}
@@ -240,9 +241,9 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
                 <p className="text-xs text-muted-foreground mt-1">O descanso começa somente após o término operacional.</p>
               </div>
               <div className="glass p-5">
-                <p className="text-xs text-muted-foreground flex items-center gap-2"><MoonStar className="w-4 h-4 text-primary" /> WOCL / Madrugada</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-2"><MoonStar className="w-4 h-4 text-primary" /> Janela circadiana / Madrugada</p>
                 <p className="text-base font-semibold text-foreground mt-2">
-                  {result.compliance.fatigue.woclExposure.totalMinutes > 0 ? `WOCL ${result.compliance.fatigue.woclExposure.totalMinutes} min` : 'Sem WOCL'}
+                  {result.compliance.fatigue.woclExposure.totalMinutes > 0 ? `Janela circadiana ${result.compliance.fatigue.woclExposure.totalMinutes} min` : 'Sem exposição na madrugada'}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">{currentDuty.isMadrugadaDuty ? 'A jornada toca a faixa 00:00–06:00.' : 'Sem operação em madrugada.'}</p>
               </div>

@@ -69,7 +69,7 @@ export default function SettingsPage() {
   return (
     <AppLayout>
       <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
-        <Settings className="w-6 h-6 text-primary" />Ajustes
+        <Settings className="w-6 h-6 text-primary" />Configurações
       </motion.h1>
       <div className="max-w-lg space-y-6">
         <div className="bg-card rounded-xl p-6 shadow-card border border-border">
@@ -85,7 +85,7 @@ export default function SettingsPage() {
           <h3 className="font-semibold text-foreground mb-4">Preferências</h3>
           <div className="space-y-4">
             <div>
-              <Label className="text-xs">Timezone</Label>
+              <Label className="text-xs">Fuso horário</Label>
               <Select value={form.timezone} onValueChange={v => setForm(f => ({ ...f, timezone: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -112,9 +112,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={saving} className="w-full"><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar Ajustes'}</Button>
+        <Button onClick={handleSave} disabled={saving} className="w-full"><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar configurações'}</Button>
         <div className="pt-4 border-t border-border">
-          <Button variant="outline" className="w-full text-destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sair da Conta</Button>
+          <Button variant="outline" className="w-full text-destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sair da conta</Button>
         </div>
       </div>
     </AppLayout>

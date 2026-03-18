@@ -135,7 +135,7 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-foreground">Companhia Aérea</Label>
+              <Label className="text-foreground">Companhia aérea</Label>
               <Input
                 placeholder="Ex: LATAM, GOL, Azul"
                 value={form.airline}
@@ -156,7 +156,7 @@ export default function ProfilePage() {
 
             <Button onClick={handleSave} disabled={saving} className="w-full h-11 gradient-sky text-primary-foreground font-semibold mt-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-              Salvar Alterações
+              Salvar alterações
             </Button>
           </div>
         </motion.div>

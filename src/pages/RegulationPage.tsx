@@ -26,7 +26,7 @@ export default function RegulationPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-foreground">Calculadora operacional</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Motor único de análise operacional aplicado no dashboard, jornada, descanso, alertas e limites.
+            Análise aplicada de forma consistente no painel, na jornada, no descanso e nos alertas.
           </p>
         </motion.div>
 
@@ -49,6 +49,7 @@ export default function RegulationPage() {
                 <div className="rounded-xl bg-secondary/50 p-4">
                   <p className="text-xs text-muted-foreground">Situação atual</p>
                   <p className="text-base font-semibold text-foreground mt-1">{focus ? formatComplianceStatus(focus.status) : 'Sem jornada relevante'}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">{focus?.alerts?.[0]?.message || 'Baseado na jornada atual e acumulados recentes.'}</p>
                 </div>
                 <div className="rounded-xl bg-secondary/50 p-4">
                   <p className="text-xs text-muted-foreground">Jornadas avaliadas</p>
@@ -59,8 +60,8 @@ export default function RegulationPage() {
                   <p className="text-base font-semibold text-foreground mt-1">{focusAlerts.length}</p>
                 </div>
                 <div className="rounded-xl bg-secondary/50 p-4">
-                  <p className="text-xs text-muted-foreground">Motor</p>
-                  <p className="text-base font-semibold text-foreground mt-1">Análise operacional</p>
+                  <p className="text-xs text-muted-foreground">Referência</p>
+                  <p className="text-base font-semibold text-foreground mt-1">Jornada atual e acumulados</p>
                 </div>
               </div>
             </div>

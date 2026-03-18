@@ -93,7 +93,7 @@ export default function DashboardPage() {
   });
 
   const statusResult = analysis?.focus ?? null;
-  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Situação normal';
+  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Dentro dos limites';
 
   return (
     <AppLayout>
@@ -130,7 +130,7 @@ export default function DashboardPage() {
                 { label: 'Horas 30 dias', value: '0h00', icon: Clock },
                 { label: 'Jornada mês', value: '0h00', icon: Gauge },
                 { label: 'Próximo voo', value: '—', icon: Plane },
-                { label: 'Status', value: 'Situação normal', icon: Shield, status: 'success' as const },
+                { label: 'Situação', value: 'Dentro dos limites', icon: Shield, status: 'success' as const },
               ].map((stat, index) => (
                 <div key={index} className="glass p-4 flex items-center gap-3 hover-lift">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${stat.status === 'success' ? 'bg-success/10' : 'bg-primary/8'}`}>
@@ -151,8 +151,8 @@ export default function DashboardPage() {
                   { title: 'Importar escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
                   { title: 'Calcular jornada', desc: 'Cálculo operacional', icon: Clock, path: '/duty-calc' },
                   { title: 'Calcular descanso', desc: 'Repouso real', icon: BedDouble, path: '/rest-calc' },
-                  { title: 'Calculadora operacional', desc: 'Análise completa', icon: Shield, path: '/regulation' },
-                  { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
+                  { title: 'Calculadora operacional', desc: 'Visão completa', icon: Shield, path: '/regulation' },
+                  { title: 'Configurações', desc: 'Preferências do app', icon: Settings, path: '/settings' },
                 ].map((card, index) => (
                   card.action === 'import' ? (
                     <PdfImportDialog key={index} onImportComplete={reload} trigger={
@@ -214,8 +214,9 @@ export default function DashboardPage() {
                   <Shield className={`w-5 h-5 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Status</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Situação</p>
                   <p className={`text-sm font-semibold ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{statusResult?.alerts?.[0]?.message || 'Baseado na jornada atual e acumulados recentes.'}</p>
                 </div>
               </div>
             </motion.div>
@@ -258,7 +259,7 @@ export default function DashboardPage() {
                 { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
                 { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'Cálculo operacional' },
                 { label: 'Calcular descanso', path: '/rest-calc', icon: BedDouble, desc: 'Repouso operacional' },
-                { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Status e limites' },
+                { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Situação e limites' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
               ].map((item) => (
                 <Link key={item.path} to={item.path} className="glass px-4 py-3.5 flex items-center gap-3 hover-lift group">

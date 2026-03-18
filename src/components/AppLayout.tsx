@@ -9,7 +9,7 @@ import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Painel', icon: LayoutDashboard },
   { path: '/schedule', label: 'Calendário da escala', icon: Calendar },
   { path: '/duty-calc', label: 'Calcular jornada', icon: Clock },
   { path: '/rest-calc', label: 'Calcular descanso', icon: BedDouble },

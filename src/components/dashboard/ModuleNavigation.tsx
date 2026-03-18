@@ -120,7 +120,7 @@ export function ModuleNavigation() {
       <div className="flex gap-3">
         <Link to="/settings" className="flex-1 glass rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-secondary/30 transition-colors">
           <Settings className="w-4 h-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-secondary-foreground">Ajustes</span>
+          <span className="text-xs font-medium text-secondary-foreground">Configurações</span>
         </Link>
         <button onClick={handleLogout} className="flex-1 glass rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-destructive/10 transition-colors text-left">
           <LogOut className="w-4 h-4 text-destructive/70" />

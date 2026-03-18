@@ -173,7 +173,7 @@ export default function UploadPage() {
           <Textarea placeholder="Cole o texto da sua escala aqui..." value={textInput} onChange={e => setTextInput(e.target.value)} className="min-h-[160px] font-mono text-sm mb-4" />
           <div className="flex gap-3">
             <Button onClick={handlePasteSubmit} disabled={processing} className="gradient-sky text-primary-foreground">
-              {processing ? 'Processando...' : 'Processar Escala'}
+              {processing ? 'Processando...' : 'Processar escala'}
             </Button>
             <Button variant="outline" onClick={() => { setTextInput(sampleData); toast.info('Dados de exemplo carregados'); }}>
               Carregar exemplo
