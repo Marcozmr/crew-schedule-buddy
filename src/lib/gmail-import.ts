@@ -66,6 +66,7 @@ export type ImportScheduleResult = {
   importedCount: number;
   parsedCount: number;
   airline: string;
+  rosterId?: string | null;
   reason?: string;
   parserError?: string;
   diagnostic: ImportDiagnostic;
@@ -101,7 +102,6 @@ const STORAGE_FILENAME = 'CrewRosterReport.pdf';
 function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
-
 
 function decodeBase64UrlToBytes(input: string): Uint8Array {
   const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -159,7 +159,7 @@ async function listCandidateMessageIds(providerToken: string, query: string): Pr
 
     const list = await gmailFetch<GmailListResponse>(
       providerToken,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${queryParams.toString()}`
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${queryParams.toString()}`,
     );
 
     (list.messages ?? []).forEach((message) => messageIds.add(message.id));
@@ -229,7 +229,7 @@ function collectPdfParts(payload: GmailPayload | undefined, results: PdfPartCand
 async function loadPdfBytesFromPart(
   providerToken: string,
   messageId: string,
-  part: GmailPayload
+  part: GmailPayload,
 ): Promise<Uint8Array | null> {
   if (part.body?.data) {
     return decodeBase64UrlToBytes(part.body.data);
@@ -241,7 +241,7 @@ async function loadPdfBytesFromPart(
 
   const attachment = await gmailFetch<{ data?: string }>(
     providerToken,
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${part.body.attachmentId}`
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${part.body.attachmentId}`,
   );
 
   if (!attachment.data) return null;
@@ -252,7 +252,7 @@ async function findPdfInGmail(
   providerToken: string,
   searchQuery: string,
   subjectContains: string,
-  senderContains: string
+  senderContains: string,
 ): Promise<GmailSearchResult> {
   const messageIds = await listCandidateMessageIds(providerToken, searchQuery);
   const normalizedSubject = normalizeText(subjectContains);
@@ -264,7 +264,7 @@ async function findPdfInGmail(
   for (const messageId of messageIds) {
     const message = await gmailFetch<GmailMessageResponse>(
       providerToken,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
     );
 
     const subjectHeader = getHeaderValue(message.payload?.headers, 'Subject');
@@ -471,12 +471,14 @@ function buildImportResult(
   airline: string,
   diagnostic: ImportDiagnostic,
   reason?: string,
-  parserError?: string
+  parserError?: string,
+  rosterId: string | null = null,
 ): ImportScheduleResult {
   return {
     importedCount,
     parsedCount,
     airline,
+    rosterId,
     reason,
     parserError,
     diagnostic: finalizeDiagnostic(diagnostic),
@@ -514,7 +516,7 @@ async function saveParserFailureLog(
   userId: string,
   messageId: string,
   extractedText: string,
-  parserError: string
+  parserError: string,
 ): Promise<string | null> {
   const parserLogPath = `${userId}/parser-failures/${messageId}-${Date.now()}.txt`;
   const payload = `parser_error: ${parserError}\n\nextracted_text:\n${extractedText}`;
@@ -531,7 +533,7 @@ async function saveParserFailureLog(
 export async function importScheduleFromGmail(
   userId: string,
   providerToken: string,
-  options?: ImportRouteOptions
+  options?: ImportRouteOptions,
 ): Promise<ImportScheduleResult> {
   const diagnostic = createInitialDiagnostic(Boolean(userId));
   const searchQuery = options?.searchQuery ?? DEFAULT_SEARCH_QUERY;
@@ -636,7 +638,6 @@ export async function importScheduleFromGmail(
 
   const airline = detectAirline(extractedText);
 
-  // Desativa escala ativa anterior e cria nova escala ativa para este import Gmail
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase.from('imported_rosters') as any)
     .update({ is_active: false })
@@ -656,6 +657,9 @@ export async function importScheduleFromGmail(
       inserted_count: 0,
       is_active: true,
       raw_text_excerpt: extractedText.substring(0, 2000),
+      import_origin: 'portal_sync',
+      connector_key: 'latam_connector',
+      synced_at: new Date().toISOString(),
     })
     .select('id')
     .single();
@@ -718,7 +722,7 @@ export async function importScheduleFromGmail(
         await (supabase.from('imported_rosters') as any)
           .update({ import_status: 'error', import_error: diagnostic.final_error, inserted_count: 0 })
           .eq('id', rosterId);
-        return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
+        return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error, undefined, rosterId);
       }
 
       insertedRowsCount = partialInsertCount;
@@ -748,7 +752,7 @@ export async function importScheduleFromGmail(
   if (insertedRowsCount > 0 && (rosterRowsCountAfterInsert ?? 0) === 0) {
     diagnostic.db_insert_ok = false;
     diagnostic.final_error = 'Os voos não ficaram vinculados ao roster ativo.';
-    return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error);
+    return buildImportResult(0, parsedEntries.length, airline, diagnostic, diagnostic.final_error, undefined, rosterId);
   }
 
   diagnostic.db_insert_ok = true;
@@ -762,7 +766,7 @@ export async function importScheduleFromGmail(
   }
 
   const reason = insertedRowsCount === 0 ? 'Importação processada, mas sem voos novos para inserir.' : savePdfResult.warning ?? undefined;
-  return buildImportResult(insertedRowsCount, parsedEntries.length, airline, diagnostic, reason);
+  return buildImportResult(insertedRowsCount, parsedEntries.length, airline, diagnostic, reason, undefined, rosterId);
 }
 
 export function isGmailScopeError(error: unknown): boolean {

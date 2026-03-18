@@ -263,6 +263,7 @@ export type Database = {
       imported_rosters: {
         Row: {
           base_airport: string | null
+          connector_key: string | null
           created_at: string
           crew_group_code: string | null
           crew_role: string | null
@@ -272,22 +273,26 @@ export type Database = {
           flying_hours_total: number | null
           id: string
           import_error: string | null
+          import_origin: string
           import_status: string | null
           inserted_count: number | null
           is_active: boolean
           name: string | null
           parsed_count: number | null
           parser_version: string | null
+          portal_connection_id: string | null
           raw_text_excerpt: string | null
           roster_end_date: string | null
           roster_start_date: string | null
           source_message_id: string
           storage_path: string
+          synced_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           base_airport?: string | null
+          connector_key?: string | null
           created_at?: string
           crew_group_code?: string | null
           crew_role?: string | null
@@ -297,22 +302,26 @@ export type Database = {
           flying_hours_total?: number | null
           id?: string
           import_error?: string | null
+          import_origin?: string
           import_status?: string | null
           inserted_count?: number | null
           is_active?: boolean
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
+          portal_connection_id?: string | null
           raw_text_excerpt?: string | null
           roster_end_date?: string | null
           roster_start_date?: string | null
           source_message_id: string
           storage_path: string
+          synced_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           base_airport?: string | null
+          connector_key?: string | null
           created_at?: string
           crew_group_code?: string | null
           crew_role?: string | null
@@ -322,21 +331,32 @@ export type Database = {
           flying_hours_total?: number | null
           id?: string
           import_error?: string | null
+          import_origin?: string
           import_status?: string | null
           inserted_count?: number | null
           is_active?: boolean
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
+          portal_connection_id?: string | null
           raw_text_excerpt?: string | null
           roster_end_date?: string | null
           roster_start_date?: string | null
           source_message_id?: string
           storage_path?: string
+          synced_at?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "imported_rosters_portal_connection_id_fkey"
+            columns: ["portal_connection_id"]
+            isOneToOne: false
+            referencedRelation: "portal_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -411,6 +431,129 @@ export type Database = {
             columns: ["related_schedule_entry_id"]
             isOneToOne: false
             referencedRelation: "schedule_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_connections: {
+        Row: {
+          connected_at: string | null
+          connection_status: string
+          connector_key: string
+          created_at: string
+          disconnected_at: string | null
+          display_name: string
+          id: string
+          last_error: string | null
+          last_successful_sync_at: string | null
+          last_synced_at: string | null
+          metadata: Json
+          session_expires_at: string | null
+          source_kind: string
+          sync_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connected_at?: string | null
+          connection_status?: string
+          connector_key: string
+          created_at?: string
+          disconnected_at?: string | null
+          display_name?: string
+          id?: string
+          last_error?: string | null
+          last_successful_sync_at?: string | null
+          last_synced_at?: string | null
+          metadata?: Json
+          session_expires_at?: string | null
+          source_kind?: string
+          sync_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connected_at?: string | null
+          connection_status?: string
+          connector_key?: string
+          created_at?: string
+          disconnected_at?: string | null
+          display_name?: string
+          id?: string
+          last_error?: string | null
+          last_successful_sync_at?: string | null
+          last_synced_at?: string | null
+          metadata?: Json
+          session_expires_at?: string | null
+          source_kind?: string
+          sync_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      portal_sync_runs: {
+        Row: {
+          completed_at: string | null
+          connection_id: string
+          connector_key: string
+          details: Json
+          error_message: string | null
+          id: string
+          imported_count: number
+          parsed_count: number
+          roster_id: string | null
+          run_status: string
+          source_kind: string
+          started_at: string
+          trigger_type: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          connection_id: string
+          connector_key: string
+          details?: Json
+          error_message?: string | null
+          id?: string
+          imported_count?: number
+          parsed_count?: number
+          roster_id?: string | null
+          run_status?: string
+          source_kind?: string
+          started_at?: string
+          trigger_type?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          connection_id?: string
+          connector_key?: string
+          details?: Json
+          error_message?: string | null
+          id?: string
+          imported_count?: number
+          parsed_count?: number
+          roster_id?: string | null
+          run_status?: string
+          source_kind?: string
+          started_at?: string
+          trigger_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_sync_runs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "portal_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_sync_runs_roster_id_fkey"
+            columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
             referencedColumns: ["id"]
           },
         ]
