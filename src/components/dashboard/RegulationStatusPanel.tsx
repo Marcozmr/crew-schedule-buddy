@@ -88,11 +88,11 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Calculadora operacional</p>
-            <p className="text-[10px] text-muted-foreground">{analysis ? 'RBAC 117 • Lei 13.475 • ACT LATAM' : 'Aguardando escala'}</p>
+            <p className="text-[10px] text-muted-foreground">{analysis ? 'Motor operacional' : 'Aguardando escala'}</p>
           </div>
         </div>
         <div className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${meta.badge}`}>
-          {analysis?.latest ? formatComplianceStatus(analysis.latest.status) : 'Sem dados'}
+          {analysis?.focus ? formatComplianceStatus(analysis.focus.status) : 'Sem dados'}
         </div>
       </div>
 

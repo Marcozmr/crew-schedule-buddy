@@ -256,7 +256,7 @@ export default function DashboardPage() {
             <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
                 { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
-                { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'RBAC + Lei + LATAM' },
+                { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'Cálculo operacional' },
                 { label: 'Calcular descanso', path: '/rest-calc', icon: BedDouble, desc: 'Repouso operacional' },
                 { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Status e limites' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
