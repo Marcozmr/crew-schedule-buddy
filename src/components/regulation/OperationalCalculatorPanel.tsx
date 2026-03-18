@@ -114,7 +114,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
         <div>
           <h2 className="text-lg font-semibold text-foreground">Cálculo operacional avançado</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Usa o mesmo motor operacional do dashboard, da análise e dos alertas.
+            Simule a jornada com a mesma base usada no painel, nos alertas e no descanso.
           </p>
         </div>
 
