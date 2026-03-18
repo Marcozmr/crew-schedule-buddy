@@ -130,7 +130,7 @@ export default function DashboardPage() {
                 { label: 'Horas 30 dias', value: '0h00', icon: Clock },
                 { label: 'Jornada mês', value: '0h00', icon: Gauge },
                 { label: 'Próximo voo', value: '—', icon: Plane },
-                { label: 'Status', value: 'Situação normal', icon: Shield, status: 'success' as const },
+                { label: 'Situação', value: 'Dentro dos limites', icon: Shield, status: 'success' as const },
               ].map((stat, index) => (
                 <div key={index} className="glass p-4 flex items-center gap-3 hover-lift">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${stat.status === 'success' ? 'bg-success/10' : 'bg-primary/8'}`}>
@@ -151,8 +151,8 @@ export default function DashboardPage() {
                   { title: 'Importar escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
                   { title: 'Calcular jornada', desc: 'Cálculo operacional', icon: Clock, path: '/duty-calc' },
                   { title: 'Calcular descanso', desc: 'Repouso real', icon: BedDouble, path: '/rest-calc' },
-                  { title: 'Calculadora operacional', desc: 'Análise completa', icon: Shield, path: '/regulation' },
-                  { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
+                  { title: 'Calculadora operacional', desc: 'Visão completa', icon: Shield, path: '/regulation' },
+                  { title: 'Configurações', desc: 'Preferências do app', icon: Settings, path: '/settings' },
                 ].map((card, index) => (
                   card.action === 'import' ? (
                     <PdfImportDialog key={index} onImportComplete={reload} trigger={
