@@ -149,7 +149,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
                   { title: 'Importar escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
-                  { title: 'Calcular jornada', desc: 'RBAC + Lei + LATAM', icon: Clock, path: '/duty-calc' },
+                  { title: 'Calcular jornada', desc: 'Cálculo operacional', icon: Clock, path: '/duty-calc' },
                   { title: 'Calcular descanso', desc: 'Repouso real', icon: BedDouble, path: '/rest-calc' },
                   { title: 'Calculadora operacional', desc: 'Análise completa', icon: Shield, path: '/regulation' },
                   { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
