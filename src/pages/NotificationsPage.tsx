@@ -105,7 +105,7 @@ export default function NotificationsPage() {
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Notificações</h1>
+            <h1 className="text-2xl font-bold text-foreground">Alertas</h1>
             <p className="text-sm text-muted-foreground">
               {unreadCount > 0 ? `${unreadCount} não lida(s)` : 'Tudo em dia'}
             </p>

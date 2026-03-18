@@ -259,7 +259,7 @@ export default function DashboardPage() {
                 { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
                 { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'Cálculo operacional' },
                 { label: 'Calcular descanso', path: '/rest-calc', icon: BedDouble, desc: 'Repouso operacional' },
-                { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Status e limites' },
+                { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Situação e limites' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
               ].map((item) => (
                 <Link key={item.path} to={item.path} className="glass px-4 py-3.5 flex items-center gap-3 hover-lift group">

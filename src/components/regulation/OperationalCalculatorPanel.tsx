@@ -241,9 +241,9 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
                 <p className="text-xs text-muted-foreground mt-1">O descanso começa somente após o término operacional.</p>
               </div>
               <div className="glass p-5">
-                <p className="text-xs text-muted-foreground flex items-center gap-2"><MoonStar className="w-4 h-4 text-primary" /> WOCL / Madrugada</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-2"><MoonStar className="w-4 h-4 text-primary" /> Janela circadiana / Madrugada</p>
                 <p className="text-base font-semibold text-foreground mt-2">
-                  {result.compliance.fatigue.woclExposure.totalMinutes > 0 ? `WOCL ${result.compliance.fatigue.woclExposure.totalMinutes} min` : 'Sem WOCL'}
+                  {result.compliance.fatigue.woclExposure.totalMinutes > 0 ? `Janela circadiana ${result.compliance.fatigue.woclExposure.totalMinutes} min` : 'Sem exposição na madrugada'}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">{currentDuty.isMadrugadaDuty ? 'A jornada toca a faixa 00:00–06:00.' : 'Sem operação em madrugada.'}</p>
               </div>
