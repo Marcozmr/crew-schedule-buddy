@@ -120,6 +120,9 @@ export async function listRecentPortalSyncRuns(userId: string) {
 }
 
 export async function preparePortalConnection(userId: string): Promise<PortalAuthRequest> {
+  const connector = getPortalConnectorDefinition(PRIMARY_PORTAL_CONNECTOR_KEY);
+  const authRequest = await connector.beginAuth();
+
   await upsertConnection(userId, {
     connection_status: 'pending',
     sync_enabled: true,
@@ -128,12 +131,13 @@ export async function preparePortalConnection(userId: string): Promise<PortalAut
     metadata: {
       provider: PRIMARY_PORTAL_CONNECTOR_KEY,
       auth_mode: 'browser_managed_session',
-      login_domain: 'login.microsoftonline.com',
+      entry_url: authRequest.loginUrl,
+      login_domains: authRequest.loginDomains,
+      success_domains: authRequest.successDomains,
     },
   });
 
-  const connector = getPortalConnectorDefinition(PRIMARY_PORTAL_CONNECTOR_KEY);
-  return connector.beginAuth();
+  return authRequest;
 }
 
 export async function markPortalConnectedFromWebView(userId: string, lastObservedUrl: string | null = null) {
@@ -149,7 +153,9 @@ export async function markPortalConnectedFromWebView(userId: string, lastObserve
     metadata: {
       provider: session?.provider ?? PRIMARY_PORTAL_CONNECTOR_KEY,
       auth_mode: session?.sessionMode ?? 'browser_managed',
-      login_domain: session?.loginDomain ?? 'login.microsoftonline.com',
+      entry_url: session?.portalEntryUrl ?? 'https://portal.latam.com',
+      login_domains: session?.loginDomains ?? ['login.microsoftonline.com'],
+      portal_domain: session?.portalDomain ?? 'portal.latam.com',
       last_observed_url: lastObservedUrl ?? session?.lastObservedUrl ?? null,
       session_persisted_locally: Boolean(session),
     },
@@ -169,6 +175,7 @@ export async function disconnectPortalConnection(userId: string) {
       provider: PRIMARY_PORTAL_CONNECTOR_KEY,
       auth_mode: 'browser_managed_session',
       disconnected_by_user: true,
+      entry_url: 'https://portal.latam.com',
     },
   });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import type { PortalAuthRequest, PortalSessionSnapshot } from '@/lib/portal/types';
 import {
   createPortalSessionSnapshot,
+  detectRedirect,
   openPortalLogin,
   storePortalSession,
 } from '@/lib/portal/webview-connector';
@@ -31,15 +32,23 @@ export function PortalAuthWebView({
   onOpenChange,
   onAuthenticated,
 }: PortalAuthWebViewProps) {
+  const popupRef = useRef<Window | null>(null);
+  const visitedLoginDomainRef = useRef(false);
+  const authenticatingRef = useRef(false);
   const [opening, setOpening] = useState(false);
   const [loginStarted, setLoginStarted] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [observedHost, setObservedHost] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setOpening(false);
       setLoginStarted(false);
       setConfirming(false);
+      setObservedHost(null);
+      visitedLoginDomainRef.current = false;
+      authenticatingRef.current = false;
+      popupRef.current = null;
       return;
     }
 
@@ -48,12 +57,54 @@ export function PortalAuthWebView({
     }
   }, [authRequest, loginStarted, open]);
 
+  useEffect(() => {
+    if (!open || !authRequest || !loginStarted) return;
+
+    const intervalId = window.setInterval(() => {
+      const popup = popupRef.current;
+      if (!popup) return;
+
+      if (popup.closed) {
+        window.clearInterval(intervalId);
+        popupRef.current = null;
+        return;
+      }
+
+      try {
+        const currentUrl = popup.location.href;
+        const detection = detectRedirect({
+          url: currentUrl,
+          authRequest,
+          hasVisitedLoginDomain: visitedLoginDomainRef.current,
+        });
+
+        visitedLoginDomainRef.current = detection.hasVisitedLoginDomain;
+        if (detection.currentHost) {
+          setObservedHost(detection.currentHost);
+        }
+
+        if (detection.completed && !authenticatingRef.current) {
+          authenticatingRef.current = true;
+          const snapshot = storePortalSession(createPortalSessionSnapshot(authRequest, currentUrl));
+          popup.close();
+          void onAuthenticated(snapshot).finally(() => {
+            onOpenChange(false);
+          });
+        }
+      } catch {
+        // Cross-origin navigation is expected while the portal and SSO pages are open.
+      }
+    }, 800);
+
+    return () => window.clearInterval(intervalId);
+  }, [authRequest, loginStarted, onAuthenticated, onOpenChange, open]);
+
   const handleOpenLogin = async () => {
     if (!authRequest) return;
 
     setOpening(true);
     try {
-      openPortalLogin(authRequest);
+      popupRef.current = openPortalLogin(authRequest);
       setLoginStarted(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o login corporativo.');
@@ -63,10 +114,11 @@ export function PortalAuthWebView({
   };
 
   const handleConfirmConnection = async () => {
-    setConfirming(true);
+    if (!authRequest) return;
 
+    setConfirming(true);
     try {
-      const snapshot = storePortalSession(createPortalSessionSnapshot(null));
+      const snapshot = storePortalSession(createPortalSessionSnapshot(authRequest, popupRef.current?.location?.href ?? null));
       await onAuthenticated(snapshot);
       onOpenChange(false);
     } catch (error) {
@@ -85,7 +137,7 @@ export function PortalAuthWebView({
             <Badge variant="secondary">SSO corporativo</Badge>
           </div>
           <DialogDescription>
-            O acesso acontece no portal oficial em uma sessão segura. O EscalaX não captura senha nem credenciais.
+            O acesso começa no portal oficial e pode redirecionar automaticamente para o SSO Microsoft. O EscalaX não captura senha nem credenciais.
           </DialogDescription>
         </DialogHeader>
 
@@ -98,7 +150,7 @@ export function PortalAuthWebView({
               <div className="space-y-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">Sessão autenticada protegida</p>
                 <p className="text-sm text-muted-foreground break-words">
-                  Após concluir o login no portal corporativo, volte ao EscalaX e confirme a conexão para manter a sessão ativa neste dispositivo.
+                  Faça o login normalmente no portal oficial, incluindo MFA se necessário. Quando o fluxo voltar ao portal autenticado, a conexão pode ser concluída.
                 </p>
               </div>
             </div>
@@ -106,9 +158,12 @@ export function PortalAuthWebView({
 
           {authRequest && (
             <div className="rounded-xl border border-border bg-secondary/40 p-4 space-y-2">
-              <p className="text-xs text-muted-foreground">Entrada de autenticação</p>
+              <p className="text-xs text-muted-foreground">Entrada oficial</p>
               <p className="text-sm font-medium text-foreground break-all">{authRequest.loginUrl}</p>
               <p className="text-xs text-muted-foreground break-words">{authRequest.successHint}</p>
+              {observedHost && (
+                <p className="text-xs text-foreground break-words">Host detectado: {observedHost}</p>
+              )}
             </div>
           )}
         </div>
@@ -116,7 +171,7 @@ export function PortalAuthWebView({
         <DialogFooter className="flex-col gap-3 sm:flex-row sm:justify-between">
           <Button type="button" variant="outline" onClick={() => void handleOpenLogin()} disabled={opening} className="w-full sm:w-auto">
             <ExternalLink className="w-4 h-4 mr-2" />
-            {opening ? 'Abrindo...' : loginStarted ? 'Abrir novamente' : 'Abrir login corporativo'}
+            {opening ? 'Abrindo...' : loginStarted ? 'Abrir novamente' : 'Abrir portal oficial'}
           </Button>
           <Button type="button" onClick={() => void handleConfirmConnection()} disabled={!loginStarted || confirming} className="w-full sm:w-auto">
             {confirming ? 'Conectando...' : 'Concluir conexão'}
