@@ -9,6 +9,7 @@ import { Plane, Clock, Moon, ChevronDown, ChevronUp, AlertTriangle } from 'lucid
 import { motion } from 'framer-motion';
 import type { DutyPeriod } from '@/lib/duty-grouping';
 import { formatDutyTime } from '@/lib/duty-grouping';
+import { formatHoursMinutes } from '@/lib/date-utils';
 import type { DashboardStatusSummary } from '@/lib/operational-analysis';
 
 interface Props {
@@ -99,7 +100,7 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
               </span>
               {duty.totalBlockHours > 0 && (
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  Tempo de voo: <span className="font-mono font-medium text-foreground">{duty.totalBlockHours.toFixed(1)}h</span>
+                  Tempo de voo: <span className="font-mono font-medium text-foreground">{formatHoursMinutes(duty.totalBlockHours)}</span>
                 </span>
               )}
             </div>
@@ -135,7 +136,7 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
                     </div>
                     {leg.flight_hours != null && leg.flight_hours > 0 && (
                       <span className="text-[10px] text-muted-foreground mt-1 font-mono whitespace-nowrap">
-                        {leg.flight_hours.toFixed(1)}h
+                        {formatHoursMinutes(leg.flight_hours)}
                       </span>
                     )}
                   </div>
@@ -163,11 +164,11 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
                 Jornada total: <span className="font-mono font-medium text-foreground">{formatDutyTime(dutyMins)}</span>
               </span>
               <span>
-                Voo total: <span className="font-mono font-medium text-foreground">{duty.totalBlockHours.toFixed(1)}h</span>
+                Tempo de voo: <span className="font-mono font-medium text-foreground">{formatHoursMinutes(duty.totalBlockHours)}</span>
               </span>
               {duty.debriefTime && (
                 <span>
-                  Pós-voo: <span className="font-mono font-medium text-foreground">{duty.debriefTime}</span>
+                  Término da jornada: <span className="font-mono font-medium text-foreground">{duty.debriefTime}</span>
                 </span>
               )}
               <span className={`font-medium ${footerStatusTone[displayStatus.tone]}`}>
@@ -201,7 +202,7 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
             <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-border min-w-0">
               {duty.totalBlockHours > 0 && (
                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                  Voo: <span className="font-mono font-medium text-foreground">{duty.totalBlockHours.toFixed(1)}h</span>
+                  Tempo de voo: <span className="font-mono font-medium text-foreground">{formatHoursMinutes(duty.totalBlockHours)}</span>
                 </span>
               )}
               {duty.totalDutyHours > 0 && (

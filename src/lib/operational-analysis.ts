@@ -192,16 +192,17 @@ export function getMonthlyStatusSummary(result: ComplianceResult | null): Monthl
   const usedHours = monthlyRule?.calculatedValue ?? result?.accumulatedHours.last30Days ?? 0;
   const limitHours = monthlyRule?.limitUsed ?? 85;
   const ratio = usageRatio(monthlyRule);
+  const limitLabel = `${limitHours}h`;
 
   if (!monthlyRule || !monthlyRule.passed) {
     return {
       tone: monthlyRule ? 'critical' : 'regular',
       label: monthlyRule ? 'Crítico' : 'Regular',
-      subtitle: monthlyRule ? 'Limite mensal excedido' : 'Dentro do limite mensal',
-      reason: 'Horas de voo acumuladas nos últimos 30 dias.',
+      subtitle: monthlyRule ? `Limite de ${limitLabel} excedido` : `Dentro do limite de ${limitLabel}`,
+      reason: 'Tempo de voo acumulado nos últimos 30 dias.',
       usedHours,
       limitHours,
-      metricLabel: 'Horas de voo',
+      metricLabel: 'Tempo de voo',
       windowLabel: 'Últimos 30 dias',
     };
   }
@@ -210,11 +211,11 @@ export function getMonthlyStatusSummary(result: ComplianceResult | null): Monthl
     return {
       tone: 'attention',
       label: 'Atenção',
-      subtitle: 'Próximo do limite mensal',
-      reason: 'Horas de voo acumuladas nos últimos 30 dias.',
+      subtitle: `Próximo do limite de ${limitLabel}`,
+      reason: 'Tempo de voo acumulado nos últimos 30 dias.',
       usedHours,
       limitHours,
-      metricLabel: 'Horas de voo',
+      metricLabel: 'Tempo de voo',
       windowLabel: 'Últimos 30 dias',
     };
   }
@@ -222,11 +223,11 @@ export function getMonthlyStatusSummary(result: ComplianceResult | null): Monthl
   return {
     tone: 'regular',
     label: 'Regular',
-    subtitle: 'Dentro do limite mensal',
-    reason: 'Horas de voo acumuladas nos últimos 30 dias.',
+    subtitle: `Dentro do limite de ${limitLabel}`,
+    reason: 'Tempo de voo acumulado nos últimos 30 dias.',
     usedHours,
     limitHours,
-    metricLabel: 'Horas de voo',
+    metricLabel: 'Tempo de voo',
     windowLabel: 'Últimos 30 dias',
   };
 }
