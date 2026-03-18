@@ -59,15 +59,15 @@ export default function DashboardPage() {
         await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na jornada ativa. Revise jornada, repouso e WOCL.');
       }
 
-      if (latest.rest.restBeforeDutyHours != null && latest.rest.restBeforeDutyHours < latest.rest.minRequiredRestHours) {
+      if (focus.rest.restBeforeDutyHours != null && focus.rest.restBeforeDutyHours < focus.rest.minRequiredRestHours) {
         await NotificationService.notifyRestReminder(
           user.id,
-          `Repouso calculado de ${formatHoursMinutes(latest.rest.restBeforeDutyHours)} abaixo do mínimo de ${formatHoursMinutes(latest.rest.minRequiredRestHours)}.`,
+          `Repouso calculado de ${formatHoursMinutes(focus.rest.restBeforeDutyHours)} abaixo do mínimo de ${formatHoursMinutes(focus.rest.minRequiredRestHours)}.`,
         );
       }
 
-      if (latest.fatigue.woclExposure.totalMinutes > 0) {
-        await NotificationService.notifyOperationalWarning(user.id, `Sua operação toca o WOCL por ${latest.fatigue.woclExposure.totalMinutes} min.`);
+      if (focus.fatigue.woclExposure.totalMinutes > 0) {
+        await NotificationService.notifyOperationalWarning(user.id, `Sua operação toca o WOCL por ${focus.fatigue.woclExposure.totalMinutes} min.`);
       }
     };
 
