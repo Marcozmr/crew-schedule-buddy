@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth-context';
@@ -17,11 +17,13 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
   const [file, setFile] = useState<File | null>(null);
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<PdfImportResult | null>(null);
-  const [showDebug, setShowDebug] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    if (selected) { setFile(selected); setResult(null); }
+    if (selected) {
+      setFile(selected);
+      setResult(null);
+    }
   };
 
   const handleImport = useCallback(async () => {
@@ -41,7 +43,11 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
     }
   }, [file, user, onImportComplete]);
 
-  const handleClose = () => { setOpen(false); setFile(null); setResult(null); setShowDebug(false); };
+  const handleClose = () => {
+    setOpen(false);
+    setFile(null);
+    setResult(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
@@ -76,7 +82,6 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                 <span className="font-semibold text-foreground">{result.success ? 'Importação concluída!' : 'Falha na importação'}</span>
               </div>
 
-              {/* Header info */}
               {result.header && (result.header.crewName || result.header.baseAirport) && (
                 <div className="bg-background rounded-lg p-3 mb-3 text-xs space-y-1">
                   {result.header.crewName && <p><span className="text-muted-foreground">Tripulante:</span> <span className="font-medium text-foreground">{result.header.crewName}</span></p>}
@@ -85,14 +90,14 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                   {result.header.baseAirport && <p><span className="text-muted-foreground">Base:</span> <span className="font-medium text-foreground">{result.header.baseAirport}</span></p>}
                   {result.header.crewRole && <p><span className="text-muted-foreground">Função:</span> <span className="font-medium text-foreground">{result.header.crewRole}</span></p>}
                   {result.header.rosterStartDate && <p><span className="text-muted-foreground">Período:</span> <span className="font-medium text-foreground">{result.header.rosterStartDate} — {result.header.rosterEndDate}</span></p>}
-                  {result.header.flyingHoursTotal != null && <p><span className="text-muted-foreground">Horas Voo:</span> <span className="font-medium text-foreground">{result.header.flyingHoursTotal}h</span></p>}
-                  {result.header.dutyHoursTotal != null && <p><span className="text-muted-foreground">Horas Duty:</span> <span className="font-medium text-foreground">{result.header.dutyHoursTotal}h</span></p>}
+                  {result.header.flyingHoursTotal != null && <p><span className="text-muted-foreground">Horas voo:</span> <span className="font-medium text-foreground">{result.header.flyingHoursTotal}h</span></p>}
+                  {result.header.dutyHoursTotal != null && <p><span className="text-muted-foreground">Horas jornada:</span> <span className="font-medium text-foreground">{result.header.dutyHoursTotal}h</span></p>}
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="bg-background rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground">Registros parseados</p>
+                  <p className="text-xs text-muted-foreground">Registros processados</p>
                   <p className="text-lg font-bold text-foreground">{result.parsedCount}</p>
                 </div>
                 <div className="bg-background rounded-lg p-3">
@@ -101,86 +106,18 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
                 </div>
               </div>
 
-              {/* Parse stats */}
               {result.parseStats && (
                 <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Voos</p><p className="font-bold text-foreground">{result.parseStats.totalFlights}</p></div>
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">DO/OFF</p><p className="font-bold text-foreground">{result.parseStats.totalDO}</p></div>
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Standby</p><p className="font-bold text-foreground">{result.parseStats.totalStandby}</p></div>
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">APR</p><p className="font-bold text-foreground">{result.parseStats.totalAPR}</p></div>
-                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Dedup</p><p className="font-bold text-foreground">{result.parseStats.totalAfterDedup}</p></div>
-                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Anchors</p><p className="font-bold text-foreground">{result.parseStats.totalRawAnchors}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Após limpeza</p><p className="font-bold text-foreground">{result.parseStats.totalAfterDedup}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Marcos</p><p className="font-bold text-foreground">{result.parseStats.totalRawAnchors}</p></div>
                 </div>
               )}
 
               {result.error && <p className="mt-3 text-xs text-muted-foreground">{result.error}</p>}
-
-              {/* Debug section */}
-              <button onClick={() => setShowDebug(!showDebug)} className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                {showDebug ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                Diagnóstico detalhado
-              </button>
-
-              {showDebug && (
-                <div className="mt-2 space-y-3 text-xs">
-                  {/* Parsed entries preview */}
-                  {result.parsedEntriesPreview.length > 0 && (
-                    <div>
-                      <p className="font-medium text-muted-foreground mb-1">Entradas parseadas ({result.parsedEntriesPreview.length})</p>
-                      <div className="bg-muted rounded-lg p-2 overflow-x-auto max-h-40 overflow-y-auto">
-                        {result.parsedEntriesPreview.map((e, i) => (
-                          <div key={i} className="py-1 border-b border-border last:border-0 text-[10px] text-foreground">
-                            <span className="font-mono">{e.date}</span> | <span className={e.isFlight ? 'text-primary font-bold' : 'text-accent-foreground font-bold'}>{e.activityType}</span> | {e.flightNumber} | {e.departureAirport}→{e.arrivalAirport} | {e.departureTime}-{e.arrivalTime} | FH:{e.flightHours ?? '—'} | DH:{e.dutyHours ?? '—'} | {e.aircraftType || '—'}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Text by day */}
-                  {result.textByDay && Object.keys(result.textByDay).length > 0 && (
-                    <div>
-                      <p className="font-medium text-muted-foreground mb-1">Texto bruto por dia</p>
-                      <div className="bg-muted rounded-lg p-2 overflow-x-auto max-h-48 overflow-y-auto">
-                        {Object.entries(result.textByDay).slice(0, 10).map(([day, txt]) => (
-                          <div key={day} className="py-1 border-b border-border last:border-0">
-                            <p className="font-mono font-bold text-[10px] text-primary">{day}</p>
-                            <p className="text-[9px] text-foreground whitespace-pre-wrap break-all">{txt}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Saved rows preview */}
-                  {result.savedRowsPreview.length > 0 && (
-                    <div>
-                      <p className="font-medium text-muted-foreground mb-1">Registros salvos no banco ({result.savedRowsPreview.length})</p>
-                      <pre className="bg-muted rounded-lg p-2 overflow-x-auto text-[10px] max-h-40 overflow-y-auto text-foreground">{JSON.stringify(result.savedRowsPreview, null, 1)}</pre>
-                    </div>
-                  )}
-
-                  {/* Raw lines */}
-                  {result.parsedEntriesPreview.length > 0 && (
-                    <div>
-                      <p className="font-medium text-muted-foreground mb-1">raw_line (primeiras 10)</p>
-                      <div className="bg-muted rounded-lg p-2 overflow-x-auto max-h-32 overflow-y-auto">
-                        {result.parsedEntriesPreview.map((e, i) => (
-                          <p key={i} className="text-[10px] text-foreground font-mono border-b border-border py-0.5 last:border-0">{e.rawLine}</p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {result.rosterId && <p className="text-muted-foreground">roster_id novo: <span className="font-mono text-foreground">{result.rosterId}</span></p>}
-                  <p className="text-muted-foreground">user_id atual: <span className="font-mono text-foreground">{result.debug.currentUserId}</span></p>
-                  <p className="text-muted-foreground">imported_rosters desativadas: <span className="font-mono text-foreground">{result.debug.deactivatedRosterIds.length > 0 ? result.debug.deactivatedRosterIds.join(', ') : 'nenhuma'}</span></p>
-                  <p className="text-muted-foreground">imported_rosters ativa: <span className="font-mono text-foreground">{result.debug.activeRoster ? `${result.debug.activeRoster.id} (${result.debug.activeRoster.file_name ?? 'sem nome'})` : 'não encontrada'}</span></p>
-                  <p className="text-muted-foreground">inserted_rows_count: <span className="font-mono text-foreground">{result.insertedCount}</span></p>
-                  <p className="text-muted-foreground">total_rows_roster_ativo: <span className="font-mono text-foreground">{result.debug.totalRowsActiveRoster}</span></p>
-                  <p className="text-muted-foreground">total_rows_rosters_antigos: <span className="font-mono text-foreground">{result.debug.totalRowsOldRosters}</span></p>
-                </div>
-              )}
 
               <Button onClick={handleClose} variant="outline" className="w-full mt-4">Fechar</Button>
             </div>

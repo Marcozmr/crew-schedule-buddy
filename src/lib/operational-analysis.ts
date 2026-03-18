@@ -243,6 +243,8 @@ export function analyzeOperationalSchedule(
 
   const results = evaluateSchedule(window);
   const allAlerts = results.flatMap((result) => result.alerts.map((alert) => ({ ...alert, dutyDate: result.duty.reportTimeLocal })));
+  const focus = selectRelevantResult(results, window.referenceDate, { includePast: false });
+  const focusAlerts = focus ? focus.alerts.map((alert) => ({ ...alert, dutyDate: focus.duty.reportTimeLocal })) : [];
   const overall: ComplianceStatus = results.some((result) => result.status === 'NON_COMPLIANT' || result.status === 'CRITICAL_FATIGUE')
     ? 'NON_COMPLIANT'
     : results.some((result) => result.status === 'WARNING')
@@ -253,7 +255,9 @@ export function analyzeOperationalSchedule(
     window,
     results,
     allAlerts,
+    focusAlerts,
     overall,
     latest: selectRelevantResult(results, window.referenceDate),
+    focus,
   };
 }
