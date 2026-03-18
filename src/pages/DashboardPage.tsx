@@ -48,26 +48,26 @@ export default function DashboardPage() {
         );
       }
 
-      const latest = analysis.latest;
-      if (!latest) return;
+      const focus = analysis.focus;
+      if (!focus) return;
 
-      if (latest.status === 'WARNING') {
-        await NotificationService.notifyOperationalWarning(user.id, 'Sua jornada atual está próxima do limite regulamentar.');
+      if (focus.status === 'WARNING') {
+        await NotificationService.notifyOperationalWarning(user.id, 'Sua jornada atual está próxima do limite operacional.');
       }
 
-      if (latest.status === 'NON_COMPLIANT' || latest.status === 'CRITICAL_FATIGUE') {
-        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na escala ativa. Revise jornada, repouso e WOCL.');
+      if (focus.status === 'NON_COMPLIANT' || focus.status === 'CRITICAL_FATIGUE') {
+        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na jornada ativa. Revise jornada, repouso e WOCL.');
       }
 
-      if (latest.rest.restBeforeDutyHours != null && latest.rest.restBeforeDutyHours < latest.rest.minRequiredRestHours) {
+      if (focus.rest.restBeforeDutyHours != null && focus.rest.restBeforeDutyHours < focus.rest.minRequiredRestHours) {
         await NotificationService.notifyRestReminder(
           user.id,
-          `Repouso calculado de ${formatHoursMinutes(latest.rest.restBeforeDutyHours)} abaixo do mínimo de ${formatHoursMinutes(latest.rest.minRequiredRestHours)}.`,
+          `Repouso calculado de ${formatHoursMinutes(focus.rest.restBeforeDutyHours)} abaixo do mínimo de ${formatHoursMinutes(focus.rest.minRequiredRestHours)}.`,
         );
       }
 
-      if (latest.fatigue.woclExposure.totalMinutes > 0) {
-        await NotificationService.notifyOperationalWarning(user.id, `Sua operação toca o WOCL por ${latest.fatigue.woclExposure.totalMinutes} min.`);
+      if (focus.fatigue.woclExposure.totalMinutes > 0) {
+        await NotificationService.notifyOperationalWarning(user.id, `Sua operação toca o WOCL por ${focus.fatigue.woclExposure.totalMinutes} min.`);
       }
     };
 
@@ -92,7 +92,7 @@ export default function DashboardPage() {
     transition: { delay, duration: 0.3, ease: 'easeOut' as const },
   });
 
-  const statusResult = analysis?.latest ?? null;
+  const statusResult = analysis?.focus ?? null;
   const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Situação normal';
 
   return (
@@ -149,7 +149,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
                   { title: 'Importar escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
-                  { title: 'Calcular jornada', desc: 'RBAC + Lei + LATAM', icon: Clock, path: '/duty-calc' },
+                  { title: 'Calcular jornada', desc: 'Cálculo operacional', icon: Clock, path: '/duty-calc' },
                   { title: 'Calcular descanso', desc: 'Repouso real', icon: BedDouble, path: '/rest-calc' },
                   { title: 'Calculadora operacional', desc: 'Análise completa', icon: Shield, path: '/regulation' },
                   { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
@@ -256,7 +256,7 @@ export default function DashboardPage() {
             <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
                 { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
-                { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'RBAC + Lei + LATAM' },
+                { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'Cálculo operacional' },
                 { label: 'Calcular descanso', path: '/rest-calc', icon: BedDouble, desc: 'Repouso operacional' },
                 { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Status e limites' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },

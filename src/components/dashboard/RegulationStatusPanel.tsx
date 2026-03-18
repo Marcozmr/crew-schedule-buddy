@@ -28,7 +28,7 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
   const analysis = useMemo(() => analyzeOperationalSchedule(schedule, 'America/Sao_Paulo'), [schedule]);
 
   const indicators = useMemo<Indicator[]>(() => {
-    if (!analysis?.latest) {
+    if (!analysis?.focus) {
       return [
         { label: 'Jornada', value: '—', ratio: 0, status: 'ok', icon: Clock },
         { label: 'Tempo de voo', value: '—', ratio: 0, status: 'ok', icon: Plane },
@@ -36,10 +36,10 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
       ];
     }
 
-    const latest = analysis.latest;
-    const dutyRule = latest.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_DUTY');
-    const flightRule = latest.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_FLIGHT');
-    const restRule = latest.rules.find((rule) => rule.ruleId === 'RBAC117_MIN_REST');
+    const focus = analysis.focus;
+    const dutyRule = focus.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_DUTY');
+    const flightRule = focus.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_FLIGHT');
+    const restRule = focus.rules.find((rule) => rule.ruleId === 'RBAC117_MIN_REST');
 
     const mapRuleStatus = (severity?: string): Indicator['status'] => {
       if (severity === 'critical') return 'critical';
@@ -50,21 +50,21 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
     return [
       {
         label: 'Jornada',
-        value: formatHoursMinutes(latest.duty.totalDutyHours),
+        value: formatHoursMinutes(focus.duty.totalDutyHours),
         ratio: dutyRule?.limitUsed ? Math.min(((dutyRule.calculatedValue ?? 0) / dutyRule.limitUsed) * 100, 100) : 0,
         status: mapRuleStatus(dutyRule?.severity),
         icon: Clock,
       },
       {
         label: 'Tempo de voo',
-        value: formatHoursMinutes(latest.duty.totalFlightHours),
+        value: formatHoursMinutes(focus.duty.totalFlightHours),
         ratio: flightRule?.limitUsed ? Math.min(((flightRule.calculatedValue ?? 0) / flightRule.limitUsed) * 100, 100) : 0,
         status: mapRuleStatus(flightRule?.severity),
         icon: Plane,
       },
       {
         label: 'Descanso',
-        value: latest.rest.restBeforeDutyHours == null ? '—' : formatHoursMinutes(latest.rest.restBeforeDutyHours),
+        value: focus.rest.restBeforeDutyHours == null ? '—' : formatHoursMinutes(focus.rest.restBeforeDutyHours),
         ratio: restRule?.limitUsed && restRule.calculatedValue != null ? Math.min((restRule.calculatedValue / restRule.limitUsed) * 100, 100) : 0,
         status: mapRuleStatus(restRule?.severity),
         icon: BedDouble,
@@ -72,9 +72,9 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
     ];
   }, [analysis]);
 
-  const focusStatus = !analysis?.latest || analysis.latest.status === 'COMPLIANT'
+  const focusStatus = !analysis?.focus || analysis.focus.status === 'COMPLIANT'
     ? 'ok'
-    : analysis.latest.status === 'WARNING'
+    : analysis.focus.status === 'WARNING'
       ? 'warning'
       : 'critical';
   const meta = statusMeta[focusStatus];
@@ -88,11 +88,11 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Calculadora operacional</p>
-            <p className="text-[10px] text-muted-foreground">{analysis ? 'RBAC 117 • Lei 13.475 • ACT LATAM' : 'Aguardando escala'}</p>
+            <p className="text-[10px] text-muted-foreground">{analysis ? 'Motor operacional' : 'Aguardando escala'}</p>
           </div>
         </div>
         <div className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${meta.badge}`}>
-          {analysis?.latest ? formatComplianceStatus(analysis.latest.status) : 'Sem dados'}
+          {analysis?.focus ? formatComplianceStatus(analysis.focus.status) : 'Sem dados'}
         </div>
       </div>
 
