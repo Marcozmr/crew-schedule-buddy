@@ -123,7 +123,7 @@ export interface GroundGapDetail {
 // ─── Calculated output types ───
 
 export interface DutyCalculation {
-  /** Report time → 30min after last block-on (ms) */
+  /** Report time → último block-on + pós-voo (ms) */
   totalDutyMs: number;
   totalDutyHours: number;
   /** Sum of block-off → block-on across all legs (ms) */
