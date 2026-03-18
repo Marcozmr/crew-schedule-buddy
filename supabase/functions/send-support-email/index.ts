@@ -14,31 +14,31 @@ const json = (payload: unknown, status = 200) =>
   });
 
 const categoryToLabel = (type: string | null | undefined) =>
-  type === "suggestion" ? "Sugerir melhoria"
-    : type === "bug" ? "Relatar problema"
-    : "Entrar em contato";
+  type === "suggestion"
+    ? "Sugerir melhoria"
+    : type === "bug"
+      ? "Relatar problema"
+      : "Entrar em contato";
 
-// ── SMTP helpers using raw Deno TCP + STARTTLS ──
-
-async function readLine(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): Promise<string> {
-  let line = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    line += decoder.decode(value, { stream: true });
-    if (line.includes("\r\n")) break;
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Erro SMTP desconhecido";
   }
-  return line.trim();
 }
 
-async function drainResponse(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): Promise<string> {
-  // Read all available response lines (multi-line responses end with "XXX " not "XXX-")
+async function drainResponse(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+): Promise<string> {
   let full = "";
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     full += decoder.decode(value, { stream: true });
-    // Check if last line is a final response (3-digit code followed by space)
     const lines = full.split("\r\n").filter(Boolean);
     const lastLine = lines[lines.length - 1] || "";
     if (/^\d{3} /.test(lastLine)) break;
@@ -51,10 +51,37 @@ async function sendCommand(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   decoder: TextDecoder,
   encoder: TextEncoder,
-  cmd: string
+  cmd: string,
 ): Promise<string> {
   await writer.write(encoder.encode(cmd + "\r\n"));
   return drainResponse(reader, decoder);
+}
+
+async function authenticateSmtp(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+  encoder: TextEncoder,
+  username: string,
+  password: string,
+) {
+  const loginResp = await sendCommand(writer, reader, decoder, encoder, "AUTH LOGIN");
+  if (loginResp.startsWith("334")) {
+    const userResp = await sendCommand(writer, reader, decoder, encoder, btoa(username));
+    if (!userResp.startsWith("334")) {
+      throw new Error(`AUTH LOGIN usuário rejeitado: ${userResp}`);
+    }
+
+    const passResp = await sendCommand(writer, reader, decoder, encoder, btoa(password));
+    if (passResp.startsWith("235")) return;
+    throw new Error(`AUTH LOGIN senha rejeitada: ${passResp}`);
+  }
+
+  const credentials = btoa(`\x00${username}\x00${password}`);
+  const plainResp = await sendCommand(writer, reader, decoder, encoder, `AUTH PLAIN ${credentials}`);
+  if (!plainResp.startsWith("235")) {
+    throw new Error(`AUTH SMTP falhou. LOGIN: ${loginResp} | PLAIN: ${plainResp}`);
+  }
 }
 
 async function sendSmtpEmail(options: {
@@ -73,99 +100,67 @@ async function sendSmtpEmail(options: {
 
   console.log(`[SMTP] Connecting to ${host}:${port}`);
 
-  // 1. Connect plain TCP
   const conn = await Deno.connect({ hostname: host, port });
   let reader = conn.readable.getReader();
   let writer = conn.writable.getWriter();
 
-  // Read greeting
   const greeting = await drainResponse(reader, decoder);
-  console.log(`[SMTP] Greeting: ${greeting.substring(0, 80)}`);
-  if (!greeting.startsWith("220")) throw new Error(`Bad greeting: ${greeting}`);
+  if (!greeting.startsWith("220")) throw new Error(`SMTP greeting inválido: ${greeting}`);
 
-  // EHLO
-  let ehlo = await sendCommand(writer, reader, decoder, encoder, `EHLO escalax.app.br`);
-  console.log(`[SMTP] EHLO response received`);
+  const ehlo = await sendCommand(writer, reader, decoder, encoder, "EHLO escalax.app.br");
+  if (!ehlo.startsWith("250")) throw new Error(`EHLO falhou: ${ehlo}`);
 
-  // STARTTLS
-  const starttls = await sendCommand(writer, reader, decoder, encoder, "STARTTLS");
-  console.log(`[SMTP] STARTTLS: ${starttls.substring(0, 40)}`);
-  if (!starttls.startsWith("220")) throw new Error(`STARTTLS failed: ${starttls}`);
+  const startTls = await sendCommand(writer, reader, decoder, encoder, "STARTTLS");
+  if (!startTls.startsWith("220")) throw new Error(`STARTTLS falhou: ${startTls}`);
 
-  // Release plain readers/writers before TLS upgrade
   reader.releaseLock();
   writer.releaseLock();
 
-  // Upgrade to TLS
   const tlsConn = await Deno.startTls(conn, { hostname: host });
   reader = tlsConn.readable.getReader();
   writer = tlsConn.writable.getWriter();
 
-  // EHLO again over TLS
-  ehlo = await sendCommand(writer, reader, decoder, encoder, `EHLO escalax.app.br`);
-  console.log(`[SMTP] TLS EHLO OK`);
+  const tlsEhlo = await sendCommand(writer, reader, decoder, encoder, "EHLO escalax.app.br");
+  if (!tlsEhlo.startsWith("250")) throw new Error(`EHLO pós-TLS falhou: ${tlsEhlo}`);
 
-  // AUTH PLAIN (more compatible than AUTH LOGIN with Titan/Hostgator)
-  const credentials = btoa(`\x00${username}\x00${password}`);
-  const authResp = await sendCommand(writer, reader, decoder, encoder, `AUTH PLAIN ${credentials}`);
-  if (!authResp.startsWith("235")) {
-    // Fallback to AUTH LOGIN
-    console.log(`[SMTP] AUTH PLAIN failed (${authResp.substring(0, 40)}), trying AUTH LOGIN...`);
-    const loginResp = await sendCommand(writer, reader, decoder, encoder, "AUTH LOGIN");
-    if (!loginResp.startsWith("334")) throw new Error(`AUTH failed: ${loginResp}`);
-    const userResp = await sendCommand(writer, reader, decoder, encoder, btoa(username));
-    if (!userResp.startsWith("334")) throw new Error(`AUTH user failed: ${userResp}`);
-    const passResp = await sendCommand(writer, reader, decoder, encoder, btoa(password));
-    if (!passResp.startsWith("235")) throw new Error(`AUTH pass failed: ${passResp}`);
-  }
-  console.log(`[SMTP] Authenticated`);
+  await authenticateSmtp(writer, reader, decoder, encoder, username, password);
 
-  // MAIL FROM
   const mailFrom = await sendCommand(writer, reader, decoder, encoder, `MAIL FROM:<${from}>`);
-  if (!mailFrom.startsWith("250")) throw new Error(`MAIL FROM failed: ${mailFrom}`);
+  if (!mailFrom.startsWith("250")) throw new Error(`MAIL FROM rejeitado: ${mailFrom}`);
 
-  // RCPT TO
   const rcptTo = await sendCommand(writer, reader, decoder, encoder, `RCPT TO:<${to}>`);
-  if (!rcptTo.startsWith("250")) throw new Error(`RCPT TO failed: ${rcptTo}`);
+  if (!rcptTo.startsWith("250")) throw new Error(`RCPT TO rejeitado: ${rcptTo}`);
 
-  // DATA
   const dataResp = await sendCommand(writer, reader, decoder, encoder, "DATA");
-  if (!dataResp.startsWith("354")) throw new Error(`DATA failed: ${dataResp}`);
+  if (!dataResp.startsWith("354")) throw new Error(`DATA falhou: ${dataResp}`);
 
-  // Build message
   const boundary = `----=_Part_${Date.now()}`;
-  const msg = [
+  const message = [
     `From: EscalaX Support <${from}>`,
     `To: ${to}`,
     `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ``,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary=\"${boundary}\"`,
+    "",
     `--${boundary}`,
-    `Content-Type: text/html; charset=UTF-8`,
-    `Content-Transfer-Encoding: 7bit`,
-    ``,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: 7bit",
+    "",
     html,
-    ``,
+    "",
     `--${boundary}--`,
-    `.`,
+    ".",
   ].join("\r\n");
 
-  const endResp = await sendCommand(writer, reader, decoder, encoder, msg);
-  if (!endResp.startsWith("250")) throw new Error(`Send failed: ${endResp}`);
-  console.log(`[SMTP] Message accepted`);
+  const endResp = await sendCommand(writer, reader, decoder, encoder, message);
+  if (!endResp.startsWith("250")) throw new Error(`Mensagem rejeitada: ${endResp}`);
 
-  // QUIT
   await sendCommand(writer, reader, decoder, encoder, "QUIT");
 
-  try {
-    reader.releaseLock();
-    writer.releaseLock();
-    tlsConn.close();
-  } catch { /* ignore close errors */ }
+  reader.releaseLock();
+  writer.releaseLock();
+  tlsConn.close();
 }
-
-// ── Main handler ──
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -173,9 +168,10 @@ serve(async (req) => {
   }
 
   try {
-    // Auth
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ sent: false, stored: false, error: "Não autorizado" }, 401);
+    if (!authHeader) {
+      return json({ sent: false, stored: false, error: "Não autorizado" }, 401);
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -184,18 +180,20 @@ serve(async (req) => {
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return json({ sent: false, stored: false, error: "Não autorizado" }, 401);
+    if (authError || !user) {
+      return json({ sent: false, stored: false, error: "Não autorizado" }, 401);
+    }
 
-    // Payload
     const { name, email, type, subject, message, route } = await req.json();
-    if (!message?.trim()) return json({ sent: false, stored: false, error: "Mensagem é obrigatória" }, 400);
+    if (!message?.trim()) {
+      return json({ sent: false, stored: false, error: "Mensagem é obrigatória" }, 400);
+    }
 
     const safeName = name?.trim() || "Usuário";
     const safeType = type?.trim() || "contact";
     const safeSubject = subject?.trim() || null;
     const safeEmail = email?.trim() || null;
 
-    // Persist first
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -220,18 +218,21 @@ serve(async (req) => {
       return json({ sent: false, stored: false, error: "Não foi possível registrar." }, 500);
     }
 
-    // SMTP Config
     const smtpHost = Deno.env.get("SMTP_HOST");
     const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "587", 10);
     const smtpUser = Deno.env.get("SMTP_USER");
     const smtpPass = Deno.env.get("SMTP_PASS");
     const toEmail = Deno.env.get("SUPPORT_TO_EMAIL") || "support@escalax.app.br";
-    const fromEmail = Deno.env.get("SUPPORT_FROM_EMAIL") || smtpUser || "noreply@escalax.app.br";
+    const fromEmail = Deno.env.get("SUPPORT_FROM_EMAIL") || smtpUser || "support@escalax.app.br";
 
     if (!smtpHost || !smtpUser || !smtpPass) {
-      console.warn("[send-support-email] SMTP not configured — stored only");
       await serviceClient.from("feedback_messages").update({ status: "stored_no_email" }).eq("id", feedback.id);
-      return json({ sent: false, stored: true, error: "Mensagem salva. Envio por e-mail pendente de configuração." });
+      return json({
+        sent: false,
+        stored: true,
+        error: "Configuração SMTP incompleta.",
+        technicalError: "Secrets SMTP ausentes ou inválidos.",
+      });
     }
 
     const categoryLabel = categoryToLabel(safeType);
@@ -269,18 +270,22 @@ serve(async (req) => {
         html: emailHtml,
       });
 
-      console.log("[send-support-email] Email sent successfully");
       await serviceClient.from("feedback_messages").update({ status: "sent" }).eq("id", feedback.id);
       return json({ sent: true, stored: true });
-
     } catch (emailErr) {
-      console.error("[send-support-email] SMTP error:", emailErr);
+      const technicalError = getErrorMessage(emailErr);
+      console.error("[send-support-email] SMTP error:", technicalError);
       await serviceClient.from("feedback_messages").update({ status: "email_failed" }).eq("id", feedback.id);
-      return json({ sent: false, stored: true, error: "Mensagem salva. Falha no envio do e-mail." });
+      return json({
+        sent: false,
+        stored: true,
+        error: "Mensagem registrada, mas o e-mail não foi entregue.",
+        technicalError,
+      });
     }
-
   } catch (err) {
-    console.error("[send-support-email] fatal:", err);
-    return json({ sent: false, stored: false, error: "Erro interno" }, 500);
+    const technicalError = getErrorMessage(err);
+    console.error("[send-support-email] fatal:", technicalError);
+    return json({ sent: false, stored: false, error: "Erro interno", technicalError }, 500);
   }
 });

@@ -51,7 +51,7 @@ export function FeedbackFAB() {
 
   const handleSend = async () => {
     if (!message.trim()) {
-      toast.error('Escreva uma mensagem');
+      toast.error('Escreva uma mensagem.');
       return;
     }
     if (!user) {
@@ -75,16 +75,19 @@ export function FeedbackFAB() {
       });
 
       if (result.success && result.emailSent) {
-        toast.success('Mensagem enviada com sucesso!');
+        toast.success('E-mail enviado com sucesso.');
         close();
-      } else if (result.success && !result.emailSent) {
-        toast.success('Mensagem recebida e salva.', {
-          description: 'O envio por e-mail está sendo configurado.',
-        });
-        close();
-      } else {
-        toast.error(result.error || 'Erro ao enviar. Tente novamente.');
+        return;
       }
+
+      toast.error(
+        result.stored
+          ? 'Mensagem registrada, mas o e-mail não foi entregue.'
+          : result.error || 'Erro ao enviar. Tente novamente.',
+        {
+          description: result.technicalError || result.error,
+        },
+      );
     } catch {
       toast.error('Erro inesperado. Tente novamente.');
     } finally {
@@ -96,7 +99,7 @@ export function FeedbackFAB() {
     <>
       <button
         onClick={handleOpen}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full gradient-sky text-primary-foreground shadow-elevated transition-transform hover:scale-105 active:scale-95"
+        className="fixed safe-bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full gradient-sky text-primary-foreground shadow-elevated transition-transform hover:scale-105 active:scale-95"
       >
         <MessageCircle className="h-6 w-6" />
       </button>
@@ -113,7 +116,7 @@ export function FeedbackFAB() {
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 50, opacity: 0 }}
-              className="w-full max-w-md overflow-hidden rounded-2xl bg-card shadow-elevated"
+              className="w-full max-w-md overflow-hidden rounded-2xl bg-card shadow-elevated safe-area-bottom"
             >
               <div className="flex items-center justify-between border-b border-border p-4">
                 <h3 className="font-semibold text-foreground">
@@ -141,32 +144,26 @@ export function FeedbackFAB() {
                 </div>
               ) : (
                 <div className="space-y-3 p-4">
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome"
-                    className="w-full rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail"
-                    className="w-full rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome" className="w-full rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail" className="w-full rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
                   <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
                     <span className="text-xs text-muted-foreground">Categoria:</span>
                     <span className="text-sm font-medium text-foreground">{categoryLabel}</span>
                   </div>
-                  <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Assunto (opcional)"
-                    className="w-full rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
-                  <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Sua mensagem..." rows={4}
-                    className="w-full resize-none rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
+                  <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Assunto (opcional)" className="w-full rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
+                  <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Sua mensagem..." rows={4} className="w-full resize-none rounded-lg bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground" />
 
                   <p className="text-center text-xs text-muted-foreground">
-                    Resposta em até 24h
-                    {' · '}
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(SUPPORT_EMAIL); toast.success('E-mail copiado!'); }}
-                      className="underline hover:text-foreground">{SUPPORT_EMAIL}</button>
+                    Resposta em até 24h {' · '}
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(SUPPORT_EMAIL); toast.success('E-mail copiado.'); }} className="underline hover:text-foreground">
+                      {SUPPORT_EMAIL}
+                    </button>
                   </p>
                   <div className="flex gap-2">
-                    <button onClick={() => setStep('choose')}
-                      className="rounded-lg bg-muted px-4 py-2 text-sm text-muted-foreground hover:bg-muted/80">
+                    <button onClick={() => setStep('choose')} className="rounded-lg bg-muted px-4 py-2 text-sm text-muted-foreground hover:bg-muted/80">
                       Voltar
                     </button>
-                    <button onClick={handleSend} disabled={sending}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground gradient-sky hover:opacity-90 disabled:opacity-50">
+                    <button onClick={handleSend} disabled={sending} className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground gradient-sky hover:opacity-90 disabled:opacity-50">
                       <Send className="h-4 w-4" />
                       {sending ? 'Enviando...' : 'Enviar'}
                     </button>

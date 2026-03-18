@@ -27,7 +27,9 @@ export function parseDateBRT(dateStr: string): TZDate {
     [year, month, day] = dateStr.split('-').map(Number);
   } else {
     const parts = dateStr.split(/[\/\-]/);
-    day = parseInt(parts[0]); month = parseInt(parts[1]); year = parseInt(parts[2]);
+    day = parseInt(parts[0]);
+    month = parseInt(parts[1]);
+    year = parseInt(parts[2]);
   }
   return new TZDate(year, month - 1, day, 0, 0, 0, BRAZIL_TZ);
 }
@@ -65,10 +67,24 @@ export function formatTimeBR(time: string | null | undefined): string {
   return time;
 }
 
+/** Format decimal hours as HhMM */
+export function formatHoursMinutes(decimalHours: number | null | undefined): string {
+  if (decimalHours == null || Number.isNaN(decimalHours)) return '—';
+  const totalMinutes = Math.round(Math.abs(decimalHours) * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const sign = decimalHours < 0 ? '-' : '';
+  return `${sign}${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
 /** Format a full ISO datetime or timestamp to dd/MM/yyyy HH:mm BRT */
 export function formatDateTimeBR(isoOrTimestamp: string | number | Date | null | undefined): string {
   if (!isoOrTimestamp) return '—';
-  const raw = typeof isoOrTimestamp === 'string' ? new Date(isoOrTimestamp).getTime() : typeof isoOrTimestamp === 'number' ? isoOrTimestamp : isoOrTimestamp.getTime();
+  const raw = typeof isoOrTimestamp === 'string'
+    ? new Date(isoOrTimestamp).getTime()
+    : typeof isoOrTimestamp === 'number'
+      ? isoOrTimestamp
+      : isoOrTimestamp.getTime();
   const d = new TZDate(raw, BRAZIL_TZ);
   const day = d.getDate().toString().padStart(2, '0');
   const month = (d.getMonth() + 1).toString().padStart(2, '0');

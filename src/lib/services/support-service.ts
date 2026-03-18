@@ -1,9 +1,8 @@
 /**
  * Support Service — abstraction layer for support form submission.
  *
- * Backend: Supabase Edge Function (send-support-email).
- * Persistence is the source of truth — stored first, email is best-effort.
- * Uses Resend API for email delivery (requires RESEND_API_KEY secret).
+ * Backend: Lovable Cloud function (send-support-email).
+ * A mensagem é persistida primeiro e o envio por e-mail só é considerado sucesso quando o SMTP aceita a entrega.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -22,37 +21,41 @@ export interface SupportResult {
   stored: boolean;
   emailSent: boolean;
   error?: string;
+  technicalError?: string;
 }
 
-/**
- * Submit a support message.
- * Returns detailed status: stored + emailSent independently.
- */
 export async function submitSupport(payload: SupportPayload): Promise<SupportResult> {
   const { data, error } = await supabase.functions.invoke('send-support-email', {
     body: payload,
   });
 
-  // Network-level failure
   if (error) {
     console.error('[support-service] invoke error:', error.message);
-    return { success: false, stored: false, emailSent: false, error: 'Serviço indisponível. Tente novamente.' };
+    return {
+      success: false,
+      stored: false,
+      emailSent: false,
+      error: 'Serviço indisponível. Tente novamente.',
+      technicalError: error.message,
+    };
   }
 
   const stored = !!data?.stored;
   const sent = !!data?.sent;
+  const technicalError = data?.technicalError || undefined;
 
   if (stored && sent) {
     return { success: true, stored: true, emailSent: true };
   }
 
   if (stored && !sent) {
-    console.warn('[support-service] Stored but email failed:', data?.error);
+    console.warn('[support-service] email delivery failed:', technicalError || data?.error);
     return {
-      success: true,
+      success: false,
       stored: true,
       emailSent: false,
-      error: data?.error || 'Mensagem salva, mas o e-mail não foi enviado.',
+      error: data?.error || 'Mensagem registrada, mas o e-mail não foi entregue.',
+      technicalError,
     };
   }
 
@@ -61,5 +64,6 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
     stored: false,
     emailSent: false,
     error: data?.error || 'Não foi possível enviar sua mensagem. Tente novamente.',
+    technicalError,
   };
 }
