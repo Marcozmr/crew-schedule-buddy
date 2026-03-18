@@ -48,15 +48,15 @@ export default function DashboardPage() {
         );
       }
 
-      const latest = analysis.latest;
-      if (!latest) return;
+      const focus = analysis.focus;
+      if (!focus) return;
 
-      if (latest.status === 'WARNING') {
-        await NotificationService.notifyOperationalWarning(user.id, 'Sua jornada atual está próxima do limite regulamentar.');
+      if (focus.status === 'WARNING') {
+        await NotificationService.notifyOperationalWarning(user.id, 'Sua jornada atual está próxima do limite operacional.');
       }
 
-      if (latest.status === 'NON_COMPLIANT' || latest.status === 'CRITICAL_FATIGUE') {
-        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na escala ativa. Revise jornada, repouso e WOCL.');
+      if (focus.status === 'NON_COMPLIANT' || focus.status === 'CRITICAL_FATIGUE') {
+        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na jornada ativa. Revise jornada, repouso e WOCL.');
       }
 
       if (latest.rest.restBeforeDutyHours != null && latest.rest.restBeforeDutyHours < latest.rest.minRequiredRestHours) {

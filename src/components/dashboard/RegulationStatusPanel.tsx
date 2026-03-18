@@ -28,7 +28,7 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
   const analysis = useMemo(() => analyzeOperationalSchedule(schedule, 'America/Sao_Paulo'), [schedule]);
 
   const indicators = useMemo<Indicator[]>(() => {
-    if (!analysis?.latest) {
+    if (!analysis?.focus) {
       return [
         { label: 'Jornada', value: '—', ratio: 0, status: 'ok', icon: Clock },
         { label: 'Tempo de voo', value: '—', ratio: 0, status: 'ok', icon: Plane },
@@ -36,10 +36,10 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
       ];
     }
 
-    const latest = analysis.latest;
-    const dutyRule = latest.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_DUTY');
-    const flightRule = latest.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_FLIGHT');
-    const restRule = latest.rules.find((rule) => rule.ruleId === 'RBAC117_MIN_REST');
+    const focus = analysis.focus;
+    const dutyRule = focus.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_DUTY');
+    const flightRule = focus.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_FLIGHT');
+    const restRule = focus.rules.find((rule) => rule.ruleId === 'RBAC117_MIN_REST');
 
     const mapRuleStatus = (severity?: string): Indicator['status'] => {
       if (severity === 'critical') return 'critical';
