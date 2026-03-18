@@ -45,8 +45,10 @@ export interface OperationalAnalysis {
   window: ScheduleWindow;
   results: ComplianceResult[];
   allAlerts: Array<ComplianceResult['alerts'][number] & { dutyDate: string }>;
+  focusAlerts: Array<ComplianceResult['alerts'][number] & { dutyDate: string }>;
   overall: ComplianceStatus;
   latest: ComplianceResult | null;
+  focus: ComplianceResult | null;
 }
 
 function parseDateParts(date: string): [number, number, number] {
