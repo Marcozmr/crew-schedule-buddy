@@ -72,9 +72,9 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
     ];
   }, [analysis]);
 
-  const focusStatus = !analysis?.latest || analysis.latest.status === 'COMPLIANT'
+  const focusStatus = !analysis?.focus || analysis.focus.status === 'COMPLIANT'
     ? 'ok'
-    : analysis.latest.status === 'WARNING'
+    : analysis.focus.status === 'WARNING'
       ? 'warning'
       : 'critical';
   const meta = statusMeta[focusStatus];
