@@ -8,6 +8,7 @@ import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
 import { Upload, Calendar, Shield, Clock, Plane, ChevronRight, BedDouble, Settings, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { formatDateBR, formatHoursMinutes } from '@/lib/date-utils';
@@ -125,6 +126,15 @@ export default function DashboardPage() {
   const monthlyStatus = getMonthlyStatusSummary(statusResult);
   const operationalMeta = statusCardMeta[operationalStatus.tone];
   const monthlyMeta = statusCardMeta[monthlyStatus.tone];
+  const monthlyShortText = monthlyStatus.tone === 'critical'
+    ? 'Limite excedido'
+    : monthlyStatus.tone === 'attention' || monthlyStatus.tone === 'review'
+      ? 'Próximo do limite'
+      : 'Dentro do limite';
+  const monthlyBalanceHours = monthlyStatus.limitHours - monthlyStatus.usedHours;
+  const monthlyTooltipDetail = monthlyStatus.tone === 'critical'
+    ? `Excedente de ${formatHoursMinutes(Math.abs(monthlyBalanceHours))}.`
+    : `Restam ${formatHoursMinutes(Math.max(monthlyBalanceHours, 0))}.`;
 
   const dutyStatusByKey = useMemo(
     () => new Map((analysis?.results ?? []).map((result) => [buildResultKey(result.duty.reportTimeLocal), getOperationalStatusSummary(result)])),
@@ -163,8 +173,8 @@ export default function DashboardPage() {
           <>
             <motion.div {...fade(0.05)} className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 mb-8">
               {[
-                { label: 'Status mensal', value: '0h00 de 85h', detail: 'Dentro do limite mensal', icon: Clock },
-                { label: 'Jornada no mês', value: '0h00', detail: 'Horas de jornada · mês calendário', icon: Gauge },
+                { label: 'Horas de voo (30 dias)', value: '0h00', detail: 'Status: Regular · Dentro do limite', icon: Clock },
+                { label: 'Jornada mensal (duty)', value: '0h00', detail: 'Tempo total de jornada no mês calendário', icon: Gauge },
                 { label: 'Próximo voo', value: '—', detail: 'Sem jornada programada', icon: Plane },
                 { label: 'Situação operacional', value: 'Regular', detail: 'Operação dentro do esperado', icon: Shield, status: 'success' as const },
               ].map((stat, index) => (
@@ -219,29 +229,41 @@ export default function DashboardPage() {
         {hasSchedule && (
           <div className="space-y-6">
             <motion.div {...fade(0.05)} className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
-              <div className={`glass p-4 flex items-start gap-3 hover-lift border min-w-0 ${monthlyMeta.border}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${monthlyMeta.iconBg}`}>
-                  <Clock className={`w-5 h-5 ${monthlyMeta.iconColor}`} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] text-muted-foreground font-medium break-words">Status mensal</p>
-                  <p className="text-base sm:text-lg font-semibold font-mono text-foreground break-words">
-                    {formatHoursMinutes(monthlyStatus.usedHours)} de {formatHoursMinutes(monthlyStatus.limitHours)}
-                  </p>
-                  <p className={`text-[11px] mt-0.5 font-medium ${monthlyMeta.textColor}`}>Status mensal: {monthlyStatus.label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{monthlyStatus.metricLabel} · {monthlyStatus.windowLabel}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{monthlyStatus.subtitle}</p>
-                </div>
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={`glass p-4 flex items-start gap-3 hover-lift border min-w-0 cursor-help ${monthlyMeta.border}`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${monthlyMeta.iconBg}`}>
+                      <Clock className={`w-5 h-5 ${monthlyMeta.iconColor}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground font-medium break-words">Horas de voo (30 dias)</p>
+                      <p className="text-base sm:text-lg font-semibold font-mono text-foreground break-words">
+                        {formatHoursMinutes(monthlyStatus.usedHours)}
+                      </p>
+                      <p className={`text-[11px] mt-0.5 font-medium ${monthlyMeta.textColor}`}>Status: {monthlyStatus.label}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{monthlyShortText}</p>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start" className="max-w-[280px]">
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-semibold">{formatHoursMinutes(monthlyStatus.usedHours)} de {formatHoursMinutes(monthlyStatus.limitHours)}</p>
+                    <p className="text-xs text-muted-foreground">Tempo de voo acumulado nos últimos 30 dias.</p>
+                    <p className="text-xs text-muted-foreground">Limite aplicado: {formatHoursMinutes(monthlyStatus.limitHours)}</p>
+                    <p className={`text-xs font-medium ${monthlyMeta.textColor}`}>Status mensal: {monthlyStatus.label}</p>
+                    <p className="text-xs text-muted-foreground">{monthlyTooltipDetail}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
 
               <div className="glass p-4 flex items-start gap-3 hover-lift min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center shrink-0">
                   <Gauge className="w-5 h-5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-muted-foreground font-medium break-words">Jornada no mês</p>
+                  <p className="text-[11px] text-muted-foreground font-medium break-words">Jornada mensal (duty)</p>
                   <p className="text-base sm:text-lg font-semibold font-mono text-foreground break-words">{formatHoursMinutes(monthDutyHours)}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">Horas de jornada · mês calendário</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">Tempo total de jornada no mês calendário</p>
                 </div>
               </div>
 
