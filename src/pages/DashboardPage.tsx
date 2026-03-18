@@ -13,8 +13,42 @@ import { Link } from 'react-router-dom';
 import { formatDateBR, formatHoursMinutes } from '@/lib/date-utils';
 import { groupIntoDutyPeriods, getTodayDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
 import { DutyPeriodCard } from '@/components/dashboard/DutyPeriodCard';
-import { analyzeOperationalSchedule } from '@/lib/operational-analysis';
+import { analyzeOperationalSchedule, getMonthlyStatusSummary, getOperationalStatusSummary } from '@/lib/operational-analysis';
 import { NotificationService } from '@/lib/services/notification-service';
+
+const statusCardMeta = {
+  regular: {
+    iconBg: 'bg-success/10',
+    iconColor: 'text-success',
+    textColor: 'text-success',
+    border: 'border-success/25',
+    accent: 'from-success/10 via-success/5 to-transparent',
+  },
+  attention: {
+    iconBg: 'bg-warning/10',
+    iconColor: 'text-warning',
+    textColor: 'text-warning',
+    border: 'border-warning/25',
+    accent: 'from-warning/10 via-warning/5 to-transparent',
+  },
+  review: {
+    iconBg: 'bg-warning/10',
+    iconColor: 'text-warning',
+    textColor: 'text-warning',
+    border: 'border-warning/25',
+    accent: 'from-warning/10 via-warning/5 to-transparent',
+  },
+  critical: {
+    iconBg: 'bg-destructive/10',
+    iconColor: 'text-destructive',
+    textColor: 'text-destructive',
+    border: 'border-destructive/25',
+    accent: 'from-destructive/10 via-destructive/5 to-transparent',
+  },
+} as const;
+
+const buildDutyKey = (date: string, time?: string | null) => `${date}|${time ?? ''}`;
+const buildResultKey = (localReportTime: string) => buildDutyKey(localReportTime.slice(0, 10), localReportTime.slice(11, 16));
 
 export default function DashboardPage() {
   const { profile, user } = useAuth();
@@ -93,41 +127,15 @@ export default function DashboardPage() {
   });
 
   const statusResult = analysis?.focus ?? null;
-  const statusTone = !statusResult || statusResult.status === 'COMPLIANT'
-    ? 'regular'
-    : statusResult.status === 'WARNING'
-      ? 'warning'
-      : 'critical';
+  const operationalStatus = getOperationalStatusSummary(statusResult);
+  const monthlyStatus = getMonthlyStatusSummary(statusResult);
+  const operationalMeta = statusCardMeta[operationalStatus.tone];
+  const monthlyMeta = statusCardMeta[monthlyStatus.tone];
 
-  const statusCardMeta = {
-    regular: {
-      label: 'Regular',
-      subtitle: 'Dentro dos limites',
-      iconBg: 'bg-success/10',
-      iconColor: 'text-success',
-      textColor: 'text-success',
-      border: 'border-success/25',
-      accent: 'from-success/10 via-success/5 to-transparent',
-    },
-    warning: {
-      label: 'Atenção',
-      subtitle: 'Próximo de um limite',
-      iconBg: 'bg-warning/10',
-      iconColor: 'text-warning',
-      textColor: 'text-warning',
-      border: 'border-warning/25',
-      accent: 'from-warning/10 via-warning/5 to-transparent',
-    },
-    critical: {
-      label: 'Crítico',
-      subtitle: 'Necessita revisão',
-      iconBg: 'bg-destructive/10',
-      iconColor: 'text-destructive',
-      textColor: 'text-destructive',
-      border: 'border-destructive/25',
-      accent: 'from-destructive/10 via-destructive/5 to-transparent',
-    },
-  }[statusTone];
+  const dutyStatusByKey = useMemo(
+    () => new Map((analysis?.results ?? []).map((result) => [buildResultKey(result.duty.reportTimeLocal), getOperationalStatusSummary(result)])),
+    [analysis],
+  );
 
   return (
     <AppLayout>
@@ -162,9 +170,9 @@ export default function DashboardPage() {
             <motion.div {...fade(0.05)} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               {[
                 { label: 'Horas 30 dias', value: '0h00', icon: Clock },
-                { label: 'Jornada mês', value: '0h00', icon: Gauge },
+                { label: 'Jornada no mês', value: '0h00', icon: Gauge },
                 { label: 'Próximo voo', value: '—', icon: Plane },
-                { label: 'Situação', value: 'Dentro dos limites', icon: Shield, status: 'success' as const },
+                { label: 'Situação operacional', value: 'Regular', icon: Shield, status: 'success' as const },
               ].map((stat, index) => (
                 <div key={index} className="glass p-4 flex items-center gap-3 hover-lift">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${stat.status === 'success' ? 'bg-success/10' : 'bg-primary/8'}`}>
@@ -216,13 +224,14 @@ export default function DashboardPage() {
         {hasSchedule && (
           <div className="space-y-6">
             <motion.div {...fade(0.05)} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="glass p-4 flex items-center gap-3 hover-lift">
-                <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5 text-primary" />
+              <div className={`glass p-4 flex items-center gap-3 hover-lift border ${monthlyMeta.border}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${monthlyMeta.iconBg}`}>
+                  <Clock className={`w-5 h-5 ${monthlyMeta.iconColor}`} />
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Horas 30 dias</p>
                   <p className="text-lg font-semibold font-mono text-foreground">{statusResult ? formatHoursMinutes(statusResult.accumulatedHours.last30Days) : formatHoursMinutes(monthFlightHours)}</p>
+                  <p className={`text-[11px] mt-0.5 font-medium ${monthlyMeta.textColor}`}>{monthlyStatus.label}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
@@ -230,8 +239,9 @@ export default function DashboardPage() {
                   <Gauge className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Jornada mês</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Jornada no mês</p>
                   <p className="text-lg font-semibold font-mono text-foreground">{formatHoursMinutes(monthDutyHours)}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Mês calendário</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
@@ -243,16 +253,19 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-foreground truncate">{nextDuty ? nextDuty.routeSummary : '—'}</p>
                 </div>
               </div>
-              <div className={`glass relative overflow-hidden border p-4 hover-lift ${statusCardMeta.border}`}>
-                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${statusCardMeta.accent}`} />
+              <div className={`glass relative overflow-hidden border p-4 hover-lift ${operationalMeta.border}`}>
+                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${operationalMeta.accent}`} />
                 <div className="relative flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${statusCardMeta.iconBg}`}>
-                    <Shield className={`w-5 h-5 ${statusCardMeta.iconColor}`} />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${operationalMeta.iconBg}`}>
+                    <Shield className={`w-5 h-5 ${operationalMeta.iconColor}`} />
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted-foreground font-medium">Situação</p>
-                    <p className={`text-sm font-semibold ${statusCardMeta.textColor}`}>{statusCardMeta.label}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{statusCardMeta.subtitle}</p>
+                    <p className="text-[11px] text-muted-foreground font-medium">Situação operacional</p>
+                    <p className={`text-sm font-semibold ${operationalMeta.textColor}`}>{operationalStatus.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{operationalStatus.subtitle}</p>
+                    {operationalStatus.reason && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{operationalStatus.reason}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -271,7 +284,12 @@ export default function DashboardPage() {
               {todayDuties.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4">
                   {todayDuties.map((duty, index) => (
-                    <DutyPeriodCard key={duty.id} duty={duty} index={index} />
+                    <DutyPeriodCard
+                      key={duty.id}
+                      duty={duty}
+                      index={index}
+                      statusSummary={dutyStatusByKey.get(buildDutyKey(duty.dutyStartDate, duty.reportTime || duty.dutyStartTime))}
+                    />
                   ))}
                 </div>
               ) : (
