@@ -210,12 +210,12 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${analysis?.overall === 'COMPLIANT' || !analysis ? 'bg-success/10' : analysis.overall === 'WARNING' ? 'bg-warning/10' : 'bg-destructive/10'}`}>
-                  <Shield className={`w-5 h-5 ${analysis?.overall === 'COMPLIANT' || !analysis ? 'text-success' : analysis.overall === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'bg-success/10' : statusResult.status === 'WARNING' ? 'bg-warning/10' : 'bg-destructive/10'}`}>
+                  <Shield className={`w-5 h-5 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Status</p>
-                  <p className={`text-sm font-semibold ${analysis?.overall === 'COMPLIANT' || !analysis ? 'text-success' : analysis.overall === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
+                  <p className={`text-sm font-semibold ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
                 </div>
               </div>
             </motion.div>

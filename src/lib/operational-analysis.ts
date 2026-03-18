@@ -8,6 +8,7 @@ import {
   type DutyPeriodInput,
   type ScheduleWindow,
 } from '@/regulation';
+import { groupIntoDutyPeriods, type DutyPeriod } from '@/lib/duty-grouping';
 
 export interface OperationalScheduleEntry {
   id: string;
@@ -84,63 +85,84 @@ export function formatComplianceStatus(status: ComplianceStatus): string {
   return 'Situação normal';
 }
 
+function resolveDutyLegOffsets(duty: DutyPeriod): Array<{ depDayOffset: number; arrDayOffset: number }> {
+  let currentDayOffset = 0;
+  let previousArrivalAbs = -1;
+
+  return duty.legs.map((leg) => {
+    const departureTime = leg.departure_time || '00:00';
+    const arrivalTime = leg.arrival_time || departureTime;
+    const departureMinutes = timeToMinutes(departureTime);
+    const arrivalMinutes = timeToMinutes(arrivalTime);
+
+    let depDayOffset = currentDayOffset;
+    let depAbs = depDayOffset * 1440 + Math.max(0, departureMinutes);
+
+    while (previousArrivalAbs >= 0 && depAbs < previousArrivalAbs) {
+      depDayOffset += 1;
+      depAbs += 1440;
+    }
+
+    let arrDayOffset = depDayOffset;
+    let arrAbs = arrDayOffset * 1440 + Math.max(0, arrivalMinutes);
+
+    while (arrAbs < depAbs) {
+      arrDayOffset += 1;
+      arrAbs += 1440;
+    }
+
+    currentDayOffset = depDayOffset;
+    previousArrivalAbs = arrAbs;
+
+    return { depDayOffset, arrDayOffset };
+  });
+}
+
+function mapDutyPeriodToInput(
+  duty: DutyPeriod,
+  timezone: string,
+  homeBase?: string | null,
+): DutyPeriodInput {
+  const offsets = resolveDutyLegOffsets(duty);
+  const firstDate = duty.dutyStartDate;
+  const firstLeg = duty.legs[0];
+  const lastLeg = duty.legs[duty.legs.length - 1];
+
+  const legs = duty.legs.map((leg, index) => {
+    const departureTime = leg.departure_time || '00:00';
+    const arrivalTime = leg.arrival_time || departureTime;
+    const { depDayOffset, arrDayOffset } = offsets[index];
+
+    return {
+      id: leg.id,
+      flightNumber: leg.flight_number,
+      departureAirport: (leg.departure_airport || leg.departure || 'TBD').toUpperCase(),
+      arrivalAirport: (leg.arrival_airport || leg.arrival || 'TBD').toUpperCase(),
+      scheduledDepartureUtc: toUtcIso(firstDate, departureTime, timezone, depDayOffset),
+      scheduledArrivalUtc: toUtcIso(firstDate, arrivalTime, timezone, arrDayOffset),
+      aircraftCategory: mapAircraftCategory(leg.aircraft_type),
+      activityType: 'flight' as const,
+      crossesMidnight: arrDayOffset > depDayOffset,
+    };
+  });
+
+  return {
+    reportTimeUtc: toUtcIso(firstDate, duty.reportTime || duty.dutyStartTime || '00:00', timezone),
+    legs,
+    baseAirport: (homeBase || firstLeg.departure_airport || firstLeg.departure || 'BSB').toUpperCase(),
+    crewRole: mapCrewRole(firstLeg.crew_role),
+    aircraftCategory: legs.some((leg) => leg.aircraftCategory === 'widebody') ? 'widebody' : 'narrowbody',
+    postFlightMinutes: inferPostFlightMinutes(lastLeg.arrival_time || '00:00', duty.debriefTime),
+  } satisfies DutyPeriodInput;
+}
+
 export function buildDutyPeriodsFromSchedule(
   schedule: OperationalScheduleEntry[],
   timezone: string,
   homeBase?: string | null,
 ): DutyPeriodInput[] {
-  const groups = new Map<string, OperationalScheduleEntry[]>();
-
-  schedule.forEach((entry) => {
-    const report = entry.report_time || entry.departure_time || '00:00';
-    const key = `${entry.date}_${report}`;
-    const list = groups.get(key) ?? [];
-    list.push(entry);
-    groups.set(key, list);
-  });
-
-  return Array.from(groups.values())
-    .sort((a, b) => {
-      const aReport = a[0]?.report_time || a[0]?.departure_time || '00:00';
-      const bReport = b[0]?.report_time || b[0]?.departure_time || '00:00';
-      return toUtcIso(a[0].date, aReport, timezone).localeCompare(toUtcIso(b[0].date, bReport, timezone));
-    })
-    .map((duty) => {
-      const legs = duty.map((leg) => {
-        const departureTime = leg.departure_time || '00:00';
-        const arrivalTime = leg.arrival_time || departureTime;
-        const depUtc = toUtcIso(leg.date, departureTime, timezone);
-        const arrDayOffset = leg.crosses_midnight || timeToMinutes(arrivalTime) < timeToMinutes(departureTime) ? 1 : 0;
-        const arrUtc = toUtcIso(leg.date, arrivalTime, timezone, arrDayOffset);
-
-        return {
-          id: leg.id,
-          flightNumber: leg.flight_number,
-          departureAirport: (leg.departure_airport || leg.departure || 'TBD').toUpperCase(),
-          arrivalAirport: (leg.arrival_airport || leg.arrival || 'TBD').toUpperCase(),
-          scheduledDepartureUtc: depUtc,
-          scheduledArrivalUtc: arrUtc,
-          aircraftCategory: mapAircraftCategory(leg.aircraft_type),
-          activityType: (leg.is_flight ? 'flight' : 'ground_duty') as 'flight' | 'ground_duty',
-          crossesMidnight: !!leg.crosses_midnight,
-        };
-      });
-
-      const first = duty[0];
-      const last = duty[duty.length - 1];
-      const reportLocal = first.report_time || first.departure_time || '00:00';
-      const reportTimeUtc = toUtcIso(first.date, reportLocal, timezone);
-      const baseAirport = (homeBase || first.departure_airport || first.departure || 'BSB').toUpperCase();
-
-      return {
-        reportTimeUtc,
-        legs,
-        baseAirport,
-        crewRole: mapCrewRole(first.crew_role),
-        aircraftCategory: legs.some((leg) => leg.aircraftCategory === 'widebody') ? 'widebody' : 'narrowbody',
-        postFlightMinutes: inferPostFlightMinutes(last.arrival_time || '00:00', last.debrief_time),
-      } satisfies DutyPeriodInput;
-    });
+  return groupIntoDutyPeriods(schedule)
+    .map((duty) => mapDutyPeriodToInput(duty, timezone, homeBase));
 }
 
 export function buildOperationalWindow(
@@ -167,6 +189,30 @@ export function buildOperationalWindow(
   };
 }
 
+function selectRelevantResult(results: ComplianceResult[], referenceDate: string): ComplianceResult | null {
+  if (results.length === 0) return null;
+
+  const referenceMs = new Date(referenceDate).getTime();
+
+  const current = results.find((result) => {
+    const start = new Date(result.duty.reportTimeUtc).getTime();
+    const end = new Date(result.duty.endTimeUtc).getTime();
+    return start <= referenceMs && referenceMs <= end;
+  });
+
+  if (current) return current;
+
+  const next = results
+    .filter((result) => new Date(result.duty.reportTimeUtc).getTime() > referenceMs)
+    .sort((a, b) => new Date(a.duty.reportTimeUtc).getTime() - new Date(b.duty.reportTimeUtc).getTime())[0];
+
+  if (next) return next;
+
+  return [...results]
+    .filter((result) => new Date(result.duty.endTimeUtc).getTime() <= referenceMs)
+    .sort((a, b) => new Date(b.duty.endTimeUtc).getTime() - new Date(a.duty.endTimeUtc).getTime())[0] ?? results.at(-1) ?? null;
+}
+
 export function analyzeOperationalSchedule(
   schedule: OperationalScheduleEntry[],
   timezone: string,
@@ -188,6 +234,6 @@ export function analyzeOperationalSchedule(
     results,
     allAlerts,
     overall,
-    latest: results.at(-1) ?? null,
+    latest: selectRelevantResult(results, window.referenceDate),
   };
 }
