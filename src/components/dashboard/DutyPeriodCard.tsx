@@ -9,17 +9,31 @@ import { Plane, Clock, Moon, ChevronDown, ChevronUp, AlertTriangle } from 'lucid
 import { motion } from 'framer-motion';
 import type { DutyPeriod } from '@/lib/duty-grouping';
 import { formatDutyTime } from '@/lib/duty-grouping';
+import type { DashboardStatusSummary } from '@/lib/operational-analysis';
 
 interface Props {
   duty: DutyPeriod;
   index: number;
+  statusSummary?: DashboardStatusSummary;
 }
 
-export function DutyPeriodCard({ duty, index }: Props) {
+const footerStatusTone = {
+  regular: 'text-success',
+  attention: 'text-warning',
+  review: 'text-warning',
+  critical: 'text-destructive',
+} as const;
+
+export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
   const [expanded, setExpanded] = useState(duty.legCount > 1);
   const isMultiLeg = duty.legCount > 1;
   const dutyMins = Math.round(duty.totalDutyHours * 60);
   const isLongDuty = duty.totalDutyHours > 11;
+  const displayStatus = statusSummary ?? {
+    tone: isLongDuty ? 'attention' : 'regular',
+    label: isLongDuty ? 'Atenção' : 'Regular',
+    subtitle: isLongDuty ? 'Acompanhe os limites da jornada' : 'Operação dentro do esperado',
+  };
 
   const fade = {
     initial: { opacity: 0, y: 8 },
@@ -170,8 +184,8 @@ export function DutyPeriodCard({ duty, index }: Props) {
                   Debrief: <span className="font-mono font-medium text-foreground">{duty.debriefTime}</span>
                 </span>
               )}
-              <span className={`font-medium ${isLongDuty ? 'text-destructive' : 'text-success'}`}>
-                {isLongDuty ? 'Jornada longa' : 'Regular'}
+              <span className={`font-medium ${footerStatusTone[displayStatus.tone]}`}>
+                {displayStatus.label}
               </span>
             </div>
           </div>
@@ -213,6 +227,9 @@ export function DutyPeriodCard({ duty, index }: Props) {
                   Jornada: <span className="font-mono font-medium text-foreground">{formatDutyTime(dutyMins)}</span>
                 </span>
               )}
+              <span className={`text-[11px] font-medium ${footerStatusTone[displayStatus.tone]}`}>
+                {displayStatus.label}
+              </span>
             </div>
           )}
         </div>

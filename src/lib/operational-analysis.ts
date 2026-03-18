@@ -6,6 +6,7 @@ import {
   type ComplianceStatus,
   type CrewRole,
   type DutyPeriodInput,
+  type RuleResult,
   type ScheduleWindow,
 } from '@/regulation';
 import { groupIntoDutyPeriods, type DutyPeriod } from '@/lib/duty-grouping';
@@ -50,6 +51,23 @@ export interface OperationalAnalysis {
   latest: ComplianceResult | null;
   focus: ComplianceResult | null;
 }
+
+export interface DashboardStatusSummary {
+  tone: 'regular' | 'attention' | 'review' | 'critical';
+  label: 'Regular' | 'Atenção' | 'Revisar' | 'Crítico';
+  subtitle: string;
+  reason?: string;
+}
+
+const CURRENT_OPERATION_RULE_IDS = new Set([
+  'RBAC117_MAX_DUTY',
+  'RBAC117_MAX_FLIGHT',
+  'RBAC117_MIN_REST',
+  'LEI13475_MAX_DUTY_ABSOLUTE',
+  'LEI13475_MIN_REST_12H',
+  'LATAM_ACT_GROUND_TIME',
+  'LATAM_ACT_REST_AUGMENTATION',
+]);
 
 function parseDateParts(date: string): [number, number, number] {
   const [y, m, d] = date.split('-').map(Number);
@@ -97,6 +115,130 @@ export function formatComplianceStatus(status: ComplianceStatus): string {
   if (status === 'WARNING') return 'Atenção';
   if (status === 'CRITICAL_FATIGUE' || status === 'NON_COMPLIANT') return 'Crítico';
   return 'Regular';
+}
+
+function usageRatio(rule?: Pick<RuleResult, 'calculatedValue' | 'limitUsed'>): number {
+  if (!rule?.limitUsed || rule.limitUsed <= 0 || rule.calculatedValue == null) return 0;
+  return rule.calculatedValue / rule.limitUsed;
+}
+
+function describeOperationalIssue(rule: RuleResult): string {
+  if (rule.ruleId === 'RBAC117_MIN_REST' || rule.ruleId === 'LEI13475_MIN_REST_12H' || rule.ruleId === 'LATAM_ACT_REST_AUGMENTATION') {
+    return 'Descanso abaixo do mínimo';
+  }
+
+  if (rule.ruleId === 'RBAC117_MAX_DUTY' || rule.ruleId === 'LEI13475_MAX_DUTY_ABSOLUTE') {
+    return 'Limite de jornada atingido';
+  }
+
+  if (rule.ruleId === 'RBAC117_MAX_FLIGHT') {
+    return 'Limite de horas de voo atingido';
+  }
+
+  if (rule.ruleId === 'LATAM_ACT_GROUND_TIME') {
+    return 'Conexão acima do permitido';
+  }
+
+  return 'Encontramos um ponto que precisa conferência';
+}
+
+export function getOperationalStatusSummary(result: ComplianceResult | null): DashboardStatusSummary {
+  if (!result) {
+    return {
+      tone: 'regular',
+      label: 'Regular',
+      subtitle: 'Operação dentro do esperado',
+    };
+  }
+
+  const currentRules = result.rules.filter((rule) => CURRENT_OPERATION_RULE_IDS.has(rule.ruleId));
+  const criticalIssue = currentRules.find((rule) => !rule.passed && rule.severity === 'critical');
+
+  if (criticalIssue) {
+    return {
+      tone: 'critical',
+      label: 'Crítico',
+      subtitle: 'Há uma violação operacional',
+      reason: describeOperationalIssue(criticalIssue),
+    };
+  }
+
+  const reviewIssue = currentRules.find((rule) => !rule.passed);
+  if (reviewIssue) {
+    return {
+      tone: 'review',
+      label: 'Revisar',
+      subtitle: 'Encontramos um ponto que precisa conferência',
+      reason: describeOperationalIssue(reviewIssue),
+    };
+  }
+
+  const dutyRule = result.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_DUTY');
+  const flightRule = result.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_FLIGHT');
+  const restRule = result.rules.find((rule) => rule.ruleId === 'RBAC117_MIN_REST');
+  const dutyRatio = usageRatio(dutyRule);
+  const flightRatio = usageRatio(flightRule);
+  const restRatio = restRule?.calculatedValue != null && restRule.limitUsed ? restRule.calculatedValue / restRule.limitUsed : null;
+
+  if (restRatio != null && restRatio >= 1 && restRatio <= 1.15) {
+    return {
+      tone: 'attention',
+      label: 'Atenção',
+      subtitle: 'Acompanhe os limites da jornada',
+      reason: 'Descanso próximo do mínimo',
+    };
+  }
+
+  if (Math.max(dutyRatio, flightRatio) >= 0.85) {
+    return {
+      tone: 'attention',
+      label: 'Atenção',
+      subtitle: 'Acompanhe os limites da jornada',
+      reason: dutyRatio >= flightRatio ? 'Jornada próxima do limite' : 'Horas de voo próximas do limite',
+    };
+  }
+
+  return {
+    tone: 'regular',
+    label: 'Regular',
+    subtitle: 'Operação dentro do esperado',
+  };
+}
+
+export function getMonthlyStatusSummary(result: ComplianceResult | null): DashboardStatusSummary {
+  const monthlyRule = result?.rules.find((rule) => rule.ruleId === 'RBAC117_FH_MONTH');
+
+  if (!monthlyRule) {
+    return {
+      tone: 'regular',
+      label: 'Regular',
+      subtitle: 'Dentro do esperado',
+    };
+  }
+
+  const ratio = usageRatio(monthlyRule);
+
+  if (!monthlyRule.passed) {
+    return {
+      tone: 'critical',
+      label: 'Crítico',
+      subtitle: 'Limite mensal atingido',
+    };
+  }
+
+  if (ratio >= 0.85) {
+    return {
+      tone: 'attention',
+      label: 'Atenção',
+      subtitle: 'Próximo do limite mensal',
+    };
+  }
+
+  return {
+    tone: 'regular',
+    label: 'Regular',
+    subtitle: 'Dentro do esperado',
+  };
 }
 
 function resolveDutyLegOffsets(duty: DutyPeriod): Array<{ depDayOffset: number; arrDayOffset: number }> {
