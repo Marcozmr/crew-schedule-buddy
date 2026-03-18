@@ -72,8 +72,12 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
     ];
   }, [analysis]);
 
-  const overall = !analysis || analysis.overall === 'COMPLIANT' ? 'ok' : analysis.overall === 'WARNING' ? 'warning' : 'critical';
-  const meta = statusMeta[overall];
+  const focusStatus = !analysis?.latest || analysis.latest.status === 'COMPLIANT'
+    ? 'ok'
+    : analysis.latest.status === 'WARNING'
+      ? 'warning'
+      : 'critical';
+  const meta = statusMeta[focusStatus];
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass rounded-2xl overflow-hidden">
@@ -88,7 +92,7 @@ export function RegulationStatusPanel({ schedule }: RegulationStatusPanelProps) 
           </div>
         </div>
         <div className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${meta.badge}`}>
-          {analysis ? formatComplianceStatus(analysis.overall) : 'Sem dados'}
+          {analysis?.latest ? formatComplianceStatus(analysis.latest.status) : 'Sem dados'}
         </div>
       </div>
 

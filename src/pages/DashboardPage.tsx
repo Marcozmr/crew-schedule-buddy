@@ -92,7 +92,8 @@ export default function DashboardPage() {
     transition: { delay, duration: 0.3, ease: 'easeOut' as const },
   });
 
-  const overallStatus = analysis ? formatComplianceStatus(analysis.overall) : 'Situação normal';
+  const statusResult = analysis?.latest ?? null;
+  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Situação normal';
 
   return (
     <AppLayout>
@@ -187,7 +188,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Horas 30 dias</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{analysis?.latest ? formatHoursMinutes(analysis.latest.accumulatedHours.last30Days) : formatHoursMinutes(monthFlightHours)}</p>
+                  <p className="text-lg font-semibold font-mono text-foreground">{statusResult ? formatHoursMinutes(statusResult.accumulatedHours.last30Days) : formatHoursMinutes(monthFlightHours)}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
@@ -209,12 +210,12 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${analysis?.overall === 'COMPLIANT' || !analysis ? 'bg-success/10' : analysis.overall === 'WARNING' ? 'bg-warning/10' : 'bg-destructive/10'}`}>
-                  <Shield className={`w-5 h-5 ${analysis?.overall === 'COMPLIANT' || !analysis ? 'text-success' : analysis.overall === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'bg-success/10' : statusResult.status === 'WARNING' ? 'bg-warning/10' : 'bg-destructive/10'}`}>
+                  <Shield className={`w-5 h-5 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Status</p>
-                  <p className={`text-sm font-semibold ${analysis?.overall === 'COMPLIANT' || !analysis ? 'text-success' : analysis.overall === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
+                  <p className={`text-sm font-semibold ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
                 </div>
               </div>
             </motion.div>
