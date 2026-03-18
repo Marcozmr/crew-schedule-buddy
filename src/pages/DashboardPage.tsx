@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { formatDateBR } from '@/lib/date-utils';
+import { formatDateBR, formatHoursMinutes } from '@/lib/date-utils';
 import { groupIntoDutyPeriods, getTodayDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
 import { DutyPeriodCard } from '@/components/dashboard/DutyPeriodCard';
 
