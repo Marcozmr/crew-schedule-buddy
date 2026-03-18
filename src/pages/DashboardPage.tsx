@@ -125,7 +125,7 @@ export default function DashboardPage() {
                   { title: 'Importar Escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
                   { title: 'Simular Jornada', desc: 'Limites RBAC 117', icon: Clock, path: '/duty-calc' },
                   { title: 'Cálc. Descanso', desc: 'Período mínimo', icon: BedDouble, path: '/rest-calc' },
-                  { title: 'Regulamentação', desc: 'Conformidade', icon: Shield, path: '/regulation' },
+                  { title: 'Simulador operacional', desc: 'Conformidade', icon: Shield, path: '/regulation' },
                   { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
                 ].map((card, i) => (
                   card.action === 'import' ? (
