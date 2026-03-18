@@ -77,6 +77,8 @@ export interface DutyPeriodInput {
   baseAirport: string;
   crewRole: CrewRole;
   aircraftCategory: AircraftCategory;
+  /** Pós-voo configurável (min), default 30 */
+  postFlightMinutes?: number;
 }
 
 export interface CrewContext {

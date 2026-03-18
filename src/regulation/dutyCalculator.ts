@@ -9,7 +9,7 @@ import { TZDate } from '@date-fns/tz';
 import type { DutyPeriodInput, DutyCalculation, GroundGapDetail } from './types';
 import { splitIntervalByTimeWindows, classifyGroundTimes } from '@/lib/time-segments';
 
-const DEBRIEF_MS = 30 * 60 * 1000; // 30 minutes
+const DEFAULT_POST_FLIGHT_MINUTES = 30;
 
 function getBlockOff(leg: DutyPeriodInput['legs'][0]): number {
   return new Date(leg.actualDepartureUtc || leg.scheduledDepartureUtc).getTime();
