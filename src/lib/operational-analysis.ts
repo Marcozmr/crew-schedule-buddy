@@ -93,10 +93,10 @@ export function inferPostFlightMinutes(arrivalTime: string, debriefTime: string 
 }
 
 export function formatComplianceStatus(status: ComplianceStatus): string {
-  if (status === 'COMPLIANT') return 'Situação normal';
-  if (status === 'WARNING') return 'Atenção operacional';
-  if (status === 'CRITICAL_FATIGUE' || status === 'NON_COMPLIANT') return 'Operação crítica';
-  return 'Situação normal';
+  if (status === 'COMPLIANT') return 'Regular';
+  if (status === 'WARNING') return 'Atenção';
+  if (status === 'CRITICAL_FATIGUE' || status === 'NON_COMPLIANT') return 'Crítico';
+  return 'Regular';
 }
 
 function resolveDutyLegOffsets(duty: DutyPeriod): Array<{ depDayOffset: number; arrDayOffset: number }> {
