@@ -1,13 +1,25 @@
-import type { ImportDiagnostic } from '@/lib/gmail-import';
+export const PORTAL_SESSION_STORAGE_KEY = 'portal_authenticated_session';
+export const PRIMARY_PORTAL_CONNECTOR_KEY = 'generic_sso' as const;
 
-export const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
-export const PRIMARY_PORTAL_CONNECTOR_KEY = 'latam_connector' as const;
-
-export type PortalConnectorKey = 'latam_connector' | 'gol_connector' | 'azul_connector';
+export type PortalConnectorKey = 'generic_sso' | 'latam_connector' | 'gol_connector' | 'azul_connector';
 export type PortalConnectionStatus = 'connected' | 'pending' | 'disconnected' | 'unavailable' | 'expired';
 export type PortalSyncRunStatus = 'pending' | 'success' | 'noop' | 'error';
 export type PortalSourceKind = 'official_pdf' | 'authenticated_html' | 'authenticated_endpoint';
 export type PortalConnectorState = 'ready' | 'planned';
+
+export interface PortalSessionSnapshot {
+  provider: 'generic_sso';
+  connectedAt: string;
+  lastObservedUrl: string | null;
+  loginDomain: string;
+  sessionMode: 'browser_managed';
+}
+
+export interface PortalAuthRequest {
+  loginUrl: string;
+  loginDomain: string;
+  successHint: string;
+}
 
 export interface PortalConnectionRecord {
   id: string;
@@ -52,13 +64,12 @@ export interface PortalSyncExecutionResult {
   rosterId: string | null;
   reason?: string;
   error?: string | null;
-  diagnostic?: ImportDiagnostic | null;
 }
 
 export interface PortalConnectorDefinition {
   key: PortalConnectorKey;
   sourceKind: PortalSourceKind;
   state: PortalConnectorState;
-  connect: () => Promise<void>;
-  sync: (args: { userId: string; providerToken: string | null }) => Promise<PortalSyncExecutionResult>;
+  beginAuth: () => Promise<PortalAuthRequest>;
+  sync: (args: { userId: string }) => Promise<PortalSyncExecutionResult>;
 }

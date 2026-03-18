@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
+import { PORTAL_SESSION_STORAGE_KEY } from '@/lib/portal/types';
 
 interface Profile {
   id: string;
@@ -32,16 +33,15 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 
-// App-specific localStorage keys to clear on logout
 const APP_STORAGE_KEYS = [
   PROVIDER_TOKEN_STORAGE_KEY,
+  PORTAL_SESSION_STORAGE_KEY,
   'escalax_schedule',
   'escalax_user',
 ];
 
 let _queryClient: QueryClient | null = null;
 
-/** Register the QueryClient so signOut can reset all caches */
 export function registerQueryClient(qc: QueryClient) {
   _queryClient = qc;
 }
@@ -98,7 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
 
       if (event === 'SIGNED_OUT') {
-        // Clear all app state on sign out
         setProfile(null);
         setProviderToken(null);
         _queryClient?.clear();
@@ -137,27 +136,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const normalizedEmail = normalizeEmail(email);
-    // Clear onboarding dismissed flag so modal shows on fresh login
     sessionStorage.removeItem('escalax_onboarding_dismissed');
     const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) throw error;
   };
 
   const signOut = async () => {
-    // Clear app-specific localStorage keys
-    APP_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     sessionStorage.removeItem('escalax_onboarding_dismissed');
 
-    // 2. Clear React Query cache entirely
     _queryClient?.clear();
 
-    // 3. Clear local state
     setProfile(null);
     setProviderToken(null);
     setSession(null);
     setUser(null);
 
-    // 4. Sign out from Supabase (triggers onAuthStateChange SIGNED_OUT)
     await supabase.auth.signOut();
   };
 
