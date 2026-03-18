@@ -1,9 +1,4 @@
-/**
- * EscalaX — Premium Aviation Dashboard (Light Theme)
- * Uses duty period grouping for correct operational ordering.
- */
-
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useScheduleData } from '@/hooks/useScheduleData';
@@ -11,40 +6,73 @@ import { useOperationalPreferences } from '@/hooks/useOperationalPreferences';
 import { useOperationalClock } from '@/hooks/useOperationalClock';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { OnboardingModal, useOnboardingModal } from '@/components/OnboardingModal';
-import {
-  Upload, Calendar, Shield, Clock, Plane, ChevronRight, BedDouble,
-  Settings, Gauge,
-} from 'lucide-react';
+import { Upload, Calendar, Shield, Clock, Plane, ChevronRight, BedDouble, Settings, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { formatDateBR, formatHoursMinutes } from '@/lib/date-utils';
 import { groupIntoDutyPeriods, getTodayDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
 import { DutyPeriodCard } from '@/components/dashboard/DutyPeriodCard';
+import { analyzeOperationalSchedule, formatComplianceStatus } from '@/lib/operational-analysis';
+import { NotificationService } from '@/lib/services/notification-service';
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { schedule, loading, reload } = useScheduleData();
   const { shouldShow: showOnboarding, dismiss: dismissOnboarding } = useOnboardingModal();
   const { homeBase, timezone } = useOperationalPreferences();
   const { now, todayStr, monthStr } = useOperationalClock(timezone, reload);
 
   const hasSchedule = !loading && schedule.length > 0;
-
-  // Group all flights into duty periods, ordered by presentation time
   const allDutyPeriods = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
-  const todayDuties = useMemo(
-    () => getTodayDutyPeriods(allDutyPeriods, todayStr, homeBase),
-    [allDutyPeriods, todayStr, homeBase],
-  );
-  const nextDuty = useMemo(
-    () => getNextDutyPeriod(allDutyPeriods, todayStr, now, timezone),
-    [allDutyPeriods, todayStr, now, timezone],
-  );
+  const todayDuties = useMemo(() => getTodayDutyPeriods(allDutyPeriods, todayStr, homeBase), [allDutyPeriods, todayStr, homeBase]);
+  const nextDuty = useMemo(() => getNextDutyPeriod(allDutyPeriods, todayStr, now, timezone), [allDutyPeriods, todayStr, now, timezone]);
+  const analysis = useMemo(() => analyzeOperationalSchedule(schedule, timezone, homeBase), [schedule, timezone, homeBase]);
 
-  const monthFlights = schedule.filter(e => e.date?.startsWith(monthStr) && e.is_flight);
-  const monthFlightHours = monthFlights.reduce((s, f) => s + (f.flight_hours || 0), 0);
-  const monthDutyHours = monthFlights.reduce((s, f) => s + (f.duty_hours || 0), 0);
+  const monthFlights = schedule.filter((entry) => entry.date?.startsWith(monthStr) && entry.is_flight);
+  const monthFlightHours = monthFlights.reduce((sum, flight) => sum + (flight.flight_hours || 0), 0);
+  const monthDutyHours = analysis?.results
+    .filter((result) => result.duty.reportTimeLocal.startsWith(monthStr))
+    .reduce((sum, result) => sum + result.duty.totalDutyHours, 0) ?? 0;
+
+  useEffect(() => {
+    if (!user || !analysis) return;
+
+    const run = async () => {
+      if (nextDuty?.reportTime) {
+        await NotificationService.notifyDutyReminder(
+          user.id,
+          formatDateBR(nextDuty.dutyStartDate),
+          nextDuty.reportTime,
+          nextDuty.legs[0]?.flight_number || nextDuty.routeSummary,
+        );
+      }
+
+      const latest = analysis.latest;
+      if (!latest) return;
+
+      if (latest.status === 'WARNING') {
+        await NotificationService.notifyOperationalWarning(user.id, 'Sua jornada atual está próxima do limite regulamentar.');
+      }
+
+      if (latest.status === 'NON_COMPLIANT' || latest.status === 'CRITICAL_FATIGUE') {
+        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na escala ativa. Revise jornada, repouso e WOCL.');
+      }
+
+      if (latest.rest.restBeforeDutyHours != null && latest.rest.restBeforeDutyHours < latest.rest.minRequiredRestHours) {
+        await NotificationService.notifyRestReminder(
+          user.id,
+          `Repouso calculado de ${formatHoursMinutes(latest.rest.restBeforeDutyHours)} abaixo do mínimo de ${formatHoursMinutes(latest.rest.minRequiredRestHours)}.`,
+        );
+      }
+
+      if (latest.fatigue.woclExposure.totalMinutes > 0) {
+        await NotificationService.notifyOperationalWarning(user.id, `Sua operação toca o WOCL por ${latest.fatigue.woclExposure.totalMinutes} min.`);
+      }
+    };
+
+    void run();
+  }, [analysis, nextDuty, user]);
 
   const greeting = () => {
     const hourStr = new Intl.DateTimeFormat('pt-BR', {
@@ -52,9 +80,9 @@ export default function DashboardPage() {
       hour12: false,
       timeZone: timezone,
     }).format(now);
-    const h = Number(hourStr);
-    if (h < 12) return 'Bom dia';
-    if (h < 18) return 'Boa tarde';
+    const hour = Number(hourStr);
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
     return 'Boa noite';
   };
 
@@ -64,12 +92,13 @@ export default function DashboardPage() {
     transition: { delay, duration: 0.3, ease: 'easeOut' as const },
   });
 
+  const overallStatus = analysis ? formatComplianceStatus(analysis.overall) : 'Situação normal';
+
   return (
     <AppLayout>
       <div className="pb-10">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
-        {/* ═══ Greeting ═══ */}
         <motion.div {...fade(0)} className="mb-8">
           <h1 className="text-xl lg:text-2xl font-semibold text-foreground">
             {greeting()}, <span className="text-primary">{profile?.name?.split(' ')[0] || 'Tripulante'}</span>
@@ -87,49 +116,45 @@ export default function DashboardPage() {
 
         {loading && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="skeleton h-[88px] rounded-2xl" />
+            {[...Array(4)].map((_, index) => (
+              <div key={index} className="skeleton h-[88px] rounded-2xl" />
             ))}
           </div>
         )}
 
         {!loading && schedule.length === 0 && (
           <>
-            {/* ═══ Quick Stats (empty) ═══ */}
             <motion.div {...fade(0.05)} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               {[
-                { label: 'Horas 28 dias', value: '0h', icon: Clock },
-                { label: 'Horas mês', value: '0h', icon: Gauge },
+                { label: 'Horas 30 dias', value: '0h00', icon: Clock },
+                { label: 'Jornada mês', value: '0h00', icon: Gauge },
                 { label: 'Próximo voo', value: '—', icon: Plane },
-                { label: 'Status', value: 'Regular', icon: Shield, status: 'success' as const },
-              ].map((s, i) => (
-                <div key={i} className="glass p-4 flex items-center gap-3 hover-lift">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    s.status === 'success' ? 'bg-success/10' : 'bg-primary/8'
-                  }`}>
-                    <s.icon className={`w-5 h-5 ${s.status === 'success' ? 'text-success' : 'text-primary'}`} />
+                { label: 'Status', value: 'Situação normal', icon: Shield, status: 'success' as const },
+              ].map((stat, index) => (
+                <div key={index} className="glass p-4 flex items-center gap-3 hover-lift">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${stat.status === 'success' ? 'bg-success/10' : 'bg-primary/8'}`}>
+                    <stat.icon className={`w-5 h-5 ${stat.status === 'success' ? 'text-success' : 'text-primary'}`} />
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted-foreground font-medium">{s.label}</p>
-                    <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
+                    <p className="text-[11px] text-muted-foreground font-medium">{stat.label}</p>
+                    <p className="text-lg font-semibold font-mono text-foreground">{stat.value}</p>
                   </div>
                 </div>
               ))}
             </motion.div>
 
-            {/* ═══ Empty State ═══ */}
             <motion.div {...fade(0.1)}>
               <h2 className="text-sm font-semibold text-foreground mb-4">Comece agora</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
-                  { title: 'Importar Escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
-                  { title: 'Simular Jornada', desc: 'Limites RBAC 117', icon: Clock, path: '/duty-calc' },
-                  { title: 'Cálc. Descanso', desc: 'Período mínimo', icon: BedDouble, path: '/rest-calc' },
-                  { title: 'Simulador operacional', desc: 'Conformidade', icon: Shield, path: '/regulation' },
+                  { title: 'Importar escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
+                  { title: 'Calcular jornada', desc: 'RBAC + Lei + LATAM', icon: Clock, path: '/duty-calc' },
+                  { title: 'Calcular descanso', desc: 'Repouso real', icon: BedDouble, path: '/rest-calc' },
+                  { title: 'Calculadora operacional', desc: 'Análise completa', icon: Shield, path: '/regulation' },
                   { title: 'Configurações', desc: 'Personalize', icon: Settings, path: '/settings' },
-                ].map((card, i) => (
+                ].map((card, index) => (
                   card.action === 'import' ? (
-                    <PdfImportDialog key={i} onImportComplete={reload} trigger={
+                    <PdfImportDialog key={index} onImportComplete={reload} trigger={
                       <div className="glass p-5 cursor-pointer hover-lift group text-left">
                         <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
                           <card.icon className="w-5 h-5 text-primary" />
@@ -139,7 +164,7 @@ export default function DashboardPage() {
                       </div>
                     } />
                   ) : (
-                    <Link key={i} to={card.path!} className="glass p-5 hover-lift group">
+                    <Link key={index} to={card.path!} className="glass p-5 hover-lift group">
                       <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
                         <card.icon className="w-5 h-5 text-primary" />
                       </div>
@@ -155,16 +180,14 @@ export default function DashboardPage() {
 
         {hasSchedule && (
           <div className="space-y-6">
-
-            {/* ═══ 4 Stat Cards ═══ */}
             <motion.div {...fade(0.05)} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="glass p-4 flex items-center gap-3 hover-lift">
                 <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center shrink-0">
                   <Clock className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Horas 28 dias</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{formatHoursMinutes(monthFlightHours)}</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Horas 30 dias</p>
+                  <p className="text-lg font-semibold font-mono text-foreground">{analysis?.latest ? formatHoursMinutes(analysis.latest.accumulatedHours.last30Days) : formatHoursMinutes(monthFlightHours)}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
@@ -182,23 +205,20 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Próximo voo</p>
-                  <p className="text-sm font-semibold text-foreground truncate">
-                    {nextDuty ? nextDuty.routeSummary : '—'}
-                  </p>
+                  <p className="text-sm font-semibold text-foreground truncate">{nextDuty ? nextDuty.routeSummary : '—'}</p>
                 </div>
               </div>
               <div className="glass p-4 flex items-center gap-3 hover-lift">
-                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-                  <Shield className="w-5 h-5 text-success" />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${analysis?.overall === 'COMPLIANT' || !analysis ? 'bg-success/10' : analysis.overall === 'WARNING' ? 'bg-warning/10' : 'bg-destructive/10'}`}>
+                  <Shield className={`w-5 h-5 ${analysis?.overall === 'COMPLIANT' || !analysis ? 'text-success' : analysis.overall === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium">Status</p>
-                  <p className="text-sm font-semibold text-success">Situação normal</p>
+                  <p className={`text-sm font-semibold ${analysis?.overall === 'COMPLIANT' || !analysis ? 'text-success' : analysis.overall === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
                 </div>
               </div>
             </motion.div>
 
-            {/* ═══ Today's Duty Periods ═══ */}
             <motion.div {...fade(0.1)}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-foreground">Operações de hoje</h2>
@@ -211,8 +231,8 @@ export default function DashboardPage() {
 
               {todayDuties.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4">
-                  {todayDuties.map((duty, i) => (
-                    <DutyPeriodCard key={duty.id} duty={duty} index={i} />
+                  {todayDuties.map((duty, index) => (
+                    <DutyPeriodCard key={duty.id} duty={duty} index={index} />
                   ))}
                 </div>
               ) : (
@@ -232,17 +252,15 @@ export default function DashboardPage() {
               )}
             </motion.div>
 
-            {/* ═══ Quick Actions ═══ */}
             <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
                 { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
-                { label: 'Calcular Jornada', path: '/duty-calc', icon: Clock, desc: 'Limites RBAC 117' },
-                { label: 'Calcular Descanso', path: '/rest-calc', icon: BedDouble, desc: 'Período mínimo' },
-                { label: 'Simulador operacional', path: '/regulation', icon: Shield, desc: 'Status de conformidade' },
+                { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'RBAC + Lei + LATAM' },
+                { label: 'Calcular descanso', path: '/rest-calc', icon: BedDouble, desc: 'Repouso operacional' },
+                { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Status e limites' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
-              ].map(item => (
-                <Link key={item.path} to={item.path}
-                  className="glass px-4 py-3.5 flex items-center gap-3 hover-lift group">
+              ].map((item) => (
+                <Link key={item.path} to={item.path} className="glass px-4 py-3.5 flex items-center gap-3 hover-lift group">
                   <div className="w-9 h-9 rounded-lg bg-primary/8 flex items-center justify-center shrink-0 group-hover:bg-primary/12 transition-colors">
                     <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
