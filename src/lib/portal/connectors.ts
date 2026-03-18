@@ -1,7 +1,7 @@
 import type { PortalConnectorDefinition, PortalConnectorKey } from '@/lib/portal/types';
 import { PRIMARY_PORTAL_CONNECTOR_KEY } from '@/lib/portal/types';
 
-const MICROSOFT_LOGIN_URL = 'https://login.microsoftonline.com/';
+const LATAM_PORTAL_ENTRY_URL = 'https://portal.latam.com';
 
 const plannedConnector = (key: Exclude<PortalConnectorKey, 'generic_sso'>): PortalConnectorDefinition => ({
   key,
@@ -24,9 +24,11 @@ const genericSsoConnector: PortalConnectorDefinition = {
   sourceKind: 'authenticated_html',
   state: 'ready',
   beginAuth: async () => ({
-    loginUrl: MICROSOFT_LOGIN_URL,
-    loginDomain: 'login.microsoftonline.com',
-    successHint: 'Conclua o login corporativo no portal oficial e volte ao EscalaX para confirmar a conexão.',
+    loginUrl: LATAM_PORTAL_ENTRY_URL,
+    loginDomains: ['login.microsoftonline.com'],
+    successDomains: ['portal.latam.com'],
+    portalLabel: 'Portal LATAM',
+    successHint: 'Abra o portal oficial, conclua o login SSO com MFA se necessário e aguarde o retorno ao portal autenticado.',
   }),
   sync: async () => ({
     status: 'noop',

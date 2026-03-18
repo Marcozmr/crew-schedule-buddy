@@ -12,13 +12,17 @@ export interface PortalSessionSnapshot {
   provider: 'generic_sso';
   connectedAt: string;
   lastObservedUrl: string | null;
-  loginDomain: string;
+  loginDomains: string[];
+  portalDomain: string;
+  portalEntryUrl: string;
   sessionMode: 'browser_managed';
 }
 
 export interface PortalAuthRequest {
   loginUrl: string;
-  loginDomain: string;
+  loginDomains: string[];
+  successDomains: string[];
+  portalLabel: string;
   successHint: string;
 }
 

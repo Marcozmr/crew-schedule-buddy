@@ -4,8 +4,11 @@ import {
   type PortalSessionSnapshot,
 } from '@/lib/portal/types';
 
-const MICROSOFT_LOGIN_HOST = 'login.microsoftonline.com';
 const POPUP_FEATURES = 'popup=yes,width=480,height=760,noopener,noreferrer';
+
+function matchesDomain(hostname: string, domain: string) {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
 
 export function openPortalLogin(authRequest: PortalAuthRequest) {
   const popup = window.open(authRequest.loginUrl, 'portal-auth-session', POPUP_FEATURES);
@@ -18,23 +21,49 @@ export function openPortalLogin(authRequest: PortalAuthRequest) {
   return popup;
 }
 
-export function detectRedirect(url: string | null | undefined) {
-  if (!url) return false;
+export function detectRedirect(args: {
+  url: string | null | undefined;
+  authRequest: PortalAuthRequest;
+  hasVisitedLoginDomain: boolean;
+}) {
+  const { url, authRequest, hasVisitedLoginDomain } = args;
+
+  if (!url) {
+    return {
+      completed: false,
+      hasVisitedLoginDomain,
+      currentHost: null,
+    };
+  }
 
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return hostname.length > 0 && !hostname.endsWith(MICROSOFT_LOGIN_HOST);
+    const isLoginDomain = authRequest.loginDomains.some((domain) => matchesDomain(hostname, domain));
+    const nextHasVisitedLoginDomain = hasVisitedLoginDomain || isLoginDomain;
+    const isSuccessDomain = authRequest.successDomains.some((domain) => matchesDomain(hostname, domain));
+
+    return {
+      completed: nextHasVisitedLoginDomain && (isSuccessDomain || !isLoginDomain),
+      hasVisitedLoginDomain: nextHasVisitedLoginDomain,
+      currentHost: hostname,
+    };
   } catch {
-    return false;
+    return {
+      completed: false,
+      hasVisitedLoginDomain,
+      currentHost: null,
+    };
   }
 }
 
-export function createPortalSessionSnapshot(lastObservedUrl: string | null = null): PortalSessionSnapshot {
+export function createPortalSessionSnapshot(authRequest: PortalAuthRequest, lastObservedUrl: string | null = null): PortalSessionSnapshot {
   return {
     provider: 'generic_sso',
     connectedAt: new Date().toISOString(),
     lastObservedUrl,
-    loginDomain: MICROSOFT_LOGIN_HOST,
+    loginDomains: authRequest.loginDomains,
+    portalDomain: authRequest.successDomains[0] ?? 'portal.latam.com',
+    portalEntryUrl: authRequest.loginUrl,
     sessionMode: 'browser_managed',
   };
 }
