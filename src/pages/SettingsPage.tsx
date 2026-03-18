@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Settings, Save, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { PortalSyncCard } from '@/components/portal/PortalSyncCard';
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
@@ -73,6 +74,8 @@ export default function SettingsPage() {
           <Settings className="w-6 h-6 text-primary shrink-0" /> Configurações
         </motion.h1>
 
+        <PortalSyncCard />
+
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
           <div className="glass p-5 sm:p-6 min-w-0">
             <h3 className="font-semibold text-foreground mb-4">Perfil</h3>
@@ -91,7 +94,7 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs">Empresa</Label>
-                <Input value={form.company_name} onChange={(event) => setForm((current) => ({ ...current, company_name: event.target.value }))} placeholder="LATAM" />
+                <Input value={form.company_name} onChange={(event) => setForm((current) => ({ ...current, company_name: event.target.value }))} placeholder="Operador" />
               </div>
             </div>
           </div>
