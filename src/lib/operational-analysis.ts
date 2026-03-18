@@ -173,31 +173,6 @@ export function getOperationalStatusSummary(result: ComplianceResult | null): Da
     };
   }
 
-  const dutyRule = result.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_DUTY');
-  const flightRule = result.rules.find((rule) => rule.ruleId === 'RBAC117_MAX_FLIGHT');
-  const restRule = result.rules.find((rule) => rule.ruleId === 'RBAC117_MIN_REST');
-  const dutyRatio = usageRatio(dutyRule);
-  const flightRatio = usageRatio(flightRule);
-  const restRatio = restRule?.calculatedValue != null && restRule.limitUsed ? restRule.calculatedValue / restRule.limitUsed : null;
-
-  if (restRatio != null && restRatio >= 1 && restRatio <= 1.15) {
-    return {
-      tone: 'attention',
-      label: 'Atenção',
-      subtitle: 'Acompanhe os limites da jornada',
-      reason: 'Descanso próximo do mínimo',
-    };
-  }
-
-  if (Math.max(dutyRatio, flightRatio) >= 0.85) {
-    return {
-      tone: 'attention',
-      label: 'Atenção',
-      subtitle: 'Acompanhe os limites da jornada',
-      reason: dutyRatio >= flightRatio ? 'Jornada próxima do limite' : 'Horas de voo próximas do limite',
-    };
-  }
-
   return {
     tone: 'regular',
     label: 'Regular',
