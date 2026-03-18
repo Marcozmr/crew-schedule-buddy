@@ -21,7 +21,7 @@ interface ScenarioResult {
 }
 
 function formatStatus(status: string): string {
-  if (status === 'COMPLIANT') return 'Regular';
+  if (status === 'COMPLIANT') return 'Dentro dos limites';
   if (status === 'WARNING') return 'Atenção';
   return 'Crítico';
 }

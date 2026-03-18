@@ -26,7 +26,7 @@ export default function RegulationPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-foreground">Calculadora operacional</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Motor único de análise operacional aplicado no dashboard, jornada, descanso, alertas e limites.
+            Análise aplicada de forma consistente no painel, na jornada, no descanso e nos alertas.
           </p>
         </motion.div>
 
