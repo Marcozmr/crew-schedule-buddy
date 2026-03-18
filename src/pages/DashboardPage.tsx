@@ -92,7 +92,7 @@ export default function DashboardPage() {
     transition: { delay, duration: 0.3, ease: 'easeOut' as const },
   });
 
-  const statusResult = analysis?.latest ?? null;
+  const statusResult = analysis?.focus ?? null;
   const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Situação normal';
 
   return (
