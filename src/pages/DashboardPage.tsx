@@ -63,8 +63,6 @@ export default function DashboardPage() {
   const nextDuty = useMemo(() => getNextDutyPeriod(allDutyPeriods, todayStr, now, timezone), [allDutyPeriods, todayStr, now, timezone]);
   const analysis = useMemo(() => analyzeOperationalSchedule(schedule, timezone, homeBase), [schedule, timezone, homeBase]);
 
-  const monthFlights = schedule.filter((entry) => entry.date?.startsWith(monthStr) && entry.is_flight);
-  const monthFlightHours = monthFlights.reduce((sum, flight) => sum + (flight.flight_hours || 0), 0);
   const monthDutyHours = analysis?.results
     .filter((result) => result.duty.reportTimeLocal.startsWith(monthStr))
     .reduce((sum, result) => sum + result.duty.totalDutyHours, 0) ?? 0;
@@ -90,7 +88,7 @@ export default function DashboardPage() {
       }
 
       if (focus.status === 'NON_COMPLIANT' || focus.status === 'CRITICAL_FATIGUE') {
-        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na jornada ativa. Revise jornada, repouso e WOCL.');
+        await NotificationService.notifyOperationalWarning(user.id, 'Há uma operação crítica na jornada ativa. Revise jornada e repouso.');
       }
 
       if (focus.rest.restBeforeDutyHours != null && focus.rest.restBeforeDutyHours < focus.rest.minRequiredRestHours) {
@@ -98,10 +96,6 @@ export default function DashboardPage() {
           user.id,
           `Repouso calculado de ${formatHoursMinutes(focus.rest.restBeforeDutyHours)} abaixo do mínimo de ${formatHoursMinutes(focus.rest.minRequiredRestHours)}.`,
         );
-      }
-
-      if (focus.fatigue.woclExposure.totalMinutes > 0) {
-        await NotificationService.notifyOperationalWarning(user.id, `Sua operação toca o WOCL por ${focus.fatigue.woclExposure.totalMinutes} min.`);
       }
     };
 
@@ -142,11 +136,11 @@ export default function DashboardPage() {
       <div className="pb-10">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
-        <motion.div {...fade(0)} className="mb-8">
-          <h1 className="text-xl lg:text-2xl font-semibold text-foreground">
+        <motion.div {...fade(0)} className="mb-8 min-w-0">
+          <h1 className="text-xl lg:text-2xl font-semibold text-foreground break-words">
             {greeting()}, <span className="text-primary">{profile?.name?.split(' ')[0] || 'Tripulante'}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1 break-words">
             {now.toLocaleDateString('pt-BR', {
               weekday: 'long',
               day: 'numeric',
@@ -158,29 +152,30 @@ export default function DashboardPage() {
         </motion.div>
 
         {loading && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 mb-6">
             {[...Array(4)].map((_, index) => (
-              <div key={index} className="skeleton h-[88px] rounded-2xl" />
+              <div key={index} className="skeleton h-[104px] rounded-2xl" />
             ))}
           </div>
         )}
 
         {!loading && schedule.length === 0 && (
           <>
-            <motion.div {...fade(0.05)} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <motion.div {...fade(0.05)} className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 mb-8">
               {[
-                { label: 'Horas 30 dias', value: '0h00', icon: Clock },
-                { label: 'Jornada no mês', value: '0h00', icon: Gauge },
-                { label: 'Próximo voo', value: '—', icon: Plane },
-                { label: 'Situação operacional', value: 'Regular', icon: Shield, status: 'success' as const },
+                { label: 'Status mensal', value: '0h00 de 85h', detail: 'Dentro do limite mensal', icon: Clock },
+                { label: 'Jornada no mês', value: '0h00', detail: 'Horas de jornada · mês calendário', icon: Gauge },
+                { label: 'Próximo voo', value: '—', detail: 'Sem jornada programada', icon: Plane },
+                { label: 'Situação operacional', value: 'Regular', detail: 'Operação dentro do esperado', icon: Shield, status: 'success' as const },
               ].map((stat, index) => (
-                <div key={index} className="glass p-4 flex items-center gap-3 hover-lift">
+                <div key={index} className="glass p-4 flex items-start gap-3 hover-lift min-w-0">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${stat.status === 'success' ? 'bg-success/10' : 'bg-primary/8'}`}>
                     <stat.icon className={`w-5 h-5 ${stat.status === 'success' ? 'text-success' : 'text-primary'}`} />
                   </div>
-                  <div>
-                    <p className="text-[11px] text-muted-foreground font-medium">{stat.label}</p>
-                    <p className="text-lg font-semibold font-mono text-foreground">{stat.value}</p>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted-foreground font-medium break-words">{stat.label}</p>
+                    <p className="text-base sm:text-lg font-semibold font-mono text-foreground break-words">{stat.value}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{stat.detail}</p>
                   </div>
                 </div>
               ))}
@@ -188,7 +183,7 @@ export default function DashboardPage() {
 
             <motion.div {...fade(0.1)}>
               <h2 className="text-sm font-semibold text-foreground mb-4">Comece agora</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
                 {[
                   { title: 'Importar escala', desc: 'Envie seu PDF', icon: Upload, action: 'import' },
                   { title: 'Calcular jornada', desc: 'Cálculo operacional', icon: Clock, path: '/duty-calc' },
@@ -198,21 +193,21 @@ export default function DashboardPage() {
                 ].map((card, index) => (
                   card.action === 'import' ? (
                     <PdfImportDialog key={index} onImportComplete={reload} trigger={
-                      <div className="glass p-5 cursor-pointer hover-lift group text-left">
+                      <div className="glass p-5 cursor-pointer hover-lift group text-left min-w-0 h-full">
                         <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
                           <card.icon className="w-5 h-5 text-primary" />
                         </div>
-                        <p className="text-sm font-semibold text-foreground">{card.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{card.desc}</p>
+                        <p className="text-sm font-semibold text-foreground break-words">{card.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">{card.desc}</p>
                       </div>
                     } />
                   ) : (
-                    <Link key={index} to={card.path!} className="glass p-5 hover-lift group">
+                    <Link key={index} to={card.path!} className="glass p-5 hover-lift group min-w-0 h-full">
                       <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
                         <card.icon className="w-5 h-5 text-primary" />
                       </div>
-                      <p className="text-sm font-semibold text-foreground">{card.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{card.desc}</p>
+                      <p className="text-sm font-semibold text-foreground break-words">{card.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{card.desc}</p>
                     </Link>
                   )
                 ))}
@@ -223,48 +218,58 @@ export default function DashboardPage() {
 
         {hasSchedule && (
           <div className="space-y-6">
-            <motion.div {...fade(0.05)} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className={`glass p-4 flex items-center gap-3 hover-lift border ${monthlyMeta.border}`}>
+            <motion.div {...fade(0.05)} className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
+              <div className={`glass p-4 flex items-start gap-3 hover-lift border min-w-0 ${monthlyMeta.border}`}>
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${monthlyMeta.iconBg}`}>
                   <Clock className={`w-5 h-5 ${monthlyMeta.iconColor}`} />
                 </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Horas 30 dias</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{statusResult ? formatHoursMinutes(statusResult.accumulatedHours.last30Days) : formatHoursMinutes(monthFlightHours)}</p>
-                  <p className={`text-[11px] mt-0.5 font-medium ${monthlyMeta.textColor}`}>{monthlyStatus.label}</p>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground font-medium break-words">Status mensal</p>
+                  <p className="text-base sm:text-lg font-semibold font-mono text-foreground break-words">
+                    {formatHoursMinutes(monthlyStatus.usedHours)} de {formatHoursMinutes(monthlyStatus.limitHours)}
+                  </p>
+                  <p className={`text-[11px] mt-0.5 font-medium ${monthlyMeta.textColor}`}>Status mensal: {monthlyStatus.label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{monthlyStatus.metricLabel} · {monthlyStatus.windowLabel}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{monthlyStatus.subtitle}</p>
                 </div>
               </div>
-              <div className="glass p-4 flex items-center gap-3 hover-lift">
+
+              <div className="glass p-4 flex items-start gap-3 hover-lift min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center shrink-0">
                   <Gauge className="w-5 h-5 text-primary" />
                 </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Jornada no mês</p>
-                  <p className="text-lg font-semibold font-mono text-foreground">{formatHoursMinutes(monthDutyHours)}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Mês calendário</p>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground font-medium break-words">Jornada no mês</p>
+                  <p className="text-base sm:text-lg font-semibold font-mono text-foreground break-words">{formatHoursMinutes(monthDutyHours)}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">Horas de jornada · mês calendário</p>
                 </div>
               </div>
-              <div className="glass p-4 flex items-center gap-3 hover-lift">
+
+              <div className="glass p-4 flex items-start gap-3 hover-lift min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center shrink-0">
                   <Plane className="w-5 h-5 text-primary" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] text-muted-foreground font-medium">Próximo voo</p>
-                  <p className="text-sm font-semibold text-foreground truncate">{nextDuty ? nextDuty.routeSummary : '—'}</p>
+                  <p className="text-sm sm:text-base font-semibold text-foreground truncate">{nextDuty ? nextDuty.routeSummary : '—'}</p>
+                  {nextDuty?.reportTime && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">Apresentação {nextDuty.reportTime}</p>
+                  )}
                 </div>
               </div>
-              <div className={`glass relative overflow-hidden border p-4 hover-lift ${operationalMeta.border}`}>
+
+              <div className={`glass relative overflow-hidden border p-4 hover-lift min-w-0 ${operationalMeta.border}`}>
                 <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${operationalMeta.accent}`} />
-                <div className="relative flex items-center gap-3">
+                <div className="relative flex items-start gap-3 min-w-0">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${operationalMeta.iconBg}`}>
                     <Shield className={`w-5 h-5 ${operationalMeta.iconColor}`} />
                   </div>
-                  <div>
-                    <p className="text-[11px] text-muted-foreground font-medium">Situação operacional</p>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted-foreground font-medium break-words">Situação operacional</p>
                     <p className={`text-sm font-semibold ${operationalMeta.textColor}`}>{operationalStatus.label}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{operationalStatus.subtitle}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{operationalStatus.subtitle}</p>
                     {operationalStatus.reason && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{operationalStatus.reason}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{operationalStatus.reason}</p>
                     )}
                   </div>
                 </div>
@@ -272,10 +277,10 @@ export default function DashboardPage() {
             </motion.div>
 
             <motion.div {...fade(0.1)}>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <h2 className="text-sm font-semibold text-foreground">Operações de hoje</h2>
                 <PdfImportDialog onImportComplete={reload} trigger={
-                  <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary hover:bg-primary/8 gap-1.5 h-8">
+                  <Button variant="ghost" size="sm" className="w-full sm:w-auto text-xs text-primary hover:text-primary hover:bg-primary/8 gap-1.5 h-8 justify-center sm:justify-start">
                     <Upload className="w-3.5 h-3.5" /> Importar
                   </Button>
                 } />
@@ -293,11 +298,11 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                <div className="glass p-6 text-center">
+                <div className="glass p-6 text-center min-w-0">
                   <Plane className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground mb-1">Nenhuma jornada hoje</p>
                   {nextDuty && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground break-words">
                       Próxima: <span className="text-foreground font-medium">{nextDuty.routeSummary}</span> em{' '}
                       <span className="text-foreground font-medium">{formatDateBR(nextDuty.dutyStartDate)}</span>
                       {nextDuty.reportTime && (
@@ -309,7 +314,7 @@ export default function DashboardPage() {
               )}
             </motion.div>
 
-            <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {[
                 { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
                 { label: 'Calcular jornada', path: '/duty-calc', icon: Clock, desc: 'Cálculo operacional' },
@@ -317,13 +322,13 @@ export default function DashboardPage() {
                 { label: 'Calculadora operacional', path: '/regulation', icon: Shield, desc: 'Situação e limites' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
               ].map((item) => (
-                <Link key={item.path} to={item.path} className="glass px-4 py-3.5 flex items-center gap-3 hover-lift group">
+                <Link key={item.path} to={item.path} className="glass px-4 py-3.5 flex items-center gap-3 hover-lift group min-w-0">
                   <div className="w-9 h-9 rounded-lg bg-primary/8 flex items-center justify-center shrink-0 group-hover:bg-primary/12 transition-colors">
                     <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{item.label}</p>
-                    <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{item.label}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{item.desc}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
                 </Link>
