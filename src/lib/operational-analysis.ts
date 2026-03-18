@@ -13,20 +13,32 @@ import { groupIntoDutyPeriods, type DutyPeriod } from '@/lib/duty-grouping';
 export interface OperationalScheduleEntry {
   id: string;
   date: string;
-  departure_time?: string | null;
-  arrival_time?: string | null;
+  departure_time: string;
+  arrival_time: string;
   flight_number: string;
-  departure_airport?: string | null;
-  departure?: string | null;
-  arrival_airport?: string | null;
-  arrival?: string | null;
-  aircraft_type?: string | null;
+  departure_airport: string | null;
+  departure: string;
+  arrival_airport: string | null;
+  arrival: string;
+  aircraft_type: string | null;
   is_flight: boolean;
-  crosses_midnight?: boolean | null;
-  crew_role?: string | null;
-  debrief_time?: string | null;
-  report_time?: string | null;
-  airline?: string | null;
+  crosses_midnight: boolean;
+  crew_role: string | null;
+  debrief_time: string | null;
+  report_time: string | null;
+  airline: string | null;
+  status: string;
+  duty_hours: number | null;
+  flight_hours: number | null;
+  activity_type: string;
+  pairing_code: string | null;
+  overnight: boolean;
+  operation_type: string | null;
+  assignment: string | null;
+  comments: string | null;
+  sort_datetime: string | null;
+  hotel_name?: string | null;
+  raw_line?: string | null;
 }
 
 export interface OperationalAnalysis {
