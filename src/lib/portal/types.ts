@@ -1,4 +1,5 @@
 export const PORTAL_SESSION_STORAGE_KEY = 'portal_authenticated_session';
+export const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 export const PRIMARY_PORTAL_CONNECTOR_KEY = 'generic_sso' as const;
 
 export type PortalConnectorKey = 'generic_sso' | 'latam_connector' | 'gol_connector' | 'azul_connector';
