@@ -45,8 +45,10 @@ export interface OperationalAnalysis {
   window: ScheduleWindow;
   results: ComplianceResult[];
   allAlerts: Array<ComplianceResult['alerts'][number] & { dutyDate: string }>;
+  focusAlerts: Array<ComplianceResult['alerts'][number] & { dutyDate: string }>;
   overall: ComplianceStatus;
   latest: ComplianceResult | null;
+  focus: ComplianceResult | null;
 }
 
 function parseDateParts(date: string): [number, number, number] {
@@ -91,10 +93,10 @@ export function inferPostFlightMinutes(arrivalTime: string, debriefTime: string 
 }
 
 export function formatComplianceStatus(status: ComplianceStatus): string {
-  if (status === 'COMPLIANT') return 'Situação normal';
-  if (status === 'WARNING') return 'Atenção operacional';
-  if (status === 'CRITICAL_FATIGUE' || status === 'NON_COMPLIANT') return 'Operação crítica';
-  return 'Situação normal';
+  if (status === 'COMPLIANT') return 'Regular';
+  if (status === 'WARNING') return 'Atenção';
+  if (status === 'CRITICAL_FATIGUE' || status === 'NON_COMPLIANT') return 'Crítico';
+  return 'Regular';
 }
 
 function resolveDutyLegOffsets(duty: DutyPeriod): Array<{ depDayOffset: number; arrDayOffset: number }> {
@@ -201,9 +203,14 @@ export function buildOperationalWindow(
   };
 }
 
-function selectRelevantResult(results: ComplianceResult[], referenceDate: string): ComplianceResult | null {
+function selectRelevantResult(
+  results: ComplianceResult[],
+  referenceDate: string,
+  options?: { includePast?: boolean },
+): ComplianceResult | null {
   if (results.length === 0) return null;
 
+  const includePast = options?.includePast ?? true;
   const referenceMs = new Date(referenceDate).getTime();
 
   const current = results.find((result) => {
@@ -219,6 +226,7 @@ function selectRelevantResult(results: ComplianceResult[], referenceDate: string
     .sort((a, b) => new Date(a.duty.reportTimeUtc).getTime() - new Date(b.duty.reportTimeUtc).getTime())[0];
 
   if (next) return next;
+  if (!includePast) return null;
 
   return [...results]
     .filter((result) => new Date(result.duty.endTimeUtc).getTime() <= referenceMs)
@@ -235,6 +243,8 @@ export function analyzeOperationalSchedule(
 
   const results = evaluateSchedule(window);
   const allAlerts = results.flatMap((result) => result.alerts.map((alert) => ({ ...alert, dutyDate: result.duty.reportTimeLocal })));
+  const focus = selectRelevantResult(results, window.referenceDate, { includePast: false });
+  const focusAlerts = focus ? focus.alerts.map((alert) => ({ ...alert, dutyDate: focus.duty.reportTimeLocal })) : [];
   const overall: ComplianceStatus = results.some((result) => result.status === 'NON_COMPLIANT' || result.status === 'CRITICAL_FATIGUE')
     ? 'NON_COMPLIANT'
     : results.some((result) => result.status === 'WARNING')
@@ -245,7 +255,9 @@ export function analyzeOperationalSchedule(
     window,
     results,
     allAlerts,
+    focusAlerts,
     overall,
     latest: selectRelevantResult(results, window.referenceDate),
+    focus,
   };
 }

@@ -11,7 +11,7 @@ export default function DutyCalcPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Calcular jornada</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Cálculo profissional com o mesmo motor RBAC 117 + Lei do Aeronauta + ACT LATAM usado no restante do app.
+            Cálculo operacional avançado com a mesma base analítica usada no restante do app.
           </p>
         </div>
 

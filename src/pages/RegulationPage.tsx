@@ -17,6 +17,9 @@ export default function RegulationPage() {
     [schedule, timezone, homeBase],
   );
 
+  const focus = analysis?.focus ?? null;
+  const focusAlerts = analysis?.focusAlerts ?? [];
+
   return (
     <AppLayout>
       <div className="space-y-6 pb-10">
@@ -44,20 +47,20 @@ export default function RegulationPage() {
             <div className="glass p-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="rounded-xl bg-secondary/50 p-4">
-                  <p className="text-xs text-muted-foreground">Situação geral</p>
-                  <p className="text-base font-semibold text-foreground mt-1">{formatComplianceStatus(analysis.overall)}</p>
+                  <p className="text-xs text-muted-foreground">Situação atual</p>
+                  <p className="text-base font-semibold text-foreground mt-1">{focus ? formatComplianceStatus(focus.status) : 'Sem jornada relevante'}</p>
                 </div>
                 <div className="rounded-xl bg-secondary/50 p-4">
                   <p className="text-xs text-muted-foreground">Jornadas avaliadas</p>
                   <p className="text-base font-semibold text-foreground mt-1">{analysis.results.length}</p>
                 </div>
                 <div className="rounded-xl bg-secondary/50 p-4">
-                  <p className="text-xs text-muted-foreground">Alertas ativos</p>
-                  <p className="text-base font-semibold text-foreground mt-1">{analysis.allAlerts.length}</p>
+                  <p className="text-xs text-muted-foreground">Alertas relevantes</p>
+                  <p className="text-base font-semibold text-foreground mt-1">{focusAlerts.length}</p>
                 </div>
                 <div className="rounded-xl bg-secondary/50 p-4">
                   <p className="text-xs text-muted-foreground">Motor</p>
-                  <p className="text-base font-semibold text-foreground mt-1">RBAC + Lei + LATAM</p>
+                  <p className="text-base font-semibold text-foreground mt-1">Análise operacional</p>
                 </div>
               </div>
             </div>
@@ -65,23 +68,23 @@ export default function RegulationPage() {
             <div className="glass p-6">
               <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
-                Alertas operacionais
+                Alertas relevantes
               </h2>
-              {analysis.allAlerts.length > 0 ? (
+              {focusAlerts.length > 0 ? (
                 <div className="space-y-2">
-                  {analysis.allAlerts.map((alert, index) => (
+                  {focusAlerts.map((alert, index) => (
                     <div key={`${alert.ruleId}-${index}`} className="flex items-start gap-2 rounded-xl bg-muted/60 px-3 py-2 text-sm">
                       <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-warning" />
                       <div>
                         <p className="font-medium text-foreground">{alert.message}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{alert.ruleSource} • {alert.ruleId}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatDateBR(alert.dutyDate.slice(0, 10))}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-success flex items-center gap-2">
-                  <Info className="w-4 h-4" /> Nenhum alerta operacional crítico na escala ativa.
+                  <Info className="w-4 h-4" /> Nenhum alerta relevante no cenário atual.
                 </p>
               )}
             </div>

@@ -21,9 +21,9 @@ interface ScenarioResult {
 }
 
 function formatStatus(status: string): string {
-  if (status === 'COMPLIANT') return 'Situação normal';
-  if (status === 'WARNING') return 'Atenção operacional';
-  return 'Operação crítica';
+  if (status === 'COMPLIANT') return 'Regular';
+  if (status === 'WARNING') return 'Atenção';
+  return 'Crítico';
 }
 
 export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCalculatorPanelProps) {
@@ -40,7 +40,6 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
   const [departureAirport, setDepartureAirport] = useState((homeBase || 'GRU').toUpperCase());
   const [arrivalAirport, setArrivalAirport] = useState('BSB');
   const [aircraftType, setAircraftType] = useState('A320');
-  const [airline, setAirline] = useState('LATAM');
   const [error, setError] = useState('');
   const [result, setResult] = useState<ScenarioResult | null>(null);
 
@@ -78,7 +77,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
       crewRole: dutyInput.crewRole,
       baseAirport: dutyInput.baseAirport,
       aircraftCategory: dutyInput.aircraftCategory,
-      airline: airline || 'LATAM',
+      airline: 'Operacional',
       timezone,
     };
 
@@ -113,9 +112,9 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
     <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
       <section className="glass p-5 lg:p-6 space-y-5">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Calculadora operacional</h2>
+          <h2 className="text-lg font-semibold text-foreground">Cálculo operacional avançado</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Usa o mesmo motor RBAC 117 + Lei do Aeronauta + ACT LATAM aplicado no app.
+            Usa o mesmo motor operacional do dashboard, da análise e dos alertas.
           </p>
         </div>
 
@@ -163,10 +162,6 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
           <div className="col-span-2 space-y-1.5">
             <Label className="text-[11px] text-muted-foreground">Próxima apresentação (opcional)</Label>
             <Input type="datetime-local" value={nextReportAt} onChange={(event) => setNextReportAt(event.target.value)} />
-          </div>
-          <div className="col-span-2 space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground">Companhia</Label>
-            <Input value={airline} onChange={(event) => setAirline(event.target.value)} />
           </div>
         </div>
 
@@ -218,7 +213,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
                   <h3 className="text-xl font-semibold text-foreground mt-1">{formatStatus(result.compliance.status)}</h3>
                 </div>
                 <div className={`rounded-full px-3 py-1 text-xs font-semibold ${result.compliance.status === 'COMPLIANT' ? 'bg-success/10 text-success' : result.compliance.status === 'WARNING' ? 'bg-warning/10 text-warning' : 'bg-destructive/10 text-destructive'}`}>
-                  {result.compliance.status === 'COMPLIANT' ? 'Dentro do limite' : result.compliance.status === 'WARNING' ? 'Atenção' : 'Acima do limite'}
+                  {result.compliance.status === 'COMPLIANT' ? 'Dentro do limite' : result.compliance.status === 'WARNING' ? 'Próximo do limite' : 'Limite violado'}
                 </div>
               </div>
             </motion.div>
@@ -261,16 +256,15 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
             </div>
 
             <div className="glass p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Regras acionadas</h3>
+              <h3 className="text-sm font-semibold text-foreground mb-3">Alertas operacionais</h3>
               <div className="space-y-2">
                 {result.compliance.alerts.length > 0 ? result.compliance.alerts.map((alert) => (
                   <div key={`${alert.ruleId}-${alert.message}`} className="rounded-xl bg-muted/60 px-3 py-2 text-sm">
                     <p className="font-medium text-foreground">{alert.message}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{alert.ruleSource} • {alert.ruleId}</p>
                   </div>
                 )) : (
                   <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" /> Nenhum alerta crítico nesta simulação.
+                    <CheckCircle2 className="w-4 h-4" /> Nenhum alerta relevante nesta simulação.
                   </div>
                 )}
               </div>
