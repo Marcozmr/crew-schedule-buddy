@@ -214,8 +214,9 @@ export default function DashboardPage() {
                   <Shield className={`w-5 h-5 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Status</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Situação</p>
                   <p className={`text-sm font-semibold ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{statusResult?.alerts?.[0]?.message || 'Baseado na jornada atual e acumulados recentes.'}</p>
                 </div>
               </div>
             </motion.div>
