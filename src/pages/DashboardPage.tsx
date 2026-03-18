@@ -235,10 +235,10 @@ export default function DashboardPage() {
             {/* ═══ Quick Actions ═══ */}
             <motion.div {...fade(0.2)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
-                { label: 'Ver Escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
+                { label: 'Calendário da escala', path: '/schedule', icon: Calendar, desc: 'Calendário mensal' },
                 { label: 'Calcular Jornada', path: '/duty-calc', icon: Clock, desc: 'Limites RBAC 117' },
                 { label: 'Calcular Descanso', path: '/rest-calc', icon: BedDouble, desc: 'Período mínimo' },
-                { label: 'Regulamentação', path: '/regulation', icon: Shield, desc: 'Status de conformidade' },
+                { label: 'Simulador operacional', path: '/regulation', icon: Shield, desc: 'Status de conformidade' },
                 { label: 'Configurações', path: '/settings', icon: Settings, desc: 'Preferências do app' },
               ].map(item => (
                 <Link key={item.path} to={item.path}

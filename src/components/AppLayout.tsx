@@ -16,7 +16,7 @@ const navItems = [
   { path: '/schedule', label: 'Calendário da escala', icon: Calendar },
   { path: '/duty-calc', label: 'Jornada', icon: Clock },
   { path: '/rest-calc', label: 'Descanso', icon: BedDouble },
-  { path: '/regulation', label: 'Análise operacional', icon: Shield },
+  { path: '/regulation', label: 'Simulador operacional', icon: Shield },
   { path: '/settings', label: 'Configurações', icon: Settings },
 ];
 
