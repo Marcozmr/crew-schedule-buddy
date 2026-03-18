@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 import { formatDateBR, formatHoursMinutes } from '@/lib/date-utils';
 import { groupIntoDutyPeriods, getTodayDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
 import { DutyPeriodCard } from '@/components/dashboard/DutyPeriodCard';
-import { analyzeOperationalSchedule, formatComplianceStatus } from '@/lib/operational-analysis';
+import { analyzeOperationalSchedule } from '@/lib/operational-analysis';
 import { NotificationService } from '@/lib/services/notification-service';
 
 export default function DashboardPage() {
@@ -93,7 +93,41 @@ export default function DashboardPage() {
   });
 
   const statusResult = analysis?.focus ?? null;
-  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Dentro dos limites';
+  const statusTone = !statusResult || statusResult.status === 'COMPLIANT'
+    ? 'regular'
+    : statusResult.status === 'WARNING'
+      ? 'warning'
+      : 'critical';
+
+  const statusCardMeta = {
+    regular: {
+      label: 'Regular',
+      subtitle: 'Dentro dos limites',
+      iconBg: 'bg-success/10',
+      iconColor: 'text-success',
+      textColor: 'text-success',
+      border: 'border-success/25',
+      accent: 'from-success/10 via-success/5 to-transparent',
+    },
+    warning: {
+      label: 'Atenção',
+      subtitle: 'Próximo de um limite',
+      iconBg: 'bg-warning/10',
+      iconColor: 'text-warning',
+      textColor: 'text-warning',
+      border: 'border-warning/25',
+      accent: 'from-warning/10 via-warning/5 to-transparent',
+    },
+    critical: {
+      label: 'Crítico',
+      subtitle: 'Necessita revisão',
+      iconBg: 'bg-destructive/10',
+      iconColor: 'text-destructive',
+      textColor: 'text-destructive',
+      border: 'border-destructive/25',
+      accent: 'from-destructive/10 via-destructive/5 to-transparent',
+    },
+  }[statusTone];
 
   return (
     <AppLayout>
@@ -209,14 +243,17 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-foreground truncate">{nextDuty ? nextDuty.routeSummary : '—'}</p>
                 </div>
               </div>
-              <div className="glass p-4 flex items-center gap-3 hover-lift">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'bg-success/10' : statusResult.status === 'WARNING' ? 'bg-warning/10' : 'bg-destructive/10'}`}>
-                  <Shield className={`w-5 h-5 ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`} />
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground font-medium">Situação</p>
-                  <p className={`text-sm font-semibold ${statusResult?.status === 'COMPLIANT' || !statusResult ? 'text-success' : statusResult.status === 'WARNING' ? 'text-warning' : 'text-destructive'}`}>{overallStatus}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{statusResult?.alerts?.[0]?.message || 'Baseado na jornada atual e acumulados recentes.'}</p>
+              <div className={`glass relative overflow-hidden border p-4 hover-lift ${statusCardMeta.border}`}>
+                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${statusCardMeta.accent}`} />
+                <div className="relative flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${statusCardMeta.iconBg}`}>
+                    <Shield className={`w-5 h-5 ${statusCardMeta.iconColor}`} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground font-medium">Situação</p>
+                    <p className={`text-sm font-semibold ${statusCardMeta.textColor}`}>{statusCardMeta.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{statusCardMeta.subtitle}</p>
+                  </div>
                 </div>
               </div>
             </motion.div>
