@@ -92,7 +92,8 @@ export default function DashboardPage() {
     transition: { delay, duration: 0.3, ease: 'easeOut' as const },
   });
 
-  const overallStatus = analysis ? formatComplianceStatus(analysis.overall) : 'Situação normal';
+  const statusResult = analysis?.latest ?? null;
+  const overallStatus = statusResult ? formatComplianceStatus(statusResult.status) : 'Situação normal';
 
   return (
     <AppLayout>
