@@ -201,7 +201,7 @@ export default function DashboardPage() {
             {/* ═══ Today's Duty Periods ═══ */}
             <motion.div {...fade(0.1)}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-foreground">Jornadas de hoje</h2>
+                <h2 className="text-sm font-semibold text-foreground">Operações de hoje</h2>
                 <PdfImportDialog onImportComplete={reload} trigger={
                   <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary hover:bg-primary/8 gap-1.5 h-8">
                     <Upload className="w-3.5 h-3.5" /> Importar
