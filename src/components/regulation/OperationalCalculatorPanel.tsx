@@ -209,8 +209,9 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Status operacional</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Situação operacional</p>
                   <h3 className="text-xl font-semibold text-foreground mt-1">{formatStatus(result.compliance.status)}</h3>
+                  <p className="text-[11px] text-muted-foreground mt-1">{result.compliance.alerts[0]?.message || 'Baseado na jornada atual e acumulados recentes.'}</p>
                 </div>
                 <div className={`rounded-full px-3 py-1 text-xs font-semibold ${result.compliance.status === 'COMPLIANT' ? 'bg-success/10 text-success' : result.compliance.status === 'WARNING' ? 'bg-warning/10 text-warning' : 'bg-destructive/10 text-destructive'}`}>
                   {result.compliance.status === 'COMPLIANT' ? 'Dentro do limite' : result.compliance.status === 'WARNING' ? 'Próximo do limite' : 'Limite violado'}
