@@ -201,7 +201,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
           <div className="glass p-8 min-h-[320px] flex items-center justify-center text-center">
             <div>
               <ShieldAlert className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">Preencha os horários para calcular jornada, descanso e status operacional.</p>
+              <p className="text-sm text-muted-foreground">Preencha os horários para calcular jornada, descanso e situação operacional.</p>
             </div>
           </div>
         ) : (
