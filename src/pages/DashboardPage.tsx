@@ -224,7 +224,7 @@ export default function DashboardPage() {
                       Próxima: <span className="text-foreground font-medium">{nextDuty.routeSummary}</span> em{' '}
                       <span className="text-foreground font-medium">{formatDateBR(nextDuty.dutyStartDate)}</span>
                       {nextDuty.reportTime && (
-                        <> · APR <span className="font-mono text-foreground">{nextDuty.reportTime}</span></>
+                        <> · Apresentação <span className="font-mono text-foreground">{nextDuty.reportTime}</span></>
                       )}
                     </p>
                   )}
