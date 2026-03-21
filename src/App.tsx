@@ -3,8 +3,9 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
+import { getThemeByLocalTime } from "./lib/themeByTime";
 
 // Eager-load auth pages (first paint)
 import LoginPage from "./pages/LoginPage";
@@ -38,8 +39,8 @@ const SupportPage = lazy(() => import("./pages/SupportPage"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 2, // 2 min
-      gcTime: 1000 * 60 * 10, // 10 min garbage collection
+      staleTime: 1000 * 60 * 2,
+      gcTime: 1000 * 60 * 10,
       refetchOnWindowFocus: false,
       retry: 1,
     },
@@ -79,7 +80,6 @@ const AppRoutes = () => (
       <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
       <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
       <Route path="/perdiem" element={<ProtectedRoute><PerDiemPage /></ProtectedRoute>} />
-      
       <Route path="/rest-calc" element={<ProtectedRoute><RestCalcPage /></ProtectedRoute>} />
       <Route path="/duty-calc" element={<ProtectedRoute><DutyCalcPage /></ProtectedRoute>} />
       <Route path="/weather" element={<ProtectedRoute><WeatherPage /></ProtectedRoute>} />
@@ -92,18 +92,34 @@ const AppRoutes = () => (
   </Suspense>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
-      <AuthProvider>
-        <TooltipProvider>
-          <Sonner />
-          <PWAUpdatePrompt />
-          <AppRoutes />
-        </TooltipProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </QueryClientProvider>
-);
+const App = () => {
+  useEffect(() => {
+    const applyTheme = () => {
+      const theme = getThemeByLocalTime();
+      document.documentElement.classList.remove("light", "dark");
+      document.documentElement.classList.add(theme);
+    };
+
+    applyTheme();
+
+    const interval = setInterval(applyTheme, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <TooltipProvider>
+            <Sonner />
+            <PWAUpdatePrompt />
+            <AppRoutes />
+          </TooltipProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
