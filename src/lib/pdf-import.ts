@@ -503,19 +503,18 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     // Regra de precedência: portal > manual.
     // Manual só fica ativa se não houver portal ativo.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: activePortalRoster } = await (supabase.from('imported_rosters') as any)
+    const { data: portalActiveRows } = await (supabase.from('imported_rosters') as any)
       .select('id')
       .eq('user_id', effectiveUserId)
       .eq('is_active', true)
-      .eq('roster_source', 'portal')
-      .maybeSingle();
+      .or('import_origin.eq.portal,portal_connection_id.not.is.null');
 
-    const shouldActivateManual = !activePortalRoster?.id;
+    const shouldActivateManual = !portalActiveRows?.length;
     let deactivatedRosterIds: string[] = [];
     if (shouldActivateManual) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
-        .update({ is_active: false, roster_status: 'superseded' })
+        .update({ is_active: false })
         .eq('user_id', effectiveUserId)
         .eq('is_active', true)
         .select('id');
@@ -544,13 +543,21 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       import_status: 'processing',
       parsed_count: entries.length,
       is_active: shouldActivateManual,
-      roster_source: 'manual',
-      roster_status: shouldActivateManual ? 'active' : 'archived',
-      imported_at: new Date().toISOString(),
     }).select('id').single();
 
     if (rosterError) return emptyResult(`Erro ao criar roster: ${rosterError.message}`);
     const rosterId = rosterRow?.id || null;
+
+    if (rosterId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: metaErr } = await (supabase.from('imported_rosters') as any).update({
+        roster_source: 'manual',
+        roster_status: shouldActivateManual ? 'active' : 'archived',
+      }).eq('id', rosterId);
+      if (metaErr) {
+        console.warn('[pdf-import] optional roster_source/roster_status skipped (apply migration)', metaErr.message);
+      }
+    }
 
     // Build rows
     const rows = entries.map(e => ({

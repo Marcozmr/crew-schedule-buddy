@@ -217,13 +217,11 @@ async function updateSyncRun(runId: string, payload: TablesUpdate<'portal_sync_r
 async function applyPortalRosterPrecedence(args: { userId: string; rosterId: string; completedAt: string }) {
   const { userId, rosterId, completedAt } = args;
 
-  // Desativa qualquer escala ativa anterior (manual ou portal antigo),
-  // marcando como superseded para manter histórico e evitar duplicidade na UI.
+  // Desativa escalas ativas anteriores (campos mínimos — compatível sem colunas opcionais)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: previousActiveRows } = await (supabase.from('imported_rosters') as any)
     .update({
       is_active: false,
-      roster_status: 'superseded',
       updated_at: completedAt,
     })
     .eq('user_id', userId)
@@ -235,27 +233,46 @@ async function applyPortalRosterPrecedence(args: { userId: string; rosterId: str
 
   if (supersededIds.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from('imported_rosters') as any)
-      .update({ superseded_by: rosterId })
+    const { error: supErr } = await (supabase.from('imported_rosters') as any)
+      .update({ superseded_by: rosterId, roster_status: 'superseded' })
       .in('id', supersededIds);
+    if (supErr) {
+      console.warn('[portal-sync] optional superseded metadata skipped (run migrations)', supErr.message);
+    }
   }
 
-  // Ativa a escala do portal recém-importada.
+  // Ativa escala do portal — núcleo sempre suportado
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase.from('imported_rosters') as any)
+  const { error: actErr } = await (supabase.from('imported_rosters') as any)
     .update({
       is_active: true,
-      roster_source: 'portal',
       import_origin: 'portal',
-      roster_status: 'active',
       synced_at: completedAt,
-      imported_at: completedAt,
       import_status: 'success',
       import_error: null,
       updated_at: completedAt,
     })
     .eq('id', rosterId)
     .eq('user_id', userId);
+
+  if (actErr) {
+    console.error('[portal-sync] failed to activate portal roster', actErr.message);
+    throw actErr;
+  }
+
+  // Opcional: colunas da migration de precedência (roster_source, roster_status, imported_at)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: metaErr } = await (supabase.from('imported_rosters') as any)
+    .update({
+      roster_source: 'portal',
+      roster_status: 'active',
+      imported_at: completedAt,
+    })
+    .eq('id', rosterId)
+    .eq('user_id', userId);
+  if (metaErr) {
+    console.warn('[portal-sync] optional roster precedence columns skipped (apply migration)', metaErr.message);
+  }
 }
 
 export async function syncPortalConnection(args: { userId: string }) {

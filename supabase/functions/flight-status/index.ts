@@ -239,17 +239,19 @@ serve(async (req) => {
 
     const { data: activeRosters } = await supabase
       .from("imported_rosters")
-      .select("id, roster_source, created_at")
+      .select("id, created_at, import_origin, portal_connection_id")
       .eq("user_id", userId)
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(5);
 
-    const activeRoster = (activeRosters ?? []).sort((a: any, b: any) => {
-      const pa = a?.roster_source === "portal" ? 0 : 1;
-      const pb = b?.roster_source === "portal" ? 0 : 1;
-      return pa - pb;
-    })[0];
+    const portalFirst = (r: { import_origin?: string | null; portal_connection_id?: string | null }) => {
+      if (r.import_origin === "portal") return 0;
+      if (r.portal_connection_id) return 0;
+      return 1;
+    };
+
+    const activeRoster = (activeRosters ?? []).sort((a: any, b: any) => portalFirst(a) - portalFirst(b))[0];
 
     if (!activeRoster?.id) {
       console.log("[flight-status] active roster not found", { userId });

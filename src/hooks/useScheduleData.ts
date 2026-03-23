@@ -44,21 +44,23 @@ export function useScheduleData() {
     if (!user) { setSchedule([]); setLoading(false); return; }
     setLoading(true);
 
-    // Busca todas as escalas ativas para tratar legados com duplicidade
-    // e priorizar portal > manual na seleção.
+    // Escalas ativas: prioriza portal (import_origin ou portal_connection_id) sem depender de coluna roster_source no SELECT
+    // (compatível com PostgREST quando migration ainda não rodou).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: activeRosters } = await (supabase.from('imported_rosters') as any)
-      .select('id, roster_source, created_at')
+      .select('id, created_at, import_origin, portal_connection_id')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(5);
 
-    const selectedActiveRoster = (activeRosters ?? []).sort((a: { roster_source?: string | null }, b: { roster_source?: string | null }) => {
-      const pa = a.roster_source === 'portal' ? 0 : 1;
-      const pb = b.roster_source === 'portal' ? 0 : 1;
-      return pa - pb;
-    })[0];
+    const portalFirst = (r: { import_origin?: string | null; portal_connection_id?: string | null }) => {
+      if (r.import_origin === 'portal') return 0;
+      if (r.portal_connection_id) return 0;
+      return 1;
+    };
+
+    const selectedActiveRoster = (activeRosters ?? []).sort((a, b) => portalFirst(a) - portalFirst(b))[0];
 
     if (!selectedActiveRoster?.id) {
       setSchedule([]);

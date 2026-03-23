@@ -34,22 +34,21 @@ export default function UploadPage() {
     const airline = detectAirline(text);
 
     // Regra de precedência: portal > manual.
-    // Se já existe portal ativo, a escala manual entra como fallback (não ativa).
+    // Portal: import_origin = 'portal' OU portal_connection_id preenchido (compatível com DB sem coluna roster_source).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: activePortalRoster } = await (supabase.from('imported_rosters') as any)
+    const { data: portalActiveRows } = await (supabase.from('imported_rosters') as any)
       .select('id')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .eq('roster_source', 'portal')
-      .maybeSingle();
+      .or('import_origin.eq.portal,portal_connection_id.not.is.null');
 
-    const shouldActivateManual = !activePortalRoster?.id;
+    const shouldActivateManual = !portalActiveRows?.length;
 
     if (shouldActivateManual) {
-      // Desativa escala ativa anterior para manter apenas uma ativa por usuário.
+      // Desativa escala ativa anterior (sem depender de colunas opcionais como roster_status)
       await supabase
         .from('imported_rosters')
-        .update({ is_active: false, roster_status: 'superseded' })
+        .update({ is_active: false })
         .eq('user_id', user.id)
         .eq('is_active', true);
     }
@@ -71,9 +70,6 @@ export default function UploadPage() {
         import_status: 'processing',
         parsed_count: entries.length,
         is_active: shouldActivateManual,
-        roster_source: 'manual',
-        roster_status: shouldActivateManual ? 'active' : 'archived',
-        imported_at: new Date().toISOString(),
       })
       .select('id')
       .single();
@@ -82,6 +78,16 @@ export default function UploadPage() {
       toast.error('Erro ao criar importação ativa');
       setProcessing(false);
       return;
+    }
+
+    // Opcional: colunas da migration de precedência (não bloqueia importação se ainda não existirem no DB)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: metaErr } = await (supabase.from('imported_rosters') as any).update({
+      roster_source: 'manual',
+      roster_status: shouldActivateManual ? 'active' : 'archived',
+    }).eq('id', rosterRow.id);
+    if (metaErr) {
+      console.warn('[UploadPage] optional roster_source/roster_status skipped (apply migration)', metaErr.message);
     }
 
     const rows = entries.map((entry) => {

@@ -275,6 +275,7 @@ export type Database = {
           import_error: string | null
           import_origin: string
           import_status: string | null
+          imported_at?: string | null
           inserted_count: number | null
           is_active: boolean
           name: string | null
@@ -283,9 +284,12 @@ export type Database = {
           portal_connection_id: string | null
           raw_text_excerpt: string | null
           roster_end_date: string | null
+          roster_source?: string | null
           roster_start_date: string | null
+          roster_status?: string | null
           source_message_id: string
           storage_path: string
+          superseded_by?: string | null
           synced_at: string | null
           updated_at: string
           user_id: string
@@ -304,6 +308,7 @@ export type Database = {
           import_error?: string | null
           import_origin?: string
           import_status?: string | null
+          imported_at?: string
           inserted_count?: number | null
           is_active?: boolean
           name?: string | null
@@ -312,9 +317,12 @@ export type Database = {
           portal_connection_id?: string | null
           raw_text_excerpt?: string | null
           roster_end_date?: string | null
+          roster_source?: string
           roster_start_date?: string | null
+          roster_status?: string
           source_message_id: string
           storage_path: string
+          superseded_by?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id: string
@@ -333,6 +341,7 @@ export type Database = {
           import_error?: string | null
           import_origin?: string
           import_status?: string | null
+          imported_at?: string
           inserted_count?: number | null
           is_active?: boolean
           name?: string | null
@@ -341,9 +350,12 @@ export type Database = {
           portal_connection_id?: string | null
           raw_text_excerpt?: string | null
           roster_end_date?: string | null
+          roster_source?: string
           roster_start_date?: string | null
+          roster_status?: string
           source_message_id?: string
           storage_path?: string
+          superseded_by?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id?: string
