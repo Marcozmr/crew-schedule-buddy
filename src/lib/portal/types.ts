@@ -3,7 +3,15 @@ export const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 export const PRIMARY_PORTAL_CONNECTOR_KEY = 'generic_sso' as const;
 
 export type PortalConnectorKey = 'generic_sso' | 'latam_connector' | 'gol_connector' | 'azul_connector';
-export type PortalConnectionStatus = 'connected' | 'pending' | 'disconnected' | 'unavailable' | 'expired';
+export type PortalConnectionStatus =
+  | 'connected'
+  | 'syncing'
+  | 'pending'
+  | 'disconnected'
+  | 'unavailable'
+  | 'expired'
+  | 'reconnect_required'
+  | 'failed';
 export type PortalSyncRunStatus = 'pending' | 'success' | 'noop' | 'error';
 export type PortalSourceKind = 'official_pdf' | 'authenticated_html' | 'authenticated_endpoint';
 export type PortalConnectorState = 'ready' | 'planned';

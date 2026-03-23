@@ -65,6 +65,10 @@ export function PortalSyncCard({ onSyncComplete }: PortalSyncCardProps) {
 
   const connectionLabel = useMemo(() => {
     if (loading) return 'Sincronização indisponível';
+    if (connection?.connection_status === 'syncing') return 'Sincronizando portal';
+    if (connection?.connection_status === 'reconnect_required') return 'Reconexão necessária';
+    if (connection?.connection_status === 'expired') return 'Sessão expirada';
+    if (connection?.connection_status === 'failed') return 'Falha na sincronização';
     if (localSessionAvailable && connection?.connection_status !== 'disconnected') return 'Portal conectado';
     return 'Sincronização indisponível';
   }, [connection?.connection_status, loading, localSessionAvailable]);

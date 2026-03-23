@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { getPortalConnectorDefinition } from '@/lib/portal/connectors';
 import { clearPortalSession, readPortalSession } from '@/lib/portal/webview-connector';
+import { emitRosterUpdated } from '@/lib/events/roster-events';
 import {
   PRIMARY_PORTAL_CONNECTOR_KEY,
   type PortalAuthRequest,
@@ -13,12 +14,13 @@ import {
 } from '@/lib/portal/types';
 
 const nowIso = () => new Date().toISOString();
+const AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 type PortalConnectionRow = Tables<'portal_connections'>;
 type PortalSyncRunRow = Tables<'portal_sync_runs'>;
 type PortalConnectionPayload = Partial<TablesInsert<'portal_connections'>> & {
   metadata?: Record<string, unknown> | null;
-};
+} & Record<string, unknown>;
 
 function normalizeConnection(row: PortalConnectionRow): PortalConnectionRecord {
   return {
@@ -180,7 +182,11 @@ export async function disconnectPortalConnection(userId: string) {
   });
 }
 
-async function createSyncRun(userId: string, connectionId: string) {
+async function createSyncRun(
+  userId: string,
+  connectionId: string,
+  triggerType: 'manual' | 'auto' | 'auto_reconnect' = 'manual'
+) {
   const { data, error } = await supabase
     .from('portal_sync_runs')
     .insert({
@@ -188,7 +194,7 @@ async function createSyncRun(userId: string, connectionId: string) {
       connection_id: connectionId,
       connector_key: PRIMARY_PORTAL_CONNECTOR_KEY,
       run_status: 'pending',
-      trigger_type: 'manual',
+      trigger_type: triggerType,
       source_kind: getPortalConnectorDefinition().sourceKind,
       details: {
         stage: 'connection_only',
@@ -208,11 +214,76 @@ async function updateSyncRun(runId: string, payload: TablesUpdate<'portal_sync_r
   await supabase.from('portal_sync_runs').update(payload).eq('id', runId);
 }
 
+async function applyPortalRosterPrecedence(args: { userId: string; rosterId: string; completedAt: string }) {
+  const { userId, rosterId, completedAt } = args;
+
+  // Desativa qualquer escala ativa anterior (manual ou portal antigo),
+  // marcando como superseded para manter histórico e evitar duplicidade na UI.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: previousActiveRows } = await (supabase.from('imported_rosters') as any)
+    .update({
+      is_active: false,
+      roster_status: 'superseded',
+      updated_at: completedAt,
+    })
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .neq('id', rosterId)
+    .select('id');
+
+  const supersededIds = ((previousActiveRows as Array<{ id: string }> | null) ?? []).map((row) => row.id);
+
+  if (supersededIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('imported_rosters') as any)
+      .update({ superseded_by: rosterId })
+      .in('id', supersededIds);
+  }
+
+  // Ativa a escala do portal recém-importada.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('imported_rosters') as any)
+    .update({
+      is_active: true,
+      roster_source: 'portal',
+      import_origin: 'portal',
+      roster_status: 'active',
+      synced_at: completedAt,
+      imported_at: completedAt,
+      import_status: 'success',
+      import_error: null,
+      updated_at: completedAt,
+    })
+    .eq('id', rosterId)
+    .eq('user_id', userId);
+}
+
 export async function syncPortalConnection(args: { userId: string }) {
+  return syncPortalConnectionInternal({ ...args, triggerType: 'manual' });
+}
+
+async function syncPortalConnectionInternal(args: {
+  userId: string;
+  triggerType: 'manual' | 'auto' | 'auto_reconnect';
+}) {
   const connection = await ensurePortalConnection(args.userId);
-  const run = await createSyncRun(args.userId, connection.id);
+  const run = await createSyncRun(args.userId, connection.id, args.triggerType);
   const connector = getPortalConnectorDefinition(connection.connector_key);
   const localSession = readPortalSession();
+  const syncStartedAt = nowIso();
+
+  await upsertConnection(args.userId, {
+    connection_status: 'syncing',
+    sync_enabled: true,
+    last_sync_attempt_at: syncStartedAt,
+    sync_attempts: ((connection as unknown as { sync_attempts?: number }).sync_attempts ?? 0) + 1,
+    sync_error: null,
+    metadata: {
+      ...(connection.metadata ?? {}),
+      last_sync_trigger_type: args.triggerType,
+      sync_stage: 'running',
+    },
+  });
 
   const execution: PortalSyncExecutionResult = localSession
     ? await connector.sync({ userId: args.userId })
@@ -226,6 +297,20 @@ export async function syncPortalConnection(args: { userId: string }) {
 
   const completedAt = nowIso();
   const runStatus = execution.status === 'expired' ? 'error' : execution.status;
+
+  if (execution.status === 'success' && execution.rosterId) {
+    await applyPortalRosterPrecedence({
+      userId: args.userId,
+      rosterId: execution.rosterId,
+      completedAt,
+    });
+
+    emitRosterUpdated({
+      userId: args.userId,
+      reason: args.triggerType === 'auto' ? 'portal_sync_auto' : 'portal_sync_success',
+      at: completedAt,
+    });
+  }
 
   await updateSyncRun(run.id, {
     run_status: runStatus,
@@ -241,17 +326,33 @@ export async function syncPortalConnection(args: { userId: string }) {
   });
 
   const updatedConnection = await upsertConnection(args.userId, {
-    connection_status: execution.status === 'expired' ? 'expired' : 'connected',
-    sync_enabled: execution.status !== 'expired',
+    connection_status:
+      execution.status === 'expired'
+        ? 'reconnect_required'
+        : execution.status === 'success' || execution.status === 'noop'
+          ? 'connected'
+          : 'failed',
+    sync_enabled: execution.status !== 'expired' && execution.status !== 'error',
     last_synced_at: execution.status === 'success' ? completedAt : connection.last_synced_at,
     last_successful_sync_at: execution.status === 'success' ? completedAt : connection.last_successful_sync_at,
-    session_expires_at: execution.status === 'expired' ? completedAt : null,
-    last_error: execution.status === 'expired' ? execution.error ?? null : null,
+    session_expires_at: execution.status === 'expired' ? completedAt : connection.session_expires_at,
+    last_error: execution.status === 'success' || execution.status === 'noop' ? null : execution.error ?? null,
+    sync_error: execution.status === 'success' || execution.status === 'noop' ? null : execution.error ?? null,
+    next_sync_at:
+      execution.status === 'success' || execution.status === 'noop'
+        ? new Date(Date.now() + AUTO_SYNC_INTERVAL_MS).toISOString()
+        : connection.last_successful_sync_at ?? null,
+    last_reconnect_attempt_at: execution.status === 'expired' ? completedAt : null,
+    reconnect_attempts:
+      execution.status === 'expired'
+        ? ((connection as unknown as { reconnect_attempts?: number }).reconnect_attempts ?? 0) + 1
+        : (connection as unknown as { reconnect_attempts?: number }).reconnect_attempts ?? 0,
     metadata: {
       ...(connection.metadata ?? {}),
       provider: PRIMARY_PORTAL_CONNECTOR_KEY,
       auth_mode: 'browser_managed_session',
-      sync_stage: 'connection_only',
+      sync_stage: execution.status === 'success' ? 'completed' : 'failed_or_pending_reconnect',
+      last_sync_trigger_type: args.triggerType,
     },
   });
 
@@ -259,4 +360,51 @@ export async function syncPortalConnection(args: { userId: string }) {
     connection: updatedConnection,
     execution,
   };
+}
+
+export async function maybeAutoSyncPortalConnection(args: { userId: string; reason?: string; force?: boolean }) {
+  const connection = await ensurePortalConnection(args.userId);
+  const now = Date.now();
+  const session = readPortalSession();
+
+  if (connection.connection_status === 'disconnected' || !connection.sync_enabled) {
+    return { skipped: true, reason: 'connection_disabled' as const };
+  }
+
+  if (!session) {
+    const nowAt = nowIso();
+    await upsertConnection(args.userId, {
+      connection_status: 'reconnect_required',
+      sync_enabled: false,
+      session_expires_at: nowAt,
+      last_reconnect_attempt_at: nowAt,
+      reconnect_attempts: ((connection as unknown as { reconnect_attempts?: number }).reconnect_attempts ?? 0) + 1,
+      last_error: 'Sessão expirada. Reconexão necessária.',
+      sync_error: 'Sessão expirada. Reconexão necessária.',
+      metadata: {
+        ...(connection.metadata ?? {}),
+        auto_sync_reason: args.reason ?? 'unspecified',
+      },
+    });
+    console.warn('[portal-sync] auto reconnect required: local session missing');
+    return { skipped: true, reason: 'reconnect_required' as const };
+  }
+
+  const nextSyncAtMs = connection.last_successful_sync_at
+    ? new Date(connection.last_successful_sync_at).getTime() + AUTO_SYNC_INTERVAL_MS
+    : 0;
+  const shouldSync = Boolean(args.force) || !connection.last_successful_sync_at || now >= nextSyncAtMs;
+
+  if (!shouldSync) {
+    console.log('[portal-sync] auto sync skipped: interval not reached');
+    return { skipped: true, reason: 'interval_not_reached' as const };
+  }
+
+  console.log('[portal-sync] auto sync started', { reason: args.reason ?? 'periodic' });
+  const result = await syncPortalConnectionInternal({
+    userId: args.userId,
+    triggerType: 'auto',
+  });
+  console.log('[portal-sync] auto sync finished', { status: result.execution.status });
+  return { skipped: false, result };
 }

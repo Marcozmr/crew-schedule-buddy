@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { emitRosterUpdated } from '@/lib/events/roster-events';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -499,15 +500,27 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       };
     }
 
-    // Deactivate previous rosters
+    // Regra de precedência: portal > manual.
+    // Manual só fica ativa se não houver portal ativo.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
-      .update({ is_active: false })
+    const { data: activePortalRoster } = await (supabase.from('imported_rosters') as any)
+      .select('id')
       .eq('user_id', effectiveUserId)
       .eq('is_active', true)
-      .select('id');
+      .eq('roster_source', 'portal')
+      .maybeSingle();
 
-    const deactivatedRosterIds = ((deactivatedRows as Array<{ id: string }> | null) ?? []).map(r => r.id);
+    const shouldActivateManual = !activePortalRoster?.id;
+    let deactivatedRosterIds: string[] = [];
+    if (shouldActivateManual) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
+        .update({ is_active: false, roster_status: 'superseded' })
+        .eq('user_id', effectiveUserId)
+        .eq('is_active', true)
+        .select('id');
+      deactivatedRosterIds = ((deactivatedRows as Array<{ id: string }> | null) ?? []).map(r => r.id);
+    }
 
     // Create new roster
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -527,9 +540,13 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       duty_hours_total: header.dutyHoursTotal,
       raw_text_excerpt: extractedText.substring(0, 2000),
       parser_version: PARSER_VERSION,
+      import_origin: 'manual',
       import_status: 'processing',
       parsed_count: entries.length,
-      is_active: true,
+      is_active: shouldActivateManual,
+      roster_source: 'manual',
+      roster_status: shouldActivateManual ? 'active' : 'archived',
+      imported_at: new Date().toISOString(),
     }).select('id').single();
 
     if (rosterError) return emptyResult(`Erro ao criar roster: ${rosterError.message}`);
@@ -601,6 +618,12 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       if (header.crewName) updates.name = header.crewName;
       await supabase.from('profiles').update(updates).eq('user_id', effectiveUserId);
     }
+
+    emitRosterUpdated({
+      userId: effectiveUserId,
+      reason: 'manual_import',
+      at: new Date().toISOString(),
+    });
 
     // Fetch diagnostics
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

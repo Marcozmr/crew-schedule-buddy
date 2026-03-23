@@ -9,6 +9,7 @@ import { parseMockSchedule, detectAirline } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { emitRosterUpdated } from '@/lib/events/roster-events';
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -32,11 +33,26 @@ export default function UploadPage() {
 
     const airline = detectAirline(text);
 
-    await supabase
-      .from('imported_rosters')
-      .update({ is_active: false })
+    // Regra de precedência: portal > manual.
+    // Se já existe portal ativo, a escala manual entra como fallback (não ativa).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: activePortalRoster } = await (supabase.from('imported_rosters') as any)
+      .select('id')
       .eq('user_id', user.id)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('roster_source', 'portal')
+      .maybeSingle();
+
+    const shouldActivateManual = !activePortalRoster?.id;
+
+    if (shouldActivateManual) {
+      // Desativa escala ativa anterior para manter apenas uma ativa por usuário.
+      await supabase
+        .from('imported_rosters')
+        .update({ is_active: false, roster_status: 'superseded' })
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+    }
 
     const createdAtMs = Date.now();
     const sourceFilename = fileName || 'manual-text-input.txt';
@@ -51,9 +67,13 @@ export default function UploadPage() {
         source_message_id: sourceMessageId,
         storage_path: storagePath,
         parser_version: 'manual-text-v1',
+        import_origin: 'manual',
         import_status: 'processing',
         parsed_count: entries.length,
-        is_active: true,
+        is_active: shouldActivateManual,
+        roster_source: 'manual',
+        roster_status: shouldActivateManual ? 'active' : 'archived',
+        imported_at: new Date().toISOString(),
       })
       .select('id')
       .single();
@@ -103,6 +123,12 @@ export default function UploadPage() {
       .from('imported_rosters')
       .update({ import_status: 'success', inserted_count: rows.length, import_error: null })
       .eq('id', rosterRow.id);
+
+    emitRosterUpdated({
+      userId: user.id,
+      reason: 'manual_import',
+      at: new Date().toISOString(),
+    });
 
     if (airline !== 'Não identificada') {
       await supabase.from('profiles').update({ airline }).eq('user_id', user.id);

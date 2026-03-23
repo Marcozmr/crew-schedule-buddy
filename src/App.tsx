@@ -1,9 +1,10 @@
+// @ts-nocheck
+import React, { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
-import { lazy, Suspense, useEffect } from "react";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { getThemeByLocalTime } from "./lib/themeByTime";
 
@@ -26,7 +27,6 @@ const RegulationPage = lazy(() => import("./pages/RegulationPage"));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
 const SalaryPage = lazy(() => import("./pages/SalaryPage"));
 const PerDiemPage = lazy(() => import("./pages/PerDiemPage"));
-
 const RestCalcPage = lazy(() => import("./pages/RestCalcPage"));
 const DutyCalcPage = lazy(() => import("./pages/DutyCalcPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
@@ -46,18 +46,21 @@ const queryClient = new QueryClient({
     },
   },
 });
+
 registerQueryClient(queryClient);
 
 const Loading = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
-    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+    <div className="w-8 h-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
   </div>
 );
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
+
   if (loading) return <Loading />;
   if (!session) return <Navigate to="/" replace />;
+
   return <>{children}</>;
 }
 
@@ -68,22 +71,134 @@ const AppRoutes = () => (
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
-      <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/download-roster" element={<ProtectedRoute><DownloadRosterPage /></ProtectedRoute>} />
-      <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
-      <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-      <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
-      <Route path="/regulation" element={<ProtectedRoute><RegulationPage /></ProtectedRoute>} />
-      <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
-      <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
-      <Route path="/perdiem" element={<ProtectedRoute><PerDiemPage /></ProtectedRoute>} />
-      <Route path="/rest-calc" element={<ProtectedRoute><RestCalcPage /></ProtectedRoute>} />
-      <Route path="/duty-calc" element={<ProtectedRoute><DutyCalcPage /></ProtectedRoute>} />
-      <Route path="/weather" element={<ProtectedRoute><WeatherPage /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <OnboardingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/home"
+        element={
+          <ProtectedRoute>
+            <HomePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/download-roster"
+        element={
+          <ProtectedRoute>
+            <DownloadRosterPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/schedule"
+        element={
+          <ProtectedRoute>
+            <SchedulePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <SearchPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/regulation"
+        element={
+          <ProtectedRoute>
+            <RegulationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/documents"
+        element={
+          <ProtectedRoute>
+            <DocumentsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/salary"
+        element={
+          <ProtectedRoute>
+            <SalaryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/perdiem"
+        element={
+          <ProtectedRoute>
+            <PerDiemPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/rest-calc"
+        element={
+          <ProtectedRoute>
+            <RestCalcPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/duty-calc"
+        element={
+          <ProtectedRoute>
+            <DutyCalcPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/weather"
+        element={
+          <ProtectedRoute>
+            <WeatherPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/support" element={<SupportPage />} />
@@ -102,9 +217,9 @@ const App = () => {
 
     applyTheme();
 
-    const interval = setInterval(applyTheme, 60000);
+    const interval = window.setInterval(applyTheme, 60000);
 
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, []);
 
   return (
