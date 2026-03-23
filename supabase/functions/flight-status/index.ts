@@ -2,9 +2,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Max-Age": "86400",
 };
 
 const ROSTER_TTL_MS = 5 * 60 * 1000;
@@ -349,9 +351,17 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const hasAuth = !!req.headers.get("Authorization")?.startsWith("Bearer ");
+  const hasApikey = !!req.headers.get("apikey");
+  console.log("[flight-status] ingress", {
+    method: req.method,
+    hasAuth,
+    hasApikey,
+    url: req.url?.replace(/[?].*/, ""),
+  });
+
   try {
     const cfg = readBackendConfig();
-    console.log("[flight-status] request received");
     const authHeader = req.headers.get("Authorization") ?? "";
     const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!jwt) {
@@ -375,13 +385,38 @@ serve(async (req) => {
 
     const userId = authData.user.id;
     const url = new URL(req.url);
-    const airportCode = (url.searchParams.get("airportCode") || "").toUpperCase();
-    const carrierCode = (url.searchParams.get("carrierCode") || "").toUpperCase();
-    const flightNumber = (url.searchParams.get("flightNumber") || "").trim();
-    const scheduledDepartureDate = url.searchParams.get("scheduledDepartureDate") || getTodayDate();
-    const boardMode = (url.searchParams.get("boardMode") || "my_schedule").toLowerCase();
+
+    let airportCode = "";
+    let carrierCode = "";
+    let flightNumber = "";
+    let scheduledDepartureDate = getTodayDate();
+    let boardMode = "my_schedule";
+
+    if (req.method === "POST") {
+      try {
+        const body = (await req.json()) as Record<string, unknown>;
+        airportCode = String(body?.airportCode ?? "").toUpperCase();
+        carrierCode = String(body?.carrierCode ?? "").toUpperCase();
+        flightNumber = String(body?.flightNumber ?? "").trim();
+        scheduledDepartureDate = String(body?.scheduledDepartureDate ?? getTodayDate());
+        boardMode = (String(body?.boardMode ?? "my_schedule")).toLowerCase();
+      } catch {
+        airportCode = "";
+        carrierCode = "";
+        flightNumber = "";
+        scheduledDepartureDate = getTodayDate();
+        boardMode = "my_schedule";
+      }
+    } else {
+      airportCode = (url.searchParams.get("airportCode") || "").toUpperCase();
+      carrierCode = (url.searchParams.get("carrierCode") || "").toUpperCase();
+      flightNumber = (url.searchParams.get("flightNumber") || "").trim();
+      scheduledDepartureDate = url.searchParams.get("scheduledDepartureDate") || getTodayDate();
+      boardMode = (url.searchParams.get("boardMode") || "my_schedule").toLowerCase();
+    }
 
     console.log("[flight-status] request received", {
+      method: req.method,
       boardMode,
       airportCode: airportCode || "(vazio)",
       date: scheduledDepartureDate,

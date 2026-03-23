@@ -77,25 +77,25 @@ function toLegacyFlightInfo(raw: any): FlightInfo {
 }
 
 async function callFlightStatus(params: Record<string, string> = {}): Promise<any> {
-  const query: Record<string, string> = {};
-  if (params.dep_iata) query.airportCode = params.dep_iata.toUpperCase();
+  const body: Record<string, string> = {
+    airportCode: params.dep_iata?.toUpperCase() || 'GRU',
+    scheduledDepartureDate: params.scheduledDepartureDate || new Date().toISOString().split('T')[0],
+    boardMode: params.dep_iata ? 'airport_base' : 'my_schedule',
+  };
   if (params.flight_iata) {
     const cleaned = params.flight_iata.replace(/\s/g, '').toUpperCase();
     const match = cleaned.match(/^([A-Z]{2})(\d+)/);
     if (match) {
-      query.carrierCode = match[1];
-      query.flightNumber = match[2];
+      body.carrierCode = match[1];
+      body.flightNumber = match[2];
     }
   }
-  if (params.airline_iata) query.carrierCode = params.airline_iata.toUpperCase();
-  if (params.flight_number) query.flightNumber = params.flight_number;
-  if (!query.scheduledDepartureDate) {
-    query.scheduledDepartureDate = new Date().toISOString().split('T')[0];
-  }
+  if (params.airline_iata) body.carrierCode = params.airline_iata.toUpperCase();
+  if (params.flight_number) body.flightNumber = params.flight_number;
 
   const { data, error } = await supabase.functions.invoke('flight-status', {
-    method: 'GET',
-    query,
+    method: 'POST',
+    body,
   });
 
   if (error) {

@@ -363,14 +363,14 @@ function enrichmentCacheKey(options: FlightProviderOptions): string {
 /**
  * Enriquecimento opcional (escala + OpenSky no backend). Não deve lançar exceção:
  * falha de rede/sessão = lista vazia (painel continua com dados da escala no cliente).
+ * Usa supabase.functions.invoke (POST) para evitar problemas de CORS com fetch direto.
  */
 async function fetchFlightStatusFromEdge(
   options: FlightProviderOptions
 ): Promise<FlightEnrichmentFetchResult> {
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = getSupabaseAnonKey();
 
-  if (!baseUrl || !anonKey) {
+  if (!baseUrl?.trim()) {
     console.warn("[flight-status] Supabase não configurado; enriquecimento indisponível");
     return { flights: [], meta: { skipped: true, reason: "no_supabase_env" } };
   }
@@ -389,16 +389,6 @@ async function fetchFlightStatusFromEdge(
     return cached.result;
   }
 
-  const params = new URLSearchParams();
-  params.set("airportCode", options.airportCode.toUpperCase());
-  params.set("scheduledDepartureDate", options.date);
-  params.set("boardMode", options.boardMode ?? "my_schedule");
-  if (options.airlineCode?.trim()) params.set("carrierCode", options.airlineCode.trim().toUpperCase());
-  if (options.flightNumber?.trim()) params.set("flightNumber", options.flightNumber.trim());
-
-  const url = `${baseUrl}/functions/v1/flight-status?${params.toString()}`;
-  const urlHost = baseUrl ? (() => { try { return new URL(baseUrl).host; } catch { return baseUrl.slice(0, 50); } })() : "(sem baseUrl)";
-
   const payloadSent = {
     boardMode: options.boardMode ?? "my_schedule",
     airportCode: options.airportCode,
@@ -406,76 +396,78 @@ async function fetchFlightStatusFromEdge(
     carrierCode: options.airlineCode ?? undefined,
     flightNumber: options.flightNumber ?? undefined,
   };
+  const urlHost = baseUrl ? (() => { try { return new URL(baseUrl).host; } catch { return baseUrl.slice(0, 50); } })() : "(sem baseUrl)";
+
   logEnrichmentPipeline("fetch_attempt", {
     ...payloadSent,
+    method: "POST",
     urlHost,
     urlPath: "/functions/v1/flight-status",
-    hasAnonKey: !!anonKey?.length,
     hasAccessToken: !!accessToken?.length,
   });
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25_000);
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
+    const { data, error } = await supabase.functions.invoke("flight-status", {
+      method: "POST",
+      body: {
+        airportCode: options.airportCode.toUpperCase(),
+        scheduledDepartureDate: options.date,
+        boardMode: options.boardMode ?? "my_schedule",
+        ...(options.airlineCode?.trim() && { carrierCode: options.airlineCode.trim().toUpperCase() }),
+        ...(options.flightNumber?.trim() && { flightNumber: options.flightNumber.trim() }),
       },
-      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      timeout: 25_000,
     });
-    clearTimeout(timeoutId);
 
     logEnrichmentPipeline("fetch_response", {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
+      hasData: !!data,
+      hasError: !!error,
+      errorName: error?.name,
+      errorMessage: error?.message?.slice?.(0, 100),
       urlHost,
     });
 
-    let data: Record<string, unknown> = {};
-    try {
-      data = (await response.json()) as Record<string, unknown>;
-    } catch {
-      const text = await response.text();
-      console.warn("[flight-status] Resposta JSON inválida", {
-        status: response.status,
-        bodyPreview: text?.slice(0, 200),
-      });
-      logEnrichmentPipeline("fetch_fallback", {
-        reason: "invalid_json",
-        httpStatus: response.status,
-        boardMode: options.boardMode ?? "my_schedule",
-      });
-      return { flights: [], meta: { skipped: false, reason: "invalid_json", httpStatus: response.status } };
-    }
+    if (error) {
+      const errMsg = error?.message ?? String(error);
+      const errName = error?.name ?? "FunctionsError";
+      const isFetch = /failed to fetch|networkerror|load failed/i.test(errMsg) || errName === "FunctionsFetchError";
+      const isHttp = errName === "FunctionsHttpError";
+      const httpStatus = (error as { context?: Response })?.context?.status;
+      const metaReason = isHttp ? "http_error" : "network";
+      const likelyCause = isFetch ? "cors_or_connection" : isHttp ? (httpStatus === 401 ? "auth_required" : `http_${httpStatus}`) : "unknown";
 
-    const flightsUnknown = data.flights ?? (data.data as Record<string, unknown> | undefined)?.flights;
-    const flights = Array.isArray(flightsUnknown) ? (flightsUnknown as FlightRaw[]) : [];
-
-    if (!response.ok) {
-      const err = typeof data.error === "string" ? data.error : "";
-      console.warn("[flight-status] HTTP", response.status, err);
       logEnrichmentPipeline("fetch_fallback", {
-        reason: "http_error",
-        httpStatus: response.status,
-        serverError: err,
+        reason: metaReason,
+        errorName: errName,
+        errorMessage: errMsg.slice(0, 200),
+        httpStatus: isHttp ? httpStatus : undefined,
+        likelyCause,
         boardMode: options.boardMode ?? "my_schedule",
         urlHost,
       });
+
       return {
         flights: [],
-        meta: { skipped: false, reason: "http_error", httpStatus: response.status, serverError: err },
+        meta: {
+          skipped: false,
+          reason: metaReason,
+          httpStatus: isHttp ? httpStatus : undefined,
+          serverError: errMsg,
+          serverErrorDetail: JSON.stringify({ name: errName, likelyCause }),
+        },
       };
     }
 
+    const dataObj = (data ?? {}) as Record<string, unknown>;
+    const flightsUnknown = dataObj.flights ?? (dataObj.data as Record<string, unknown> | undefined)?.flights;
+    const flights = Array.isArray(flightsUnknown) ? (flightsUnknown as FlightRaw[]) : [];
+
     const summary = summarizeEnrichmentRaw(flights);
     const airportBaseReason =
-      typeof data.airportBaseReason === "string" ? data.airportBaseReason : undefined;
-    const airportBaseMeta = data.airportBaseMeta as Record<string, unknown> | undefined;
-    const diagnostic = data.diagnostic as Record<string, unknown> | undefined;
+      typeof dataObj.airportBaseReason === "string" ? dataObj.airportBaseReason : undefined;
+    const airportBaseMeta = dataObj.airportBaseMeta as Record<string, unknown> | undefined;
+    const diagnostic = dataObj.diagnostic as Record<string, unknown> | undefined;
     const fallbackReason =
       (typeof airportBaseMeta?.reasonZeroResults === "string"
         ? airportBaseMeta.reasonZeroResults
@@ -504,7 +496,7 @@ async function fetchFlightStatusFromEdge(
       openSkyMatchCount,
       fallbackReason: fallbackReason ?? (summary.count === 0 ? "empty_response" : null),
       ...summary,
-      responseKeys: Object.keys(data),
+      responseKeys: Object.keys(dataObj),
       airportBaseReason,
     });
 
@@ -529,24 +521,28 @@ async function fetchFlightStatusFromEdge(
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     const isAbort = err.name === "AbortError";
-    const likelyCause = isAbort
-      ? "timeout_25s"
-      : /failed to fetch|networkerror|load failed/i.test(err.message)
-        ? "cors_or_connection"
-        : "unknown";
-    console.warn("[flight-status] Falha de rede ou timeout", {
+    const isFetch = /failed to fetch|networkerror|load failed/i.test(err.message);
+    const likelyCause = isAbort ? "timeout_25s" : isFetch ? "cors_or_connection" : "unexpected_error";
+    const payloadSent = {
+      boardMode: options.boardMode ?? "my_schedule",
+      airportCode: options.airportCode,
+      date: options.date,
+    };
+    console.warn("[flight-status] Exceção inesperada (invoke)", {
       name: err.name,
       message: err.message,
-      cause: err.cause,
+      stack: err.stack?.slice?.(0, 300),
       likelyCause,
+      payloadSent,
     });
     logEnrichmentPipeline("fetch_fallback", {
       reason: "network",
       errorName: err.name,
       errorMessage: err.message,
+      errorStack: err.stack?.slice?.(0, 200),
       likelyCause,
       boardMode: options.boardMode ?? "my_schedule",
-      urlHost,
+      payloadSent,
     });
     return {
       flights: [],

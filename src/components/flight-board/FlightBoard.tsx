@@ -70,14 +70,24 @@ function buildEnrichmentBanner(args: {
     return null;
   }
   if (meta.reason === "http_error") {
-    return `Servidor de enriquecimento retornou HTTP ${meta.httpStatus ?? "?"}. Exibindo dados planejados da escala.`;
+    if (meta.httpStatus === 401) {
+      return "Autenticação necessária — faça login para usar o enriquecimento ao vivo.";
+    }
+    if (meta.httpStatus === 404) {
+      return "Função flight-status não encontrada (404) — verifique o deploy no projeto Supabase.";
+    }
+    return `Servidor retornou HTTP ${meta.httpStatus ?? "?"}. Exibindo dados planejados da escala.`;
   }
   if (meta.reason === "network") {
     const detail = meta.serverErrorDetail
       ? (() => {
           try {
             const d = JSON.parse(meta.serverErrorDetail as string) as { likelyCause?: string };
-            return d.likelyCause ? ` (${d.likelyCause})` : "";
+            const c = d.likelyCause ?? "";
+            if (c === "cors_or_connection") return " (CORS ou conexão)";
+            if (c === "timeout_25s") return " (timeout)";
+            if (c === "auth_required") return " (token ausente)";
+            return c ? ` (${c})` : "";
           } catch {
             return "";
           }
@@ -124,6 +134,12 @@ function buildAirportBaseBanner(args: {
     return null;
   }
   if (meta.reason === "http_error") {
+    if (meta.httpStatus === 401) {
+      return "Base operacional: faça login para carregar voos do aeroporto.";
+    }
+    if (meta.httpStatus === 404) {
+      return "Base operacional: função flight-status não encontrada (404) — verifique o deploy.";
+    }
     return `Base operacional: HTTP ${meta.httpStatus ?? "?"}.`;
   }
   if (meta.reason === "network") {
@@ -131,7 +147,10 @@ function buildAirportBaseBanner(args: {
       ? (() => {
           try {
             const d = JSON.parse(meta.serverErrorDetail as string) as { likelyCause?: string };
-            return d.likelyCause ? ` (${d.likelyCause})` : "";
+            const c = d.likelyCause ?? "";
+            if (c === "cors_or_connection") return " (CORS ou conexão)";
+            if (c === "timeout_25s") return " (timeout)";
+            return c ? ` (${c})` : "";
           } catch {
             return "";
           }
