@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { resolveSafeIANATimezone } from '@/lib/date-utils';
 
 const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
@@ -60,7 +61,7 @@ export function useOperationalPreferences(): OperationalPreferences {
       const rosterBase = normalizeBase(rosterRes.data?.base_airport);
 
       setHomeBase(rosterBase ?? settingsBase ?? null);
-      setTimezone(settingsRes.data?.timezone || DEFAULT_TIMEZONE);
+      setTimezone(resolveSafeIANATimezone(settingsRes.data?.timezone || DEFAULT_TIMEZONE));
       setNotificationsEnabled(settingsRes.data?.notifications_enabled ?? true);
       setLoading(false);
     };

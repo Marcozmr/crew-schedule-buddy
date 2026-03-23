@@ -20,7 +20,7 @@ async function getFlightStatusFromSupabase(
   date: string
 ): Promise<FlightRaw | null> {
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   if (!baseUrl?.trim() || !anonKey?.trim()) {
     throw new Error("Supabase não configurado para consulta de status");
   }

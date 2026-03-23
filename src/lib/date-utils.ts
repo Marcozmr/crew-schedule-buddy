@@ -5,9 +5,24 @@ import { TZDate } from '@date-fns/tz';
 
 const BRAZIL_TZ = 'America/Sao_Paulo';
 
+/**
+ * Evita RangeError do Intl com fuso inválido/vazio no banco — causa comum de tela branca no dashboard.
+ */
+export function resolveSafeIANATimezone(raw: string | null | undefined): string {
+  const candidate = (raw ?? '').trim() || BRAZIL_TZ;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: candidate }).format(new Date());
+    return candidate;
+  } catch {
+    console.warn('[date-utils] Fuso IANA inválido; usando fallback', BRAZIL_TZ, { received: raw });
+    return BRAZIL_TZ;
+  }
+}
+
 function getDatePartsInTimeZone(date: Date, timeZone: string) {
+  const tz = resolveSafeIANATimezone(timeZone);
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+    timeZone: tz,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

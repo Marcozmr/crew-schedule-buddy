@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { AppLayout } from "../components/AppLayout";
+import { RouteErrorBoundary } from "../components/RouteErrorBoundary";
 import { FlightBoard } from "../components/flight-board";
 import { PdfImportDialog } from "../components/PdfImportDialog";
 import {
@@ -29,7 +30,11 @@ import {
 } from "../components/ui/tooltip";
 
 import { useAuth } from "../lib/auth-context";
-import { formatDateBR, formatHoursMinutes } from "../lib/date-utils";
+import {
+  formatDateBR,
+  formatHoursMinutes,
+  resolveSafeIANATimezone,
+} from "../lib/date-utils";
 import {
   groupIntoDutyPeriods,
   getTodayDutyPeriods,
@@ -90,8 +95,20 @@ export default function DashboardPage() {
   const { shouldShow: showOnboarding, dismiss: dismissOnboarding } =
     useOnboardingModal();
   const { homeBase, timezone } = useOperationalPreferences();
-  const { now, todayStr, monthStr } = useOperationalClock(timezone, reload);
+  /** Fuso seguro — Intl lança RangeError com IANA inválido e derruba o dashboard (tela branca). */
+  const safeTz = useMemo(() => resolveSafeIANATimezone(timezone), [timezone]);
+  const { now, todayStr, monthStr } = useOperationalClock(safeTz, reload);
   usePortalAutoSync(reload);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log("[Dashboard] operacional", {
+        safeTz,
+        todayStr,
+        rawTimezoneSetting: timezone,
+      });
+    }
+  }, [safeTz, todayStr, timezone]);
 
   const hasSchedule = !loading && schedule.length > 0;
   const allDutyPeriods = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
@@ -102,13 +119,13 @@ export default function DashboardPage() {
   );
 
   const nextDuty = useMemo(
-    () => getNextDutyPeriod(allDutyPeriods, todayStr, now, timezone),
-    [allDutyPeriods, todayStr, now, timezone]
+    () => getNextDutyPeriod(allDutyPeriods, todayStr, now, safeTz),
+    [allDutyPeriods, todayStr, now, safeTz]
   );
 
   const analysis = useMemo(
-    () => analyzeOperationalSchedule(schedule, timezone, homeBase),
-    [schedule, timezone, homeBase]
+    () => analyzeOperationalSchedule(schedule, safeTz, homeBase),
+    [schedule, safeTz, homeBase]
   );
 
   const monthDutyHours =
@@ -171,7 +188,7 @@ export default function DashboardPage() {
     const hourStr = new Intl.DateTimeFormat("pt-BR", {
       hour: "2-digit",
       hour12: false,
-      timeZone: timezone,
+      timeZone: safeTz,
     }).format(now);
 
     const hour = Number(hourStr);
@@ -238,18 +255,20 @@ export default function DashboardPage() {
               day: "numeric",
               month: "long",
               year: "numeric",
-              timeZone: timezone,
+              timeZone: safeTz,
             })}
           </p>
         </motion.div>
 
         <motion.div {...fade(0.03)} className="mb-6">
-          <FlightBoard
-            schedule={schedule}
-            scheduleLoading={loading}
-            operationalTodayIso={todayStr}
-            operationalTimezone={timezone}
-          />
+          <RouteErrorBoundary scope="Flight Board Pro">
+            <FlightBoard
+              schedule={schedule}
+              scheduleLoading={loading}
+              operationalTodayIso={todayStr}
+              operationalTimezone={safeTz}
+            />
+          </RouteErrorBoundary>
         </motion.div>
 
         {loading && (

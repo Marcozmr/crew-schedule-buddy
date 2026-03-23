@@ -1,1 +1,4 @@
-project_id = "tmqpwwpzhrdvkerhnilr"
+# Projeto Supabase do EscalaX — DEVE coincidir com VITE_SUPABASE_URL do frontend
+# Migrado para projeto controlado (fbryqzwykdhnmskfectg)
+# Deploy: npm run deploy:flight-status ou npm run deploy:functions
+project_id = "fbryqzwykdhnmskfectg"

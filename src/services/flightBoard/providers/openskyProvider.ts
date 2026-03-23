@@ -1,101 +1,47 @@
 /**
- * Provedor OpenSky Network para tracking de aeronaves
- * Documentação: https://openskynetwork.github.io/opensky-api/
+ * OpenSky — extrai parcial de tracking a partir de FlightRaw já mesclado pela edge.
+ * Nunca lança; trackingStatus = no_match quando não há posição.
  */
 
-import { flightApiConfig } from "../apiConfig";
+import type { FlightRaw } from "../types";
+import type { FlightEnrichmentPartial, FlightTrackingData } from "../flightEnrichmentTypes";
 
-export interface OpenSkyAircraftNormalized {
-  callsign: string;
-  latitude: number;
-  longitude: number;
-  altitude: number;
-  velocity: number;
-  heading: number;
-  icao24?: string;
-  onGround?: boolean;
+/** Normaliza callsign / número: LA3359, LA 3359, LA-3359 → LA3359 */
+export function normalizeFlightCallsign(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/[\s\-_/]+/g, "")
+    .toUpperCase();
 }
 
-const TIMEOUT_MS = flightApiConfig.opensky.timeoutMs;
-const BASE = flightApiConfig.opensky.baseUrl;
+export function buildOpenSkyPartialFromRaw(raw: FlightRaw): FlightEnrichmentPartial {
+  const t = raw.tracking;
+  const hasLatLon =
+    t != null &&
+    typeof t.latitude === "number" &&
+    typeof t.longitude === "number" &&
+    !Number.isNaN(t.latitude) &&
+    !Number.isNaN(t.longitude);
 
-/**
- * OpenSky states array indices:
- * 0: icao24, 1: callsign, 2: origin_country, 3: time_position, 4: last_contact,
- * 5: longitude, 6: latitude, 7: baro_altitude, 8: on_ground, 9: velocity,
- * 10: true_track, 11: vertical_rate, ...
- */
-function parseStateVector(row: unknown[]): OpenSkyAircraftNormalized | null {
-  if (!Array.isArray(row) || row.length < 11) return null;
-
-  const latitude = Number(row[6]);
-  const longitude = Number(row[5]);
-  if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
-
-  const callsign = (row[1] ?? "").toString().trim() || "—";
-  const baroAlt = row[7];
-  const velocityMs = row[9];
-  const trueTrack = row[10];
+  const trackingData: FlightTrackingData = {
+    trackingAvailable: hasLatLon,
+    trackingStatus: hasLatLon ? "matched" : t === null ? "no_match" : "unavailable",
+    aircraftIcao: raw.icao24 ?? t?.icao24 ?? null,
+    onGround: t?.onGround ?? null,
+    latitude: t?.latitude ?? null,
+    longitude: t?.longitude ?? null,
+    altitude: t?.altitude ?? null,
+    velocity: t?.velocity ?? null,
+    heading: t?.heading ?? null,
+    lastContact: t?.lastContact ?? null,
+    callsignMatched: t?.callsign ?? null,
+  };
 
   return {
-    callsign,
-    latitude,
-    longitude,
-    altitude: typeof baroAlt === "number" && !Number.isNaN(baroAlt) ? Math.round(baroAlt) : 0,
-    velocity: typeof velocityMs === "number" && !Number.isNaN(velocityMs)
-      ? Math.round(velocityMs * 3.6) // m/s -> km/h
-      : 0,
-    heading: typeof trueTrack === "number" && !Number.isNaN(trueTrack) ? Math.round(trueTrack) : 0,
-    icao24: typeof row[0] === "string" ? row[0] : undefined,
-    onGround: row[8] === true,
+    source: "opensky",
+    tracking: t ?? null,
+    trackingMeta: {
+      status: trackingData.trackingStatus,
+      aircraftIcao: trackingData.aircraftIcao,
+    },
   };
-}
-
-async function fetchWithTimeout(
-  url: string,
-  opts: RequestInit = {},
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...opts, signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-export interface NearbyAircraftOptions {
-  lamin: number;
-  lomin: number;
-  lamax: number;
-  lomax: number;
-  maxResults?: number;
-}
-
-export async function getOpenSkyNearbyAircraft(
-  options: NearbyAircraftOptions
-): Promise<OpenSkyAircraftNormalized[]> {
-  const params = new URLSearchParams();
-  params.set("lamin", String(options.lamin));
-  params.set("lomin", String(options.lomin));
-  params.set("lamax", String(options.lamax));
-  params.set("lomax", String(options.lomax));
-
-  const url = `${BASE}/states/all?${params.toString()}`;
-  const response = await fetchWithTimeout(url, {}, TIMEOUT_MS);
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.message ?? "Erro na API OpenSky");
-  }
-
-  const states: unknown[] = Array.isArray(data?.states) ? data.states : [];
-  const maxResults = options.maxResults ?? 50;
-
-  return states
-    .map((row) => parseStateVector(row as unknown[]))
-    .filter((a): a is OpenSkyAircraftNormalized => a != null)
-    .filter((a) => !a.onGround && (a.altitude > 0 || a.velocity > 0))
-    .slice(0, maxResults);
 }

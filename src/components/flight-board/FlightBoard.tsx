@@ -6,7 +6,7 @@ import {
   getDepartures,
   getArrivals,
 } from "@/services/flightBoard/flightService";
-import type { FlightNormalized, FlightFilters } from "@/services/flightBoard/types";
+import type { FlightNormalized, FlightFilters, FlightRaw } from "@/services/flightBoard/types";
 import { FlightFilters as FlightFiltersComponent } from "./FlightFilters";
 import { FlightRow } from "./FlightRow";
 import { FlightBoardSkeleton } from "./FlightBoardSkeleton";
@@ -18,10 +18,29 @@ import { subscribeRosterUpdated } from "@/lib/events/roster-events";
 import {
   resolveFlightBoardState,
   mergeEnrichmentIntoNormalized,
+  buildNormalizedListsFromEnrichmentRaw,
   logFlightBoardDiagnostics,
   getOperationalResolveReason,
 } from "@/services/flightBoard/flightBoardOperational";
-import { fetchFlightStatusEnrichment } from "@/services/flightBoard/flightProvider";
+import {
+  fetchFlightStatusEnrichment,
+  type EnrichmentFetchMeta,
+} from "@/services/flightBoard/flightProvider";
+import {
+  logEnrichmentPipeline,
+  summarizeEnrichmentRaw,
+} from "@/services/flightBoard/flightEnrichmentDiagnostics";
+import {
+  DEFAULT_OPERATIONAL_TIMEZONE,
+  getOperationalTodayIso,
+} from "@/lib/operational-date";
+import { resolveSafeIANATimezone } from "@/lib/date-utils";
+import {
+  finalizeNormalizedFlights,
+  computePipelineMetrics,
+  logFlightBoardPipeline,
+  logFlightBoardAirportMode,
+} from "@/services/flightBoard/flightBoardPipeline";
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
@@ -31,18 +50,122 @@ const MODERATE_MONITOR_MS = 60 * 1000;
 const LIGHT_MONITOR_MS = 3 * 60 * 1000;
 const IDLE_MONITOR_MS = 5 * 60 * 1000;
 
+/** Mensagem única do banner (motivos distintos no console via pipeline logs). */
+function buildEnrichmentBanner(args: {
+  hasPlanned: boolean;
+  raw: FlightRaw[];
+  meta: EnrichmentFetchMeta;
+  dep: FlightNormalized[];
+  arr: FlightNormalized[];
+}): string | null {
+  const { hasPlanned, raw, meta, dep, arr } = args;
+  if (!hasPlanned) return null;
+  if (meta.skipped) {
+    if (meta.reason === "no_supabase_env") {
+      return "Enriquecimento desligado: variáveis VITE_SUPABASE_* ausentes no build do cliente.";
+    }
+    if (meta.reason === "no_session") {
+      return "Enriquecimento indisponível: sessão não encontrada.";
+    }
+    return null;
+  }
+  if (meta.reason === "http_error") {
+    return `Servidor de enriquecimento retornou HTTP ${meta.httpStatus ?? "?"}. Exibindo dados planejados da escala.`;
+  }
+  if (meta.reason === "network") {
+    const detail = meta.serverErrorDetail
+      ? (() => {
+          try {
+            const d = JSON.parse(meta.serverErrorDetail as string) as { likelyCause?: string };
+            return d.likelyCause ? ` (${d.likelyCause})` : "";
+          } catch {
+            return "";
+          }
+        })()
+      : "";
+    return `Falha de rede ao contatar o enriquecimento${detail}. Exibindo dados planejados da escala.`;
+  }
+  if (meta.reason === "invalid_json") {
+    return "Resposta inválida do servidor de enriquecimento. Exibindo dados planejados da escala.";
+  }
+  if (raw.length === 0) {
+    return "Nenhum voo retornado pelo servidor para esta data/aeroporto. Exibindo dados da escala local.";
+  }
+  const anyLive = [...dep, ...arr].some((f) => f.liveTrackingAvailable);
+  const summary = summarizeEnrichmentRaw(raw);
+  logEnrichmentPipeline("banner_reason", {
+    anyLive,
+    withAirportInfo: summary.withAirportInfo,
+    withTrackingLatLon: summary.withTrackingLatLon,
+  });
+  if (!anyLive && summary.withAirportInfo > 0) {
+    return "OpenSky: sem posição ao vivo; contexto de aeroporto e status do servidor foram aplicados ao card.";
+  }
+  if (!anyLive) {
+    return "OpenSky: sem match de posição; status e horários vêm do servidor e da escala. Dados ao vivo disponíveis apenas para voos ativos ou próximos da operação.";
+  }
+  return null;
+}
+
+function buildAirportBaseBanner(args: {
+  raw: FlightRaw[];
+  meta: EnrichmentFetchMeta;
+  builtDep: number;
+  builtArr: number;
+}): string | null {
+  const { raw, meta, builtDep, builtArr } = args;
+  if (meta.skipped) {
+    if (meta.reason === "no_supabase_env") {
+      return "Base operacional: variáveis VITE_SUPABASE_* ausentes; não é possível chamar a edge.";
+    }
+    if (meta.reason === "no_session") {
+      return "Base operacional: sessão ausente — faça login para carregar voos do aeroporto.";
+    }
+    return null;
+  }
+  if (meta.reason === "http_error") {
+    return `Base operacional: HTTP ${meta.httpStatus ?? "?"}.`;
+  }
+  if (meta.reason === "network") {
+    const detail = meta.serverErrorDetail
+      ? (() => {
+          try {
+            const d = JSON.parse(meta.serverErrorDetail as string) as { likelyCause?: string };
+            return d.likelyCause ? ` (${d.likelyCause})` : "";
+          } catch {
+            return "";
+          }
+        })()
+      : "";
+    return `Base operacional: falha de rede ao contatar o servidor${detail}.`;
+  }
+  if (meta.airportBaseReason === "opensky_credentials_required") {
+    return "Base operacional: configure OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET na função flight-status (OpenSky OAuth).";
+  }
+  if (meta.airportBaseReason === "unknown_airport_iata") {
+    return "Base operacional: código IATA não mapeado para ICAO (amplie IATA_TO_ICAO na edge).";
+  }
+  if (raw.length === 0) {
+    return "Base operacional: OpenSky não retornou voos para esta janela. Dados ao vivo disponíveis apenas para voos que já partiram ou chegaram no dia (UTC). Verifique data e credenciais.";
+  }
+  if (builtDep + builtArr === 0) {
+    return "Base operacional: resposta recebida, mas nenhum voo passou nos filtros de partida/chegada na base.";
+  }
+  return null;
+}
+
 export interface FlightBoardProps {
   className?: string;
   /** Escala do usuário (mesma fonte do calendário / dashboard) */
-  schedule: ScheduleEntry[];
+  schedule?: ScheduleEntry[] | null;
   scheduleLoading: boolean;
   /**
    * "Hoje" operacional YYYY-MM-DD — mesmo valor que `useOperationalClock` / calendário
    * (não usar UTC do navegador).
    */
-  operationalTodayIso: string;
+  operationalTodayIso?: string;
   /** IANA, ex.: America/Sao_Paulo — mesmas preferências do dashboard */
-  operationalTimezone: string;
+  operationalTimezone?: string;
 }
 
 export function FlightBoard({
@@ -52,30 +175,65 @@ export function FlightBoard({
   operationalTodayIso,
   operationalTimezone,
 }: FlightBoardProps) {
+  const safeSchedule = schedule ?? [];
+  const tzResolved = useMemo(
+    () => resolveSafeIANATimezone(operationalTimezone ?? DEFAULT_OPERATIONAL_TIMEZONE),
+    [operationalTimezone]
+  );
+
+  const todayFromDashboard = useMemo(() => {
+    if (
+      typeof operationalTodayIso === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(operationalTodayIso.trim())
+    ) {
+      return operationalTodayIso.trim();
+    }
+    return getOperationalTodayIso(tzResolved);
+  }, [operationalTodayIso, tzResolved]);
+
   const { homeBase } = useOperationalPreferences();
 
-  const [filters, setFilters] = useState<FlightFilters>(() => ({
-    airportCode: "GRU",
-    airlineCode: "",
-    flightNumber: "",
-    date: operationalTodayIso,
-    mode: "departures",
-  }));
+  const [filters, setFilters] = useState<FlightFilters>(() => {
+    const tz = resolveSafeIANATimezone(operationalTimezone ?? DEFAULT_OPERATIONAL_TIMEZONE);
+    const initialDate =
+      typeof operationalTodayIso === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(operationalTodayIso.trim())
+        ? operationalTodayIso.trim()
+        : getOperationalTodayIso(tz);
+    return {
+      airportCode: "GRU",
+      airlineCode: "",
+      flightNumber: "",
+      date: initialDate,
+      mode: "departures",
+      boardMode: "my_schedule",
+    };
+  });
 
   /** Avança o filtro para o novo “hoje” operacional só se o usuário ainda estava no dia anterior */
   const lastOperationalDayRef = useRef<string | null>(null);
   useEffect(() => {
     if (lastOperationalDayRef.current === null) {
-      lastOperationalDayRef.current = operationalTodayIso;
+      lastOperationalDayRef.current = todayFromDashboard;
       return;
     }
-    if (lastOperationalDayRef.current === operationalTodayIso) return;
+    if (lastOperationalDayRef.current === todayFromDashboard) return;
     const previousDay = lastOperationalDayRef.current;
-    lastOperationalDayRef.current = operationalTodayIso;
+    lastOperationalDayRef.current = todayFromDashboard;
     setFilters((f) =>
-      f.date === previousDay ? { ...f, date: operationalTodayIso } : f
+      f.date === previousDay ? { ...f, date: todayFromDashboard } : f
     );
-  }, [operationalTodayIso]);
+  }, [todayFromDashboard]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log("[FlightBoard] mount", {
+        tzResolved,
+        todayFromDashboard,
+        entries: safeSchedule.length,
+      });
+    }
+  }, [tzResolved, todayFromDashboard, safeSchedule.length]);
 
   const [departures, setDepartures] = useState<FlightNormalized[]>([]);
   const [arrivals, setArrivals] = useState<FlightNormalized[]>([]);
@@ -90,17 +248,121 @@ export function FlightBoard({
     () =>
       resolveFlightBoardState({
         scheduleLoading,
-        schedule,
+        schedule: safeSchedule,
         dateIso: filters.date,
         airportCode: filters.airportCode,
       }),
-    [schedule, scheduleLoading, filters.date, filters.airportCode]
+    [safeSchedule, scheduleLoading, filters.date, filters.airportCode]
   );
 
   const loadFlights = useCallback(async () => {
     setFatalError(null);
     setTechnicalError(null);
     setEnrichmentWarning(null);
+
+    /** Base operacional: não depende da escala importada — só edge + OpenSky airport */
+    if (filters.boardMode === "airport_base") {
+      setLoading(true);
+      try {
+        let raw: FlightRaw[] = [];
+        let meta: EnrichmentFetchMeta = { skipped: true, reason: "no_supabase_env" };
+        try {
+          const result = await fetchFlightStatusEnrichment({
+            airportCode: filters.airportCode,
+            date: filters.date,
+            airlineCode: filters.airlineCode || undefined,
+            flightNumber: filters.flightNumber || undefined,
+            boardMode: "airport_base",
+          });
+          raw = result.flights;
+          meta = result.meta;
+        } catch (enrichErr) {
+          console.warn(
+            "[FlightBoard] airport_base fetch",
+            enrichErr instanceof Error ? enrichErr.message : enrichErr
+          );
+          raw = [];
+          meta = {
+            skipped: false,
+            reason: "network",
+            serverError: enrichErr instanceof Error ? enrichErr.message : String(enrichErr),
+          };
+        }
+
+        const built = buildNormalizedListsFromEnrichmentRaw(
+          raw,
+          filters.date,
+          filters.airportCode
+        );
+        const rawById = new Map(raw.map((r) => [r.id, r]));
+        let dep = finalizeNormalizedFlights(built.departures, rawById, {
+          boardMode: "airport_base",
+          meta,
+        });
+        let arr = finalizeNormalizedFlights(built.arrivals, rawById, {
+          boardMode: "airport_base",
+          meta,
+        });
+        dep = getDepartures(dep, {
+          airlineCode: filters.airlineCode || undefined,
+          flightNumber: filters.flightNumber || undefined,
+        });
+        arr = getArrivals(arr, {
+          airlineCode: filters.airlineCode || undefined,
+          flightNumber: filters.flightNumber || undefined,
+        });
+
+        logFlightBoardAirportMode({
+          airportSelected: filters.airportCode,
+          date: filters.date,
+          companyFilter: filters.airlineCode,
+          flightFilter: filters.flightNumber,
+          payloadSent: {
+            boardMode: "airport_base",
+            airportCode: filters.airportCode,
+            scheduledDepartureDate: filters.date,
+          },
+          flightsReturned: raw.length,
+          flightsAfterFilter: dep.length + arr.length,
+          reasonZeroResults:
+            raw.length === 0
+              ? meta.airportBaseReason ?? meta.reason ?? "empty_response"
+              : dep.length + arr.length === 0
+                ? "filtered_or_normalize_empty"
+                : null,
+        });
+
+        logFlightBoardPipeline(
+          computePipelineMetrics({
+            raw,
+            finalDep: dep,
+            finalArr: arr,
+            scaleCount: 0,
+            boardMode: "airport_base",
+            meta,
+          })
+        );
+
+        setDepartures(dep);
+        setArrivals(arr);
+        setLastUpdated(new Date().toISOString());
+        setEnrichmentWarning(
+          buildAirportBaseBanner({
+            raw,
+            meta,
+            builtDep: dep.length,
+            builtArr: arr.length,
+          })
+        );
+      } catch (err) {
+        console.error("[FlightBoard] airport_base", err);
+        setDepartures([]);
+        setArrivals([]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (scheduleLoading) {
       setLoading(true);
@@ -112,16 +374,16 @@ export function FlightBoard({
     try {
       const resolved = resolveFlightBoardState({
         scheduleLoading,
-        schedule,
+        schedule: safeSchedule,
         dateIso: filters.date,
         airportCode: filters.airportCode,
       });
 
-      const entriesForDate = schedule.filter((e) => e.date === filters.date);
+      const entriesForDate = safeSchedule.filter((e) => e.date === filters.date);
       const entryActivityLabels = entriesForDate.map(
         (e) => (e.activity_type || "").trim() || e.raw_line?.slice(0, 40) || "—"
       );
-      const matchesDashboardToday = filters.date === operationalTodayIso;
+      const matchesDashboardToday = filters.date === todayFromDashboard;
       const resolveReason = getOperationalResolveReason(resolved, {
         dateIso: filters.date,
         entriesForDate,
@@ -143,8 +405,8 @@ export function FlightBoard({
           enrichmentOk: null,
           enrichmentMatch: false,
           finalUiKind: resolved.uiKind,
-          operationalTimezone,
-          operationalTodayIso,
+          operationalTimezone: tzResolved,
+          operationalTodayIso: todayFromDashboard,
           matchesDashboardToday,
           resolveReason,
           entryActivityLabels,
@@ -158,38 +420,91 @@ export function FlightBoard({
       setLastUpdated(new Date().toISOString());
       setLoading(false);
 
-      let raw: Awaited<ReturnType<typeof fetchFlightStatusEnrichment>> = [];
+      logEnrichmentPipeline("roster_extracted", {
+        plannedDep: resolved.departures.length,
+        plannedArr: resolved.arrivals.length,
+        date: filters.date,
+        airport: filters.airportCode,
+        boardMode: filters.boardMode,
+      });
+
+      let raw: FlightRaw[] = [];
+      let meta: EnrichmentFetchMeta = { skipped: true, reason: "no_supabase_env" };
       try {
-        raw = await fetchFlightStatusEnrichment({
+        const result = await fetchFlightStatusEnrichment({
           airportCode: filters.airportCode,
           date: filters.date,
           airlineCode: filters.airlineCode || undefined,
           flightNumber: filters.flightNumber || undefined,
+          boardMode: "my_schedule",
         });
+        raw = result.flights;
+        meta = result.meta;
       } catch (enrichErr) {
         console.warn(
           "[FlightBoard] enriquecimento opcional indisponível (não fatal)",
           enrichErr instanceof Error ? enrichErr.message : enrichErr
         );
         raw = [];
+        meta = {
+          skipped: false,
+          reason: "network",
+          serverError: enrichErr instanceof Error ? enrichErr.message : String(enrichErr),
+        };
       }
 
-      const dep = mergeEnrichmentIntoNormalized(resolved.departures, raw);
-      const arr = mergeEnrichmentIntoNormalized(resolved.arrivals, raw);
+      const depMerged = mergeEnrichmentIntoNormalized(
+        resolved.departures,
+        raw,
+        filters.date,
+        filters.airportCode
+      );
+      const arrMerged = mergeEnrichmentIntoNormalized(
+        resolved.arrivals,
+        raw,
+        filters.date,
+        filters.airportCode
+      );
+
+      const rawById = new Map(raw.map((r) => [r.id, r]));
+      let dep = finalizeNormalizedFlights(depMerged, rawById, {
+        boardMode: "my_schedule",
+        meta,
+      });
+      let arr = finalizeNormalizedFlights(arrMerged, rawById, {
+        boardMode: "my_schedule",
+        meta,
+      });
+
+      logEnrichmentPipeline("merge_roster", {
+        dep: dep.length,
+        arr: arr.length,
+        boardMode: filters.boardMode,
+      });
 
       const hasPlanned = dep.length + arr.length > 0;
       const anyLive = [...dep, ...arr].some((f) => f.liveTrackingAvailable);
-      if (hasPlanned && raw.length === 0) {
-        setEnrichmentWarning(
-          "Informações ao vivo indisponíveis no momento; exibindo dados planejados da escala."
-        );
-      } else if (hasPlanned && !anyLive && raw.length > 0) {
-        setEnrichmentWarning(
-          "Sem correspondência ao vivo para estes trechos no momento; exibindo dados planejados."
-        );
-      } else {
-        setEnrichmentWarning(null);
-      }
+
+      setEnrichmentWarning(
+        buildEnrichmentBanner({
+          hasPlanned,
+          raw,
+          meta,
+          dep,
+          arr,
+        })
+      );
+
+      logFlightBoardPipeline(
+        computePipelineMetrics({
+          raw,
+          finalDep: dep,
+          finalArr: arr,
+          scaleCount: resolved.departures.length + resolved.arrivals.length,
+          boardMode: "my_schedule",
+          meta,
+        })
+      );
 
       setDepartures(dep);
       setArrivals(arr);
@@ -206,8 +521,8 @@ export function FlightBoard({
         enrichmentOk: raw.length > 0,
         enrichmentMatch: anyLive,
         finalUiKind: resolved.uiKind,
-        operationalTimezone,
-        operationalTodayIso,
+        operationalTimezone: tzResolved,
+        operationalTodayIso: todayFromDashboard,
         matchesDashboardToday,
         resolveReason,
         entryActivityLabels,
@@ -226,14 +541,15 @@ export function FlightBoard({
       setLoading(false);
     }
   }, [
-    schedule,
+    safeSchedule,
     scheduleLoading,
     filters.airportCode,
     filters.date,
     filters.airlineCode,
     filters.flightNumber,
-    operationalTimezone,
-    operationalTodayIso,
+    filters.boardMode,
+    tzResolved,
+    todayFromDashboard,
   ]);
 
   useEffect(() => {
@@ -321,10 +637,6 @@ export function FlightBoard({
       : undefined;
 
   const renderBody = () => {
-    if (scheduleLoading && !schedule.length) {
-      return <FlightBoardSkeleton />;
-    }
-
     if (fatalError) {
       return (
         <FlightBoardError
@@ -333,6 +645,59 @@ export function FlightBoard({
           onRetry={() => void loadFlights()}
         />
       );
+    }
+
+    /** Base operacional: UI não depende da escala importada */
+    if (filters.boardMode === "airport_base") {
+      if (loading && list.length === 0) {
+        return <FlightBoardSkeleton />;
+      }
+      if (!loading && list.length === 0) {
+        return (
+          <FlightBoardNeutral
+            variant="airport_base_empty"
+            title="Nenhum voo na base para esta data (modo operacional)"
+            subtitle={
+              enrichmentWarning ??
+              "Confira credenciais OpenSky na edge, data (UTC) e filtros de companhia/número."
+            }
+            airportHint={airportContextHint}
+          />
+        );
+      }
+      return (
+        <div className="space-y-2">
+          {enrichmentWarning && (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              {enrichmentWarning}
+            </p>
+          )}
+          {list.map((flight, index) => (
+            <motion.div
+              key={flight.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: index * 0.03,
+                duration: 0.25,
+                ease: "easeOut",
+              }}
+            >
+              <FlightRow
+                flight={flight}
+                mode={mode}
+                now={now}
+                isNext={shouldHighlightNext(flight)}
+                isDelayed={shouldHighlightDelayed(flight)}
+              />
+            </motion.div>
+          ))}
+        </div>
+      );
+    }
+
+    if (scheduleLoading && !safeSchedule.length) {
+      return <FlightBoardSkeleton />;
     }
 
     const neutral = baseResolved;
@@ -456,7 +821,7 @@ export function FlightBoard({
             isLoading={loading}
             lastUpdated={lastUpdated}
             homeBase={homeBase}
-            operationalTimezone={operationalTimezone}
+            operationalTimezone={tzResolved}
           />
         </div>
       </div>

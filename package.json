@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy:flight-status": "npx supabase functions deploy flight-status --project-ref fbryqzwykdhnmskfectg",
+    "deploy:send-support-email": "npx supabase functions deploy send-support-email --project-ref fbryqzwykdhnmskfectg",
+    "deploy:functions": "npm run deploy:flight-status && npm run deploy:send-support-email",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

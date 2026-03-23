@@ -33,6 +33,7 @@ export function FlightFilters({
   isLoading,
   lastUpdated,
   homeBase,
+  operationalTimezone,
   className,
 }: FlightFiltersProps) {
   const airportOptions = homeBase
@@ -60,6 +61,21 @@ export function FlightFilters({
             </TabsTrigger>
           </TabsList>
         </Tabs>
+
+        <Select
+          value={filters.boardMode ?? "my_schedule"}
+          onValueChange={(v) =>
+            onChange({ boardMode: v as "my_schedule" | "airport_base" })
+          }
+        >
+          <SelectTrigger className="h-9 w-full sm:w-[240px]">
+            <SelectValue placeholder="Modo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="my_schedule">Minha escala (local + servidor)</SelectItem>
+            <SelectItem value="airport_base">Base operacional (payload servidor)</SelectItem>
+          </SelectContent>
+        </Select>
 
         <div className="flex items-center gap-2">
           {lastUpdated && (

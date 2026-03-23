@@ -8,6 +8,7 @@
  */
 
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
+import { resolveSafeIANATimezone } from '@/lib/date-utils';
 
 export interface DutyPeriod {
   id: string;
@@ -322,8 +323,9 @@ export function getTodayDutyPeriods(
 }
 
 function getTimeInTimeZone(date: Date, timeZone: string): string {
+  const tz = resolveSafeIANATimezone(timeZone);
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone,
+    timeZone: tz,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,

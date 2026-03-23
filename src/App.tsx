@@ -6,6 +6,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { getThemeByLocalTime } from "./lib/themeByTime";
 
 // Eager-load auth pages (first paint)
@@ -91,7 +92,9 @@ const AppRoutes = () => (
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <RouteErrorBoundary scope="Dashboard">
+              <DashboardPage />
+            </RouteErrorBoundary>
           </ProtectedRoute>
         }
       />

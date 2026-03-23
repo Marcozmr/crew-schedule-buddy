@@ -3,6 +3,16 @@
  * Preparados para pipeline de escala + enriquecimento local + OpenSky
  */
 
+import type { FlightOperationalStatus } from "./operationalStatus";
+
+export type EnrichmentFallbackReason =
+  | "NO_LIVE_DATA"
+  | "NO_MATCH"
+  | "NO_ENRICHMENT"
+  | "SCALE_ONLY"
+  | "AIRPORT_ONLY"
+  | "NONE";
+
 export type FlightStatusKey =
   | "on_time"
   | "boarding"
@@ -11,6 +21,12 @@ export type FlightStatusKey =
   | "cancelled"
   | "completed"
   | "unknown";
+
+/** Origem agregada do registro (edge / escala). */
+export type FlightRecordSource =
+  | "schedule_edge"
+  | "opensky_airport_base"
+  | "mock";
 
 export interface FlightRaw {
   id: string;
@@ -58,14 +74,27 @@ export interface FlightRaw {
       city?: string | null;
       country?: string | null;
       timezone?: string | null;
+      iata?: string | null;
+      icao?: string | null;
     } | null;
     arrival?: {
       name?: string | null;
       city?: string | null;
       country?: string | null;
       timezone?: string | null;
+      iata?: string | null;
+      icao?: string | null;
     } | null;
   } | null;
+  /** Metadado opcional da edge */
+  recordSource?: FlightRecordSource;
+}
+
+export interface FlightDataSourceFlags {
+  scale: boolean;
+  openSky: boolean;
+  airport: boolean;
+  baseAirport: boolean;
 }
 
 export interface FlightNormalized {
@@ -92,6 +121,16 @@ export interface FlightNormalized {
   aggregateSource?: "roster" | "roster_enriched";
   /** Indica se há tracking/posição ao vivo disponível para o trecho */
   liveTrackingAvailable?: boolean;
+  /** Status operacional agregado (tracking + horário + atraso) */
+  operationalStatus?: FlightOperationalStatus;
+  /** Chips de origem (escala, OpenSky, aeroporto, base) */
+  dataSources?: FlightDataSourceFlags;
+  /** Match OpenSky explícito para UI */
+  openSkyMatch?: "matched" | "no_match" | "unavailable" | "not_attempted";
+  /** Motivo de fallback quando não há enriquecimento completo */
+  enrichmentFallback?: EnrichmentFallbackReason;
+  /** Label legível do fallback (PT) */
+  enrichmentFallbackLabel?: string;
 }
 
 export type FlightBoardData = {
@@ -119,6 +158,11 @@ export interface FlightFilters {
   flightNumber: string;
   date: string;
   mode: "departures" | "arrivals";
+  /**
+   * Minha escala: lista alinhada à escala local + merge com edge.
+   * Base operacional: lista montada a partir do payload da edge (mesmos voos da escala no servidor, prioriza status/aeroporto do servidor).
+   */
+  boardMode: "my_schedule" | "airport_base";
 }
 
 export interface FlightBoardResult {
@@ -133,6 +177,8 @@ export interface FlightProviderOptions {
   date: string;
   airlineCode?: string;
   flightNumber?: string;
+  /** default my_schedule — airport_base ativa OpenSky flights no edge */
+  boardMode?: "my_schedule" | "airport_base";
 }
 
 export interface FlightProvider {

@@ -12,8 +12,44 @@ const TRACKING_TTL_MS_HIGH = 30 * 1000;
 const TRACKING_TTL_MS_MEDIUM = 60 * 1000;
 
 const rosterCache = new Map<string, { expiresAt: number; data: any }>();
+const airportBaseCache = new Map<string, { expiresAt: number; data: any }>();
 let openSkyStatesCache: { expiresAt: number; states: any[] } | null = null;
 const trackingCache = new Map<string, { expiresAt: number; tracking: any | null }>();
+
+const AIRPORT_BASE_CACHE_TTL_MS = 60 * 1000;
+const OPENSKY_STATES_CACHE_TTL_MS = 60 * 1000;
+
+/** IATA → ICAO (OpenSky) — bases BR cobertas pelo AIRPORT_DB */
+const IATA_TO_ICAO: Record<string, string> = {
+  GRU: "SBGR",
+  CGH: "SBSP",
+  VCP: "SBKP",
+  GIG: "SBGL",
+  SDU: "SBRJ",
+  BSB: "SBBR",
+  CNF: "SBCF",
+  POA: "SBPA",
+  SSA: "SBSV",
+  REC: "SBRF",
+  FOR: "SBFZ",
+};
+
+function iataToIcao(iata: string): string | null {
+  return IATA_TO_ICAO[iata.toUpperCase()] ?? null;
+}
+
+function icaoToIata(icao: string): string {
+  const u = (icao ?? "").toUpperCase();
+  for (const [iata, icaoVal] of Object.entries(IATA_TO_ICAO)) {
+    if (icaoVal === u) return iata;
+  }
+  return u.length >= 3 ? u.slice(1) : u || "UNK";
+}
+
+function utcHHMMFromUnix(sec: number): string {
+  const d = new Date(sec * 1000);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
 
 const AIRPORT_DB: Record<string, { name: string; city: string; country: string; timezone: string }> = {
   GRU: { name: "Aeroporto Internacional de Guarulhos", city: "Sao Paulo", country: "Brazil", timezone: "America/Sao_Paulo" },
@@ -66,11 +102,17 @@ function parseOpenSkyRow(row: unknown[]): any | null {
 
 function getAirportInfo(iata?: string | null) {
   if (!iata) return null;
-  return AIRPORT_DB[iata.toUpperCase()] ?? {
-    name: iata.toUpperCase(),
-    city: iata.toUpperCase(),
+  const code = iata.toUpperCase();
+  const row = AIRPORT_DB[code];
+  if (row) {
+    return { ...row, iata: code };
+  }
+  return {
+    name: code,
+    city: code,
     country: "Unknown",
     timezone: "UTC",
+    iata: code,
   };
 }
 
@@ -101,8 +143,13 @@ function readBackendConfig() {
   if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) {
     throw new Error("Supabase service role não configurado");
   }
-  if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) {
-    console.warn("[flight-status] OpenSky credentials ausentes; tracking continuará opcional.");
+  const hasOpenSky = !!(cfg.openSkyClientId && cfg.openSkyClientSecret);
+  console.log("[flight-status] config", {
+    hasOpenSky,
+    openSkyUrl: cfg.openSkyBaseUrl?.slice(0, 40) ?? "(ausente)",
+  });
+  if (!hasOpenSky) {
+    console.warn("[flight-status] OPENSKY_CLIENT_ID ou OPENSKY_CLIENT_SECRET ausentes; tracking/airport_base opcional.");
   }
   return cfg;
 }
@@ -122,7 +169,7 @@ async function fetchOpenSkyStates(cfg: ReturnType<typeof readBackendConfig>): Pr
     const states = Array.isArray(data?.states)
       ? data.states.map((row: unknown[]) => parseOpenSkyRow(row)).filter(Boolean)
       : [];
-    openSkyStatesCache = { expiresAt: now + TRACKING_TTL_MS_MEDIUM, states };
+    openSkyStatesCache = { expiresAt: now + OPENSKY_STATES_CACHE_TTL_MS, states };
     return states;
   } catch {
     return [];
@@ -144,6 +191,112 @@ function buildTrackingCacheKey(flight: any): string {
   const dep = flight.departure?.scheduledISO ? String(flight.departure.scheduledISO).slice(0, 16) : "no-dep";
   const id = normalizeCallsign(flight.callsign || flight.flightNumber) || String(flight.flightNumber ?? "unknown");
   return `${id}|${dep}`;
+}
+
+async function fetchOpenSkyAirportDayFlights(
+  cfg: ReturnType<typeof readBackendConfig>,
+  icao: string,
+  begin: number,
+  end: number
+): Promise<{ depRows: any[]; arrRows: any[]; httpDep: number; httpArr: number }> {
+  if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) {
+    return { depRows: [], arrRows: [], httpDep: 0, httpArr: 0 };
+  }
+  const basic = btoa(`${cfg.openSkyClientId}:${cfg.openSkyClientSecret}`);
+  const depUrl = `${cfg.openSkyBaseUrl}/flights/departure?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`;
+  const arrUrl = `${cfg.openSkyBaseUrl}/flights/arrival?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`;
+  const [depRes, arrRes] = await Promise.all([
+    fetch(depUrl, { headers: { Authorization: `Basic ${basic}` } }),
+    fetch(arrUrl, { headers: { Authorization: `Basic ${basic}` } }),
+  ]);
+  let depRows: any[] = [];
+  let arrRows: any[] = [];
+  try {
+    const depJ = depRes.ok ? await depRes.json() : [];
+    depRows = Array.isArray(depJ) ? depJ : [];
+  } catch {
+    depRows = [];
+  }
+  try {
+    const arrJ = arrRes.ok ? await arrRes.json() : [];
+    arrRows = Array.isArray(arrJ) ? arrJ : [];
+  } catch {
+    arrRows = [];
+  }
+  return { depRows, arrRows, httpDep: depRes.status, httpArr: arrRes.status };
+}
+
+function openSkyRowToFlightRaw(row: Record<string, unknown>, role: "departure" | "arrival"): any | null {
+  const icao24 = String(row.icao24 ?? "");
+  const firstSeen = Number(row.firstSeen);
+  const lastSeen = Number(row.lastSeen);
+  const callsign = row.callsign != null ? String(row.callsign).trim() : null;
+  const depIcao = row.estDepartureAirport != null ? String(row.estDepartureAirport).toUpperCase() : "";
+  const arrIcao = row.estArrivalAirport != null ? String(row.estArrivalAirport).toUpperCase() : "";
+  if (!icao24 || !Number.isFinite(firstSeen) || !Number.isFinite(lastSeen)) return null;
+
+  const origin = icaoToIata(depIcao);
+  const destination = icaoToIata(arrIcao);
+  const depIso = new Date(firstSeen * 1000).toISOString();
+  const arrIso = new Date(lastSeen * 1000).toISOString();
+  const fn = callsign ? callsign.replace(/\s+/g, "").toUpperCase() : `OSK${icao24.slice(-4)}`;
+  const carrier = fn.length >= 2 ? fn.slice(0, 2) : "OS";
+  const id = `osm-${icao24}-${firstSeen}-${role}`;
+
+  const depInfo = getAirportInfo(origin);
+  const arrInfo = getAirportInfo(destination);
+
+  return {
+    id,
+    flightNumber: fn,
+    carrierCode: carrier,
+    origin,
+    destination,
+    departure: {
+      scheduled: utcHHMMFromUnix(firstSeen),
+      actual: null,
+      terminal: null,
+      gate: null,
+      scheduledISO: depIso,
+      actualISO: null,
+    },
+    arrival: {
+      scheduled: utcHHMMFromUnix(lastSeen),
+      actual: null,
+      terminal: null,
+      gate: null,
+      scheduledISO: arrIso,
+      actualISO: null,
+    },
+    aircraftCode: null,
+    callsign: callsign ?? fn,
+    icao24,
+    delayMinutes: null,
+    presentationTimeISO: null,
+    airportInfo: {
+      departure: depInfo
+        ? {
+            name: depInfo.name,
+            city: depInfo.city,
+            country: depInfo.country,
+            timezone: depInfo.timezone,
+            iata: depInfo.iata ?? origin,
+          }
+        : null,
+      arrival: arrInfo
+        ? {
+            name: arrInfo.name,
+            city: arrInfo.city,
+            country: arrInfo.country,
+            timezone: arrInfo.timezone,
+            iata: arrInfo.iata ?? destination,
+          }
+        : null,
+    },
+    tracking: null,
+    status: "UPCOMING",
+    recordSource: "opensky_airport_base",
+  };
 }
 
 function computeTrackingPriority(
@@ -226,9 +379,234 @@ serve(async (req) => {
     const carrierCode = (url.searchParams.get("carrierCode") || "").toUpperCase();
     const flightNumber = (url.searchParams.get("flightNumber") || "").trim();
     const scheduledDepartureDate = url.searchParams.get("scheduledDepartureDate") || getTodayDate();
+    const boardMode = (url.searchParams.get("boardMode") || "my_schedule").toLowerCase();
 
-    const cacheKey = `${userId}|${airportCode}|${carrierCode}|${flightNumber}|${scheduledDepartureDate}`;
+    console.log("[flight-status] request received", {
+      boardMode,
+      airportCode: airportCode || "(vazio)",
+      date: scheduledDepartureDate,
+      carrierCode: carrierCode || "(vazio)",
+      flightNumber: flightNumber || "(vazio)",
+      userIdLen: userId?.length ?? 0,
+      payload: { boardMode, airportCode, scheduledDepartureDate, carrierCode, flightNumber },
+    });
+
     const now = Date.now();
+
+    /** Base operacional: não usa schedule_entries — OpenSky flights by airport (ICAO) */
+    if (boardMode === "airport_base") {
+      const abKey = `ab|${userId}|${airportCode}|${carrierCode}|${flightNumber}|${scheduledDepartureDate}`;
+      const abCached = airportBaseCache.get(abKey);
+      if (abCached && now < abCached.expiresAt) {
+        return new Response(JSON.stringify(abCached.data), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const icao = airportCode ? iataToIcao(airportCode) : null;
+      if (!icao) {
+        const payload = {
+          ok: true,
+          source: "opensky_airport_base",
+          mode: "airport_base",
+          boardMode: "airport_base",
+          count: 0,
+          flights: [],
+          lastUpdatedAt: new Date().toISOString(),
+          airportBaseReason: "unknown_airport_iata",
+        };
+        airportBaseCache.set(abKey, { expiresAt: now + AIRPORT_BASE_CACHE_TTL_MS, data: payload });
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const begin = Math.floor(new Date(`${scheduledDepartureDate}T00:00:00.000Z`).getTime() / 1000);
+      const end = begin + 86400 - 1;
+      console.log("[flight-status] airport_base OpenSky window", { icao, begin, end, date: scheduledDepartureDate });
+
+      const { depRows, arrRows, httpDep, httpArr } = await fetchOpenSkyAirportDayFlights(cfg, icao, begin, end);
+
+      if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) {
+        const payload = {
+          ok: true,
+          source: "opensky_airport_base",
+          mode: "airport_base",
+          boardMode: "airport_base",
+          count: 0,
+          flights: [],
+          lastUpdatedAt: new Date().toISOString(),
+          airportBaseReason: "opensky_credentials_required",
+        };
+        airportBaseCache.set(abKey, { expiresAt: now + AIRPORT_BASE_CACHE_TTL_MS, data: payload });
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const seen = new Set<string>();
+      let flights: any[] = [];
+      for (const row of depRows) {
+        if (typeof row !== "object" || !row) continue;
+        const fr = openSkyRowToFlightRaw(row as Record<string, unknown>, "departure");
+        if (fr && !seen.has(fr.id)) {
+          seen.add(fr.id);
+          flights.push(fr);
+        }
+      }
+      for (const row of arrRows) {
+        if (typeof row !== "object" || !row) continue;
+        const fr = openSkyRowToFlightRaw(row as Record<string, unknown>, "arrival");
+        if (fr && !seen.has(fr.id)) {
+          seen.add(fr.id);
+          flights.push(fr);
+        }
+      }
+
+      const upperAp = airportCode.toUpperCase();
+      flights = flights.filter((f: any) => f.origin === upperAp || f.destination === upperAp);
+
+      if (carrierCode) {
+        flights = flights.filter((f: any) => String(f.carrierCode || "").toUpperCase().startsWith(carrierCode));
+      }
+      if (flightNumber) {
+        const q = flightNumber.toUpperCase();
+        flights = flights.filter((f: any) => String(f.flightNumber || "").toUpperCase().includes(q));
+      }
+
+      console.log("[flight-status] airport_base flights built", {
+        rawDep: depRows.length,
+        rawArr: arrRows.length,
+        afterFilter: flights.length,
+        httpDep,
+        httpArr,
+      });
+
+      const sortedUpcoming = [...flights]
+        .filter((f: any) => f.departure?.scheduledISO)
+        .sort((a: any, b: any) => new Date(a.departure.scheduledISO).getTime() - new Date(b.departure.scheduledISO).getTime());
+      const nextFlightId = sortedUpcoming.find((f: any) => new Date(f.departure.scheduledISO).getTime() > now)?.id ?? null;
+
+      const trackingPlan = flights.map((f: any) => ({
+        id: f.id,
+        cacheKey: buildTrackingCacheKey(f),
+        ...computeTrackingPriority(f, now, nextFlightId === f.id),
+      }));
+
+      const relevantPlan = trackingPlan.filter((p: any) => p.shouldTrack);
+      const misses: any[] = [];
+
+      for (const plan of relevantPlan) {
+        const cachedTracking = trackingCache.get(plan.cacheKey);
+        if (cachedTracking && now < cachedTracking.expiresAt) {
+          flights = flights.map((f: any) => (f.id === plan.id ? { ...f, tracking: cachedTracking.tracking } : f));
+        } else {
+          misses.push(plan);
+        }
+      }
+
+      if (misses.length > 0) {
+        const states = await fetchOpenSkyStates(cfg);
+        if (states.length > 0) {
+          for (const miss of misses) {
+            const flight = flights.find((f: any) => f.id === miss.id);
+            if (!flight) continue;
+            const match = matchTracking(flight, states);
+            const normalizedTracking = match
+              ? {
+                  latitude: match.latitude,
+                  longitude: match.longitude,
+                  altitude: match.altitude,
+                  velocity: match.velocity,
+                  heading: match.heading,
+                  onGround: match.onGround,
+                  callsign: match.callsign,
+                  icao24: match.icao24,
+                  lastContact: match.lastContact,
+                }
+              : null;
+
+            trackingCache.set(miss.cacheKey, {
+              expiresAt: now + (miss.ttlMs ?? TRACKING_TTL_MS_MEDIUM),
+              tracking: normalizedTracking,
+            });
+
+            flights = flights.map((f: any) =>
+              f.id === miss.id
+                ? {
+                    ...f,
+                    icao24: normalizedTracking?.icao24 ?? f.icao24 ?? null,
+                    callsign: normalizedTracking?.callsign ?? f.callsign,
+                    tracking: normalizedTracking,
+                  }
+                : f
+            );
+          }
+        } else {
+          for (const miss of misses) {
+            trackingCache.set(miss.cacheKey, {
+              expiresAt: now + (miss.ttlMs ?? TRACKING_TTL_MS_MEDIUM),
+              tracking: null,
+            });
+          }
+        }
+      }
+
+      flights = flights.map((f: any) => ({
+        ...f,
+        status: calculateInternalStatus(f, now, nextFlightId === f.id),
+      }));
+
+      const openSkyMatchCount = flights.filter((f: any) => f.tracking != null && f.tracking.latitude != null).length;
+
+      console.log("[flight-status] airport_base response", {
+        boardMode: "airport_base",
+        icao,
+        date: scheduledDepartureDate,
+        rawDep: depRows.length,
+        rawArr: arrRows.length,
+        flightCount: flights.length,
+        openSkyMatchCount,
+        reasonZeroResults: flights.length === 0
+          ? (depRows.length + arrRows.length === 0 ? "opensky_empty_for_window" : "filtered_out_or_no_match")
+          : null,
+      });
+
+      const payload = {
+        ok: true,
+        source: "opensky_airport_base",
+        mode: "airport_base",
+        boardMode: "airport_base",
+        count: flights.length,
+        flights,
+        lastUpdatedAt: new Date().toISOString(),
+        airportBaseMeta: {
+          httpDep,
+          httpArr,
+          openskyCredentials: true,
+          openSkyMatchCount,
+          rawDepCount: depRows.length,
+          rawArrCount: arrRows.length,
+          reasonZeroResults:
+            flights.length === 0
+              ? depRows.length + arrRows.length === 0
+                ? "opensky_empty_for_window"
+                : "filtered_out_or_no_match"
+              : null,
+        },
+      };
+
+      airportBaseCache.set(abKey, { expiresAt: now + AIRPORT_BASE_CACHE_TTL_MS, data: payload });
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const cacheKey = `${userId}|my_schedule|${airportCode}|${carrierCode}|${flightNumber}|${scheduledDepartureDate}`;
     const cached = rosterCache.get(cacheKey);
     if (cached && now < cached.expiresAt) {
       return new Response(JSON.stringify(cached.data), {
@@ -324,6 +702,7 @@ serve(async (req) => {
         },
         tracking: null,
         status: "UPCOMING",
+        recordSource: "schedule_edge",
       };
     });
 
@@ -423,6 +802,7 @@ serve(async (req) => {
       status: calculateInternalStatus(f, now, nextFlightId === f.id),
     }));
 
+    const openSkyMatchCount = flights.filter((f: any) => f.tracking != null && f.tracking.latitude != null).length;
     const payload = {
       ok: true,
       source: "roster+local+opensky",
@@ -430,7 +810,20 @@ serve(async (req) => {
       count: flights.length,
       flights,
       lastUpdatedAt: new Date().toISOString(),
+      diagnostic: {
+        openSkyMatchCount,
+        rosterFlights: (rows ?? []).length,
+        fallbackReason: flights.length === 0 ? "no_roster_or_no_entries_for_date" : (openSkyMatchCount === 0 ? "no_opensky_match" : null),
+      },
     };
+
+    console.log("[flight-status] my_schedule response", {
+      boardMode: "my_schedule",
+      flightCount: flights.length,
+      openSkyMatchCount,
+      rosterFlights: (rows ?? []).length,
+      fallbackReason: (payload.diagnostic as Record<string, unknown>)?.fallbackReason ?? null,
+    });
 
     rosterCache.set(cacheKey, { expiresAt: now + ROSTER_TTL_MS, data: payload });
 

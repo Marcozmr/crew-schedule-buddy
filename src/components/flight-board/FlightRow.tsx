@@ -4,6 +4,8 @@ import { FlightStatusBadge } from "./FlightStatusBadge";
 import { FlightCountdown } from "./FlightCountdown";
 import type { FlightNormalized } from "@/services/flightBoard/types";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { OPERATIONAL_STATUS_LABEL_PT } from "@/services/flightBoard/operationalStatus";
 
 interface FlightRowProps {
   flight: FlightNormalized;
@@ -21,6 +23,21 @@ export function FlightRow({
   isDelayed,
 }: FlightRowProps) {
   const isHighlighted = isNext || isDelayed;
+
+  const airportLine =
+    mode === "departure"
+      ? [flight.airportInfo?.departure?.name, flight.airportInfo?.departure?.city]
+          .filter(Boolean)
+          .join(" · ")
+      : [flight.airportInfo?.arrival?.name, flight.airportInfo?.arrival?.city]
+          .filter(Boolean)
+          .join(" · ");
+
+  const side = mode === "departure" ? flight.airportInfo?.departure : flight.airportInfo?.arrival;
+  const airportCityCountry = [side?.city, side?.country].filter(Boolean).join(", ");
+
+  const ds = flight.dataSources;
+  const showSourceChips = Boolean(ds || flight.openSkyMatch);
 
   return (
     <div
@@ -44,6 +61,14 @@ export function FlightRow({
             <p className="text-[11px] text-muted-foreground">
               {flight.airlineName} {flight.flightNumber}
             </p>
+            {airportLine ? (
+              <p className="line-clamp-2 text-[10px] text-muted-foreground/90">{airportLine}</p>
+            ) : null}
+            {airportCityCountry ? (
+              <p className="text-[10px] text-muted-foreground/80">
+                Airport: {airportCityCountry}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -81,9 +106,9 @@ export function FlightRow({
       </div>
 
       {/* Detalhes secundários - escondidos em mobile compacto */}
-      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+      <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
         {(flight.gate || flight.terminal || flight.aircraft) && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {flight.gate && (
               <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
                 Portão {flight.gate}
@@ -102,14 +127,57 @@ export function FlightRow({
           </div>
         )}
 
-        {flight.liveTrackingAvailable && (
-          <span
-            className="rounded-md border border-primary/25 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary"
-            title="Dados complementares ao vivo disponíveis para este trecho"
-          >
-            Ao vivo
-          </span>
-        )}
+        <div className="flex flex-wrap justify-end gap-1">
+          {flight.operationalStatus && (
+            <Badge variant="outline" className="text-[9px] font-normal">
+              {OPERATIONAL_STATUS_LABEL_PT[flight.operationalStatus] ?? flight.operationalStatus}
+            </Badge>
+          )}
+          {flight.liveTrackingAvailable && (
+            <span className="rounded-md border border-primary/25 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary">
+              Ao vivo
+            </span>
+          )}
+          {ds?.openSky && (
+            <Badge variant="secondary" className="text-[9px] font-normal">
+              OpenSky
+            </Badge>
+          )}
+          {showSourceChips && (
+            <>
+              {ds?.scale && (
+                <Badge variant="outline" className="text-[9px] font-normal">
+                  Escala
+                </Badge>
+              )}
+              {ds?.airport && (
+                <Badge variant="outline" className="text-[9px] font-normal">
+                  Aeroporto
+                </Badge>
+              )}
+              {ds?.baseAirport && (
+                <Badge variant="outline" className="text-[9px] font-normal">
+                  Base
+                </Badge>
+              )}
+              {flight.openSkyMatch === "no_match" && (
+                <Badge variant="outline" className="text-[9px] font-normal text-muted-foreground">
+                  OpenSky sem match
+                </Badge>
+              )}
+              {flight.openSkyMatch === "unavailable" && (
+                <Badge variant="outline" className="text-[9px] font-normal text-muted-foreground">
+                  Live indisponível
+                </Badge>
+              )}
+              {flight.enrichmentFallback && flight.enrichmentFallback !== "NONE" && (
+                <Badge variant="outline" className="max-w-[140px] truncate text-[9px] font-normal text-amber-700 dark:text-amber-400">
+                  {flight.enrichmentFallbackLabel ?? flight.enrichmentFallback}
+                </Badge>
+              )}
+            </>
+          )}
+        </div>
 
         <FlightStatusBadge
           statusKey={flight.statusKey}

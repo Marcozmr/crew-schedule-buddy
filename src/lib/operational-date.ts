@@ -11,11 +11,11 @@
  * nesse caso o board lista o voo nesse dia (coerente com o calendário).
  */
 
-import { getISODateInTimeZone } from "@/lib/date-utils";
+import { getISODateInTimeZone, resolveSafeIANATimezone } from "@/lib/date-utils";
 
 export const DEFAULT_OPERATIONAL_TIMEZONE = "America/Sao_Paulo";
 
 /** "Hoje" no fuso operacional (YYYY-MM-DD). Equivalente ao `todayStr` do `useOperationalClock`. */
 export function getOperationalTodayIso(timezone: string): string {
-  return getISODateInTimeZone(new Date(), timezone);
+  return getISODateInTimeZone(new Date(), resolveSafeIANATimezone(timezone));
 }

@@ -5,7 +5,12 @@ interface FlightBoardNeutralProps {
   subtitle?: string;
   /** Quando o dia não tem voo mas há contexto de base/aeroporto */
   airportHint?: string;
-  variant?: "no_flight_day" | "no_entries" | "no_airport_ops" | "no_schedule";
+  variant?:
+    | "no_flight_day"
+    | "no_entries"
+    | "no_airport_ops"
+    | "no_schedule"
+    | "airport_base_empty";
 }
 
 export function FlightBoardNeutral({

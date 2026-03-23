@@ -337,12 +337,20 @@ export function resolveFlightBoardState(args: {
   };
 }
 
-/** Mescla tracking/status da API (mesmo id da schedule_entries) */
+/**
+ * Mescla enriquecimento da edge (aeroporto + status + tracking/OpenSky) sobre a lista da escala.
+ * Reaplica `normalizeFlightData` com o `FlightRaw` do servidor para que status, atraso, gate/terminal
+ * (quando existirem no payload) e airportInfo passem para a UI.
+ */
 export function mergeEnrichmentIntoNormalized(
   base: FlightNormalized[],
-  enrichment: FlightRaw[]
+  enrichment: FlightRaw[],
+  dateIso: string,
+  airportCode: string
 ): FlightNormalized[] {
   const byId = new Map(enrichment.map((r) => [r.id, r]));
+  const upper = airportCode.toUpperCase();
+
   return base.map((f) => {
     const ex = byId.get(f.id);
     if (!ex) {
@@ -352,16 +360,88 @@ export function mergeEnrichmentIntoNormalized(
         aggregateSource: "roster",
       };
     }
-    const tracking = ex.tracking ?? null;
-    const hasLive = tracking != null && tracking.latitude != null && tracking.longitude != null;
+
+    const mode: "departure" | "arrival" = f.origin === upper ? "departure" : "arrival";
+    const n = normalizeFlightData(ex, dateIso, mode, upper);
+    if (!n) {
+      const hasLive =
+        ex.tracking != null &&
+        ex.tracking.latitude != null &&
+        ex.tracking.longitude != null;
+      return {
+        ...f,
+        airportInfo: ex.airportInfo ?? f.airportInfo,
+        tracking: ex.tracking ?? f.tracking,
+        liveTrackingAvailable: hasLive,
+        aggregateSource: "roster",
+      };
+    }
+
+    const hasLive =
+      ex.tracking != null &&
+      ex.tracking.latitude != null &&
+      ex.tracking.longitude != null;
+
     return {
-      ...f,
-      tracking: tracking ?? f.tracking,
-      airportInfo: ex.airportInfo ?? f.airportInfo,
+      ...n,
+      tracking: ex.tracking ?? n.tracking,
+      airportInfo: ex.airportInfo ?? n.airportInfo,
       liveTrackingAvailable: hasLive,
       aggregateSource: hasLive ? "roster_enriched" : "roster",
     };
   });
+}
+
+/**
+ * Modo "Base operacional": lista derivada diretamente do payload da edge (mesmos IDs da escala no servidor).
+ */
+export function buildNormalizedListsFromEnrichmentRaw(
+  raw: FlightRaw[],
+  dateIso: string,
+  airportCode: string
+): { departures: FlightNormalized[]; arrivals: FlightNormalized[] } {
+  const upper = airportCode.toUpperCase();
+  const departures: FlightNormalized[] = [];
+  const arrivals: FlightNormalized[] = [];
+
+  for (const r of raw) {
+    if (r.origin?.toUpperCase() === upper) {
+      const n = normalizeFlightData(r, dateIso, "departure", upper);
+      if (n) {
+        const hasLive =
+          r.tracking != null &&
+          r.tracking.latitude != null &&
+          r.tracking.longitude != null;
+        departures.push({
+          ...n,
+          tracking: r.tracking ?? n.tracking,
+          airportInfo: r.airportInfo ?? n.airportInfo,
+          liveTrackingAvailable: hasLive,
+          aggregateSource: hasLive ? "roster_enriched" : "roster",
+        });
+      }
+    }
+    if (r.destination?.toUpperCase() === upper) {
+      const n = normalizeFlightData(r, dateIso, "arrival", upper);
+      if (n) {
+        const hasLive =
+          r.tracking != null &&
+          r.tracking.latitude != null &&
+          r.tracking.longitude != null;
+        arrivals.push({
+          ...n,
+          tracking: r.tracking ?? n.tracking,
+          airportInfo: r.airportInfo ?? n.airportInfo,
+          liveTrackingAvailable: hasLive,
+          aggregateSource: hasLive ? "roster_enriched" : "roster",
+        });
+      }
+    }
+  }
+
+  departures.sort((a, b) => a.scheduledTimestamp - b.scheduledTimestamp);
+  arrivals.sort((a, b) => a.scheduledTimestamp - b.scheduledTimestamp);
+  return { departures, arrivals };
 }
 
 /** Alias solicitado na arquitetura (enriquecimento OpenSky / edge) */
