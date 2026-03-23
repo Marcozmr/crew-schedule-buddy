@@ -21,6 +21,8 @@ interface FlightFiltersProps {
   isLoading: boolean;
   lastUpdated?: string;
   homeBase?: string | null;
+  /** Fuso operacional (mesmo do calendário / dashboard) */
+  operationalTimezone?: string;
   className?: string;
 }
 
@@ -124,13 +126,19 @@ export function FlightFilters({
           />
         </div>
 
-        <div>
+        <div className="space-y-1">
           <Input
             type="date"
             value={filters.date}
             onChange={(e) => onChange({ date: e.target.value })}
             className="h-9"
           />
+          {operationalTimezone && (
+            <p className="text-[10px] leading-tight text-muted-foreground">
+              Dia operacional (YYYY-MM-DD), alinhado ao calendário · fuso{" "}
+              <span className="font-mono">{operationalTimezone}</span>
+            </p>
+          )}
         </div>
       </div>
     </div>

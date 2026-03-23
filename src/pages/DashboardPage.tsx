@@ -244,7 +244,12 @@ export default function DashboardPage() {
         </motion.div>
 
         <motion.div {...fade(0.03)} className="mb-6">
-          <FlightBoard />
+          <FlightBoard
+            schedule={schedule}
+            scheduleLoading={loading}
+            operationalTodayIso={todayStr}
+            operationalTimezone={timezone}
+          />
         </motion.div>
 
         {loading && (

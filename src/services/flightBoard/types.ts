@@ -88,6 +88,10 @@ export interface FlightNormalized {
   /** Timestamp em ms para ordenação e cálculo de tempo restante */
   scheduledTimestamp: number;
   estimatedTimestamp: number | null;
+  /** Origem do agregador: escala importada vs enriquecida com dados ao vivo */
+  aggregateSource?: "roster" | "roster_enriched";
+  /** Indica se há tracking/posição ao vivo disponível para o trecho */
+  liveTrackingAvailable?: boolean;
 }
 
 export type FlightBoardData = {

@@ -3,14 +3,24 @@
  * Fluxo principal: Supabase Edge Function flight-status (Roster + OpenSky)
  */
 
+import { supabase } from "@/integrations/supabase/client";
 import type { FlightProvider, FlightProviderOptions } from "./types";
 import type { FlightRaw } from "./types";
 
 export type ProviderType = "supabase" | "mock";
 
+/** Chave pública anônima (compatível com VITE_SUPABASE_PUBLISHABLE_KEY do client) */
+function getSupabaseAnonKey(): string {
+  return (
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    ""
+  );
+}
+
 function hasSupabaseConfig(): boolean {
   const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const key = getSupabaseAnonKey();
   return !!(url?.trim() && key?.trim());
 }
 
@@ -296,12 +306,24 @@ export async function getMockFlights(options: FlightProviderOptions): Promise<Fl
   return [...mockDepartures, ...mockArrivals];
 }
 
+/**
+ * Enriquecimento opcional (escala + OpenSky no backend). Não deve lançar exceção:
+ * falha de rede/sessão = lista vazia (painel continua com dados da escala no cliente).
+ */
 async function getSupabaseFlights(options: FlightProviderOptions): Promise<FlightRaw[]> {
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const anonKey = getSupabaseAnonKey();
 
   if (!baseUrl || !anonKey) {
-    throw new Error("Variáveis do Supabase não configuradas");
+    console.warn("[flight-status] Supabase não configurado; enriquecimento indisponível");
+    return [];
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) {
+    console.warn("[flight-status] Sem sessão do usuário; enriquecimento ao vivo indisponível");
+    return [];
   }
 
   const params = new URLSearchParams();
@@ -310,20 +332,40 @@ async function getSupabaseFlights(options: FlightProviderOptions): Promise<Fligh
   if (options.airlineCode?.trim()) params.set("carrierCode", options.airlineCode.trim().toUpperCase());
   if (options.flightNumber?.trim()) params.set("flightNumber", options.flightNumber.trim());
 
-  const response = await fetch(`${baseUrl}/functions/v1/flight-status?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      "Content-Type": "application/json",
-    },
-  });
+  try {
+    const response = await fetch(`${baseUrl}/functions/v1/flight-status?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-  const data = await response.json();
+    let data: { flights?: FlightRaw[]; error?: string } = {};
+    try {
+      data = await response.json();
+    } catch {
+      console.warn("[flight-status] Resposta JSON inválida");
+      return [];
+    }
 
-  if (!response.ok) {
-    throw new Error(data.error || "Erro na consulta");
+    if (!response.ok) {
+      console.warn("[flight-status] HTTP", response.status, data?.error ?? "");
+      return [];
+    }
+
+    return data.flights ?? [];
+  } catch (e) {
+    console.warn("[flight-status] Falha de rede ou timeout", e instanceof Error ? e.message : e);
+    return [];
   }
+}
 
-  return data.flights ?? [];
+/** Exportado para o Flight Board agregar enriquecimento sem tratar falha como erro fatal */
+export async function fetchFlightStatusEnrichment(
+  options: FlightProviderOptions
+): Promise<FlightRaw[]> {
+  if (!hasSupabaseConfig()) return [];
+  return getSupabaseFlights(options);
 }

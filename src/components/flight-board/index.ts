@@ -1,4 +1,5 @@
 export { FlightBoard } from "./FlightBoard";
+export { FlightBoardNeutral } from "./FlightBoardNeutral";
 export { FlightStatusBadge } from "./FlightStatusBadge";
 export { FlightCountdown } from "./FlightCountdown";
 export { FlightFilters } from "./FlightFilters";

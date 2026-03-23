@@ -102,6 +102,15 @@ export function FlightRow({
           </div>
         )}
 
+        {flight.liveTrackingAvailable && (
+          <span
+            className="rounded-md border border-primary/25 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary"
+            title="Dados complementares ao vivo disponíveis para este trecho"
+          >
+            Ao vivo
+          </span>
+        )}
+
         <FlightStatusBadge
           statusKey={flight.statusKey}
           label={flight.statusLabel}
