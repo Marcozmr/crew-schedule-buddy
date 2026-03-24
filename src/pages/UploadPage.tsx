@@ -33,25 +33,12 @@ export default function UploadPage() {
 
     const airline = detectAirline(text);
 
-    // Regra de precedência: portal > manual.
-    // Portal: import_origin = 'portal' OU portal_connection_id preenchido (compatível com DB sem coluna roster_source).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: portalActiveRows } = await (supabase.from('imported_rosters') as any)
-      .select('id')
+    // Desativa escalas ativas anteriores
+    await supabase
+      .from('imported_rosters')
+      .update({ is_active: false })
       .eq('user_id', user.id)
-      .eq('is_active', true)
-      .or('import_origin.eq.portal,portal_connection_id.not.is.null');
-
-    const shouldActivateManual = !portalActiveRows?.length;
-
-    if (shouldActivateManual) {
-      // Desativa escala ativa anterior (sem depender de colunas opcionais como roster_status)
-      await supabase
-        .from('imported_rosters')
-        .update({ is_active: false })
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-    }
+      .eq('is_active', true);
 
     const createdAtMs = Date.now();
     const sourceFilename = fileName || 'manual-text-input.txt';
@@ -69,7 +56,7 @@ export default function UploadPage() {
         import_origin: 'manual',
         import_status: 'processing',
         parsed_count: entries.length,
-        is_active: shouldActivateManual,
+        is_active: true,
       })
       .select('id')
       .single();
@@ -84,7 +71,7 @@ export default function UploadPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: metaErr } = await (supabase.from('imported_rosters') as any).update({
       roster_source: 'manual',
-      roster_status: shouldActivateManual ? 'active' : 'archived',
+      roster_status: 'active',
     }).eq('id', rosterRow.id);
     if (metaErr) {
       console.warn('[UploadPage] optional roster_source/roster_status skipped (apply migration)', metaErr.message);
@@ -146,7 +133,7 @@ export default function UploadPage() {
     toast.success(`✅ ${entries.length} voos importados! Redirecionando...`);
     setProcessing(false);
 
-    setTimeout(() => navigate('/dashboard'), 1500);
+    setTimeout(() => navigate('/download-roster'), 1500);
   }, [user, refreshProfile, navigate, fileName]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

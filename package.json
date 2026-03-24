@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/ensure-local-env.mjs && vite",
     "build": "vite build",
     "deploy:flight-status": "npx supabase functions deploy flight-status --project-ref fbryqzwykdhnmskfectg",
     "deploy:send-support-email": "npx supabase functions deploy send-support-email --project-ref fbryqzwykdhnmskfectg",

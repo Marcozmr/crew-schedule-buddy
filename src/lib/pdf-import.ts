@@ -1,11 +1,20 @@
 import { supabase } from '@/integrations/supabase/client';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
+import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
+import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 const PARSER_VERSION = '4.0-latam-iflight';
+
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 // ── Types ──────────────────────────────────────────────
 
@@ -58,6 +67,8 @@ export interface ImportDebugInfo {
 
 export interface PdfImportResult {
   success: boolean;
+  /** Mesmo binário já importado — nenhuma linha nova inserida. */
+  duplicate?: boolean;
   header: RosterHeader | null;
   parsedCount: number;
   insertedCount: number;
@@ -473,6 +484,62 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     const effectiveUserId = authUser?.id || userId;
 
     const arrayBuffer = await file.arrayBuffer();
+    const fileSizeBytes = arrayBuffer.byteLength;
+    const contentSha256 = await sha256Hex(arrayBuffer);
+
+    const { data: dupByHash } = await supabase
+      .from('imported_rosters')
+      .select('id')
+      .eq('user_id', effectiveUserId)
+      .eq('content_sha256', contentSha256)
+      .maybeSingle();
+    if ((dupByHash as { id: string } | null)?.id) {
+      const dupId = (dupByHash as { id: string }).id;
+      return {
+        success: true,
+        duplicate: true,
+        header: null,
+        parsedCount: 0,
+        insertedCount: 0,
+        rosterId: dupId,
+        fileName,
+        extractedTextPreview: '',
+        parsedEntriesPreview: [],
+        savedRowsPreview: [],
+        debug: { ...emptyDebug, rosterId: dupId },
+        textByDay: {},
+        parseStats: emptyStats,
+        error: null,
+      };
+    }
+
+    const { data: dupByMeta } = await supabase
+      .from('imported_rosters')
+      .select('id')
+      .eq('user_id', effectiveUserId)
+      .eq('file_name', fileName)
+      .eq('file_size_bytes', fileSizeBytes)
+      .maybeSingle();
+    if ((dupByMeta as { id: string } | null)?.id) {
+      const dupId = (dupByMeta as { id: string }).id;
+      return {
+        success: true,
+        duplicate: true,
+        header: null,
+        parsedCount: 0,
+        insertedCount: 0,
+        rosterId: dupId,
+        fileName,
+        extractedTextPreview: '',
+        parsedEntriesPreview: [],
+        savedRowsPreview: [],
+        debug: { ...emptyDebug, rosterId: dupId },
+        textByDay: {},
+        parseStats: emptyStats,
+        error: null,
+      };
+    }
+
     const storagePath = `${effectiveUserId}/${Date.now()}-${fileName}`;
     const blob = new Blob([new Uint8Array(arrayBuffer)], { type: 'application/pdf' });
     await supabase.storage.from('crew-rosters').upload(storagePath, blob, { contentType: 'application/pdf', upsert: true });
@@ -500,32 +567,24 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       };
     }
 
-    // Regra de precedência: portal > manual.
-    // Manual só fica ativa se não houver portal ativo.
+    const isOfficialPdf = isOfficialCrewRosterFileName(fileName);
+
+    // Desativa escalas ativas anteriores para ativar a nova importação.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: portalActiveRows } = await (supabase.from('imported_rosters') as any)
-      .select('id')
+    const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
+      .update({ is_active: false })
       .eq('user_id', effectiveUserId)
       .eq('is_active', true)
-      .or('import_origin.eq.portal,portal_connection_id.not.is.null');
-
-    const shouldActivateManual = !portalActiveRows?.length;
-    let deactivatedRosterIds: string[] = [];
-    if (shouldActivateManual) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
-        .update({ is_active: false })
-        .eq('user_id', effectiveUserId)
-        .eq('is_active', true)
-        .select('id');
-      deactivatedRosterIds = ((deactivatedRows as Array<{ id: string }> | null) ?? []).map(r => r.id);
-    }
+      .select('id');
+    const deactivatedRosterIds = ((deactivatedRows as Array<{ id: string }> | null) ?? []).map((r) => r.id);
 
     // Create new roster
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
       file_name: fileName,
+      file_size_bytes: fileSizeBytes,
+      content_sha256: contentSha256,
       source_message_id: `manual-upload-${Date.now()}`,
       storage_path: storagePath,
       name: header.crewName || null,
@@ -540,9 +599,12 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       raw_text_excerpt: extractedText.substring(0, 2000),
       parser_version: PARSER_VERSION,
       import_origin: 'manual',
+      roster_provider: 'pdf',
+      source_type: isOfficialPdf ? 'official_pdf' : 'pdf',
       import_status: 'processing',
       parsed_count: entries.length,
-      is_active: shouldActivateManual,
+      is_active: true,
+      is_official_crew_roster_pdf: isOfficialPdf,
     }).select('id').single();
 
     if (rosterError) return emptyResult(`Erro ao criar roster: ${rosterError.message}`);
@@ -552,11 +614,18 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: metaErr } = await (supabase.from('imported_rosters') as any).update({
         roster_source: 'manual',
-        roster_status: shouldActivateManual ? 'active' : 'archived',
+        roster_status: 'active',
       }).eq('id', rosterId);
       if (metaErr) {
         console.warn('[pdf-import] optional roster_source/roster_status skipped (apply migration)', metaErr.message);
       }
+    }
+
+    if (rosterId && deactivatedRosterIds.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('imported_rosters') as any)
+        .update({ superseded_by_roster_id: rosterId })
+        .in('id', deactivatedRosterIds);
     }
 
     // Build rows
@@ -610,12 +679,16 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     }
 
     // Update roster status
+    const syncNow = new Date().toISOString();
     if (rosterId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('imported_rosters') as any).update({
         import_status: insertedCount > 0 ? 'success' : 'error',
         inserted_count: insertedCount,
         import_error: insertedCount === 0 ? 'Falha ao inserir registros' : null,
+        synced_at: insertedCount > 0 ? syncNow : null,
+        last_sync_at: insertedCount > 0 ? syncNow : null,
+        sync_status: insertedCount > 0 ? 'success' : 'error',
       }).eq('id', rosterId);
     }
 
@@ -626,10 +699,20 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       await supabase.from('profiles').update(updates).eq('user_id', effectiveUserId);
     }
 
+    const connectionType = isOfficialPdf ? 'official_pdf' : 'corporate_pdf';
+    if (rosterId && insertedCount > 0) {
+      await UserRosterConnectionService.recordSuccessfulImport({
+        userId: effectiveUserId,
+        rosterId,
+        connectionType,
+      });
+    }
+
+    const replaced = deactivatedRosterIds.length > 0;
     emitRosterUpdated({
       userId: effectiveUserId,
-      reason: 'manual_import',
-      at: new Date().toISOString(),
+      reason: replaced ? 'roster_replaced' : isOfficialPdf ? 'official_pdf_import' : 'corporate_pdf_import',
+      at: syncNow,
     });
 
     // Fetch diagnostics

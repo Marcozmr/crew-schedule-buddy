@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { Settings, Save, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { PortalSyncCard } from '@/components/portal/PortalSyncCard';
+import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
@@ -74,7 +74,7 @@ export default function SettingsPage() {
           <Settings className="w-6 h-6 text-primary shrink-0" /> Configurações
         </motion.h1>
 
-        <PortalSyncCard />
+        <RosterSourcesCard />
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
           <div className="glass p-5 sm:p-6 min-w-0">

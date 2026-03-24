@@ -50,7 +50,7 @@ import { NotificationService } from "../lib/services/notification-service";
 import { useScheduleData } from "../hooks/useScheduleData";
 import { useOperationalPreferences } from "../hooks/useOperationalPreferences";
 import { useOperationalClock } from "../hooks/useOperationalClock";
-import { usePortalAutoSync } from "../hooks/usePortalAutoSync";
+import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
 
 const statusCardMeta = {
   regular: {
@@ -98,7 +98,6 @@ export default function DashboardPage() {
   /** Fuso seguro — Intl lança RangeError com IANA inválido e derruba o dashboard (tela branca). */
   const safeTz = useMemo(() => resolveSafeIANATimezone(timezone), [timezone]);
   const { now, todayStr, monthStr } = useOperationalClock(safeTz, reload);
-  usePortalAutoSync(reload);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -240,6 +239,8 @@ export default function DashboardPage() {
     <AppLayout>
       <div className="pb-10">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
+
+        <RosterConnectionBanner />
 
         <motion.div {...fade(0)} className="mb-8 min-w-0">
           <h1 className="break-words text-xl font-semibold text-foreground lg:text-2xl">

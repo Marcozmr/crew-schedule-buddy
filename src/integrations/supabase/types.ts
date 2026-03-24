@@ -267,9 +267,11 @@ export type Database = {
           created_at: string
           crew_group_code: string | null
           crew_role: string | null
+          content_sha256: string | null
           duty_hours_total: number | null
           employee_code: string | null
           file_name: string
+          file_size_bytes: number | null
           flying_hours_total: number | null
           id: string
           import_error: string | null
@@ -278,6 +280,8 @@ export type Database = {
           imported_at?: string | null
           inserted_count: number | null
           is_active: boolean
+          is_official_crew_roster_pdf?: boolean | null
+          superseded_by_roster_id?: string | null
           name: string | null
           parsed_count: number | null
           parser_version: string | null
@@ -297,12 +301,14 @@ export type Database = {
         Insert: {
           base_airport?: string | null
           connector_key?: string | null
+          content_sha256?: string | null
           created_at?: string
           crew_group_code?: string | null
           crew_role?: string | null
           duty_hours_total?: number | null
           employee_code?: string | null
           file_name?: string
+          file_size_bytes?: number | null
           flying_hours_total?: number | null
           id?: string
           import_error?: string | null
@@ -311,6 +317,7 @@ export type Database = {
           imported_at?: string
           inserted_count?: number | null
           is_active?: boolean
+          is_official_crew_roster_pdf?: boolean | null
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
@@ -323,6 +330,7 @@ export type Database = {
           source_message_id: string
           storage_path: string
           superseded_by?: string | null
+          superseded_by_roster_id?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id: string
@@ -330,12 +338,14 @@ export type Database = {
         Update: {
           base_airport?: string | null
           connector_key?: string | null
+          content_sha256?: string | null
           created_at?: string
           crew_group_code?: string | null
           crew_role?: string | null
           duty_hours_total?: number | null
           employee_code?: string | null
           file_name?: string
+          file_size_bytes?: number | null
           flying_hours_total?: number | null
           id?: string
           import_error?: string | null
@@ -344,6 +354,7 @@ export type Database = {
           imported_at?: string
           inserted_count?: number | null
           is_active?: boolean
+          is_official_crew_roster_pdf?: boolean | null
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
@@ -356,6 +367,7 @@ export type Database = {
           source_message_id?: string
           storage_path?: string
           superseded_by?: string | null
+          superseded_by_roster_id?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id?: string
@@ -868,6 +880,59 @@ export type Database = {
           {
             foreignKeyName: "schedule_entries_roster_id_fkey"
             columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roster_connection: {
+        Row: {
+          id: string
+          user_id: string
+          connection_type: string
+          connection_status: string
+          connected_at: string | null
+          last_checked_at: string | null
+          last_successful_import_at: string | null
+          current_active_roster_id: string | null
+          last_error: string | null
+          is_auto_update_enabled: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          connection_type: string
+          connection_status?: string
+          connected_at?: string | null
+          last_checked_at?: string | null
+          last_successful_import_at?: string | null
+          current_active_roster_id?: string | null
+          last_error?: string | null
+          is_auto_update_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          connection_type?: string
+          connection_status?: string
+          connected_at?: string | null
+          last_checked_at?: string | null
+          last_successful_import_at?: string | null
+          current_active_roster_id?: string | null
+          last_error?: string | null
+          is_auto_update_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roster_connection_current_active_roster_id_fkey"
+            columns: ["current_active_roster_id"]
             isOneToOne: false
             referencedRelation: "imported_rosters"
             referencedColumns: ["id"]

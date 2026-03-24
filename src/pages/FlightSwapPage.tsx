@@ -81,19 +81,13 @@ export default function FlightSwapPage() {
       // 1) active roster
       const { data: activeRosters } = await (supabase as any)
         .from('imported_rosters')
-        .select('base_airport, import_origin, portal_connection_id, created_at')
+        .select('base_airport, created_at')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      const portalFirst = (r: { import_origin?: string | null; portal_connection_id?: string | null }) => {
-        if (r.import_origin === 'portal') return 0;
-        if (r.portal_connection_id) return 0;
-        return 1;
-      };
-
-      const roster = (activeRosters ?? []).sort((a: any, b: any) => portalFirst(a) - portalFirst(b))[0];
+      const roster = (activeRosters ?? [])[0];
 
       if (roster?.base_airport) { setUserBase(roster.base_airport); return; }
       // 2) profile

@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeRosterUpdated } from '@/lib/events/roster-events';
+import { emitRosterUpdated, subscribeRosterUpdated } from '@/lib/events/roster-events';
+import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
 
 export interface ScheduleEntry {
   id: string;
@@ -39,30 +40,15 @@ export function useScheduleData() {
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const prevUserIdRef = useRef<string | null>(null);
+  const autoLoadedEmittedRef = useRef(false);
 
   const loadSchedule = useCallback(async () => {
     if (!user) { setSchedule([]); setLoading(false); return; }
     setLoading(true);
 
-    // Escalas ativas: prioriza portal (import_origin ou portal_connection_id) sem depender de coluna roster_source no SELECT
-    // (compatível com PostgREST quando migration ainda não rodou).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: activeRosters } = await (supabase.from('imported_rosters') as any)
-      .select('id, created_at, import_origin, portal_connection_id')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(5);
+    const activeRosterId = await UserRosterConnectionService.resolveActiveRosterId(user.id);
 
-    const portalFirst = (r: { import_origin?: string | null; portal_connection_id?: string | null }) => {
-      if (r.import_origin === 'portal') return 0;
-      if (r.portal_connection_id) return 0;
-      return 1;
-    };
-
-    const selectedActiveRoster = (activeRosters ?? []).sort((a, b) => portalFirst(a) - portalFirst(b))[0];
-
-    if (!selectedActiveRoster?.id) {
+    if (!activeRosterId) {
       setSchedule([]);
       setLoading(false);
       return;
@@ -72,11 +58,20 @@ export function useScheduleData() {
     const { data } = await (supabase.from('schedule_entries') as any)
       .select('*')
       .eq('user_id', user.id)
-      .eq('roster_id', selectedActiveRoster.id)
+      .eq('roster_id', activeRosterId)
       .order('sort_datetime', { ascending: true, nullsFirst: false });
 
     if (data) setSchedule(data as unknown as ScheduleEntry[]);
     setLoading(false);
+
+    if (data && (data as ScheduleEntry[]).length > 0 && !autoLoadedEmittedRef.current) {
+      autoLoadedEmittedRef.current = true;
+      emitRosterUpdated({
+        userId: user.id,
+        reason: 'roster_auto_loaded',
+        at: new Date().toISOString(),
+      });
+    }
   }, [user]);
 
   // Clear schedule when user changes (critical for account switching)
@@ -87,6 +82,7 @@ export function useScheduleData() {
       setSchedule([]);
       setLoading(true);
       prevUserIdRef.current = currentUserId;
+      autoLoadedEmittedRef.current = false;
     }
     void loadSchedule();
   }, [loadSchedule, user]);
@@ -118,6 +114,14 @@ export function useScheduleData() {
         { event: '*', schema: 'public', table: 'schedule_entries', filter: `user_id=eq.${user.id}` },
         () => {
           console.log('[schedule] realtime: schedule_entries changed; refreshing dashboard');
+          void loadSchedule();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_roster_connection', filter: `user_id=eq.${user.id}` },
+        () => {
+          console.log('[schedule] realtime: user_roster_connection changed; refreshing dashboard');
           void loadSchedule();
         }
       )

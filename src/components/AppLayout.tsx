@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { FeedbackFAB } from '@/components/FeedbackFAB';
+import { ConnectedRosterLifecycle } from '@/components/roster/ConnectedRosterLifecycle';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 const navItems = [
@@ -75,6 +76,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen min-h-svh min-h-dvh flex bg-background overflow-x-clip">
+      <ConnectedRosterLifecycle />
       <aside className="hidden lg:flex flex-col w-[240px] shrink-0 sticky top-0 h-screen min-h-dvh border-r border-border bg-card safe-area-top safe-area-bottom">
         <div className="px-5 h-16 flex items-center gap-3 border-b border-border">
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">

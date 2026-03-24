@@ -32,10 +32,12 @@ const RestCalcPage = lazy(() => import("./pages/RestCalcPage"));
 const DutyCalcPage = lazy(() => import("./pages/DutyCalcPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const UploadPage = lazy(() => import("./pages/UploadPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
+const CorporateAuthCallbackPage = lazy(() => import("./pages/CorporateAuthCallbackPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -202,6 +204,15 @@ const AppRoutes = () => (
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/import-manual"
+        element={
+          <ProtectedRoute>
+            <UploadPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/auth/corporate-callback" element={<CorporateAuthCallbackPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/support" element={<SupportPage />} />

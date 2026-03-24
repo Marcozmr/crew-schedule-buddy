@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth-context';
 import { importPdfFile, type PdfImportResult } from '@/lib/pdf-import';
+import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
+import { ROSTER_UX_MESSAGES } from '@/lib/roster/roster-ux-messages';
 import { toast } from 'sonner';
 
 interface PdfImportDialogProps {
@@ -33,8 +35,25 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
     const res = await importPdfFile(file, user.id);
     setResult(res);
     setProcessing(false);
+    if (res.duplicate) {
+      toast.info(ROSTER_UX_MESSAGES.scaleAlreadyImported);
+      onImportComplete?.();
+      return;
+    }
     if (res.success && res.insertedCount > 0) {
-      toast.success(`✅ ${res.insertedCount} registro(s) importado(s)!`);
+      const official = isOfficialCrewRosterFileName(res.fileName);
+      const replaced = (res.debug?.deactivatedRosterIds?.length ?? 0) > 0;
+      if (replaced) {
+        toast.success(ROSTER_UX_MESSAGES.scaleUpdatedSuccess, {
+          description: ROSTER_UX_MESSAGES.previousReplaced,
+        });
+      } else if (official) {
+        toast.success(ROSTER_UX_MESSAGES.scaleConnected, {
+          description: `${res.insertedCount} registro(s) importado(s).`,
+        });
+      } else {
+        toast.success(`✅ ${res.insertedCount} registro(s) importado(s)!`);
+      }
       onImportComplete?.();
     } else if (res.success && res.insertedCount === 0) {
       toast.info(res.error || 'Todos os registros já existiam.');

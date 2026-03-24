@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
-import { PORTAL_SESSION_STORAGE_KEY } from '@/lib/portal/types';
+/** Chave legada para limpar sessão de portal no logout (compatibilidade). */
+const PORTAL_SESSION_STORAGE_KEY_LEGACY = 'escalax_portal_session';
 
 interface Profile {
   id: string;
@@ -35,7 +36,7 @@ const PROVIDER_TOKEN_STORAGE_KEY = 'google_provider_token';
 
 const APP_STORAGE_KEYS = [
   PROVIDER_TOKEN_STORAGE_KEY,
-  PORTAL_SESSION_STORAGE_KEY,
+  PORTAL_SESSION_STORAGE_KEY_LEGACY,
   'escalax_schedule',
   'escalax_user',
 ];

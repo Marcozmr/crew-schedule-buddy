@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { ImportHistoryCard } from '@/components/ImportHistoryCard';
-import { PortalSyncCard } from '@/components/portal/PortalSyncCard';
+import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
+import { ActiveRosterDownloadButton } from '@/components/roster/ActiveRosterDownloadButton';
 
 export default function DownloadRosterPage() {
   const navigate = useNavigate();
@@ -21,6 +22,16 @@ export default function DownloadRosterPage() {
       </div>
 
       <div className="p-4 max-w-3xl mx-auto space-y-4 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-card/60 p-4">
+          <div>
+            <p className="font-medium text-foreground text-sm">Escala ativa no EscalaX</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Baixe o PDF guardado ou exporte CSV se o arquivo original não estiver no armazenamento.
+            </p>
+          </div>
+          <ActiveRosterDownloadButton variant="default" size="sm" />
+        </div>
+
         {importDone && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-success/10 border border-success/30 rounded-xl p-4 flex items-center gap-3 min-w-0">
             <CheckCircle className="w-6 h-6 text-success shrink-0" />
@@ -31,7 +42,7 @@ export default function DownloadRosterPage() {
           </motion.div>
         )}
 
-        <PortalSyncCard onSyncComplete={() => setImportDone(true)} />
+        <RosterSourcesCard onImportComplete={() => setImportDone(true)} />
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6 shadow-card">
           <div className="flex items-center gap-3 mb-3">

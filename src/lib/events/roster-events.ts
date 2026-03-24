@@ -2,7 +2,13 @@ export type RosterUpdateReason =
   | "portal_sync_success"
   | "portal_sync_auto"
   | "manual_import"
-  | "active_roster_changed";
+  | "active_roster_changed"
+  | "official_pdf_import"
+  | "corporate_pdf_import"
+  | "auto_update_check"
+  | "roster_replaced"
+  | "roster_connected"
+  | "roster_auto_loaded";
 
 const ROSTER_UPDATED_EVENT = "escalax:roster-updated";
 

@@ -4,6 +4,8 @@ import { useAuth } from '@/lib/auth-context';
 import { Download, Clock, CheckCircle, AlertCircle, Power, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { downloadImportedRosterById } from '@/modules/roster/services/ActiveRosterDownloadService';
+import { ROSTER_UX_MESSAGES } from '@/lib/roster/roster-ux-messages';
 
 interface ImportRecord {
   id: string;
@@ -20,6 +22,8 @@ interface ImportRecord {
   roster_end_date: string | null;
   parser_version: string | null;
   is_active: boolean;
+  is_official_crew_roster_pdf: boolean | null;
+  superseded_by_roster_id: string | null;
 }
 
 interface ImportHistoryCardProps {
@@ -36,7 +40,7 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
 
     const { data } = await supabase
       .from('imported_rosters')
-      .select('id, file_name, storage_path, created_at, import_status, parsed_count, inserted_count, import_error, name, base_airport, roster_start_date, roster_end_date, parser_version, is_active')
+      .select('id, file_name, storage_path, created_at, import_status, parsed_count, inserted_count, import_error, name, base_airport, roster_start_date, roster_end_date, parser_version, is_active, is_official_crew_roster_pdf, superseded_by_roster_id')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -48,16 +52,19 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
     void loadImports();
   }, [loadImports]);
 
-  const handleDownload = async (storagePath: string, fileName: string) => {
-    const { data } = await supabase.storage.from('crew-rosters').download(storagePath);
-    if (data) {
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(url);
+  const handleDownload = async (imp: ImportRecord) => {
+    if (!user) return;
+    toast.message(ROSTER_UX_MESSAGES.downloadingCurrent);
+    const result = await downloadImportedRosterById(user.id, imp.id);
+    if (!result.ok) {
+      toast.error(
+        result.code === 'NO_PDF_IN_STORAGE'
+          ? ROSTER_UX_MESSAGES.downloadNoPdfInStorage
+          : ROSTER_UX_MESSAGES.downloadUnavailable
+      );
+      return;
     }
+    toast.success(ROSTER_UX_MESSAGES.downloadComplete, { description: result.fileName });
   };
 
   const handleActivate = async (rosterId: string) => {
@@ -162,7 +169,14 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
           const deleting = busyActionId === `delete-${imp.id}`;
 
           return (
-            <div key={imp.id} className="bg-muted/50 rounded-lg p-3 space-y-2">
+            <div
+              key={imp.id}
+              className={`rounded-lg p-3 space-y-2 ${
+                imp.is_active
+                  ? 'bg-primary/5 border-2 border-primary/40 shadow-sm'
+                  : 'bg-muted/50 border border-transparent'
+              }`}
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   {imp.import_status === 'success'
@@ -171,10 +185,13 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
                   <div className="min-w-0">
                     <p className="font-medium text-foreground text-sm truncate">{imp.file_name}</p>
                     <p className="text-xs text-muted-foreground">{new Date(imp.created_at).toLocaleString('pt-BR')}</p>
+                    {imp.is_active && (
+                      <p className="text-xs font-semibold text-primary mt-0.5">Versão em uso no app</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => handleDownload(imp.storage_path, imp.file_name)}>
+                  <Button size="sm" variant="ghost" title="Baixar esta versão" onClick={() => handleDownload(imp)}>
                     <Download className="w-4 h-4" />
                   </Button>
                 </div>
@@ -183,9 +200,15 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="bg-background px-2 py-0.5 rounded text-foreground">{imp.parsed_count ?? 0} parseados</span>
                 <span className="bg-background px-2 py-0.5 rounded text-foreground">{imp.inserted_count ?? 0} inseridos</span>
-                <span className={`px-2 py-0.5 rounded ${imp.is_active ? 'bg-primary/15 text-primary' : 'bg-background text-muted-foreground'}`}>
+                <span className={`px-2 py-0.5 rounded font-medium ${imp.is_active ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'}`}>
                   {imp.is_active ? 'Escala ativa' : 'Arquivada'}
                 </span>
+                {imp.is_official_crew_roster_pdf && (
+                  <span className="px-2 py-0.5 rounded bg-success/10 text-success">PDF oficial</span>
+                )}
+                {imp.superseded_by_roster_id && (
+                  <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground">Substituída por nova versão</span>
+                )}
                 {imp.base_airport && <span className="bg-background px-2 py-0.5 rounded text-muted-foreground">Base: {imp.base_airport}</span>}
                 {imp.roster_start_date && <span className="bg-background px-2 py-0.5 rounded text-muted-foreground">{imp.roster_start_date} — {imp.roster_end_date}</span>}
                 {imp.parser_version && <span className="bg-background px-2 py-0.5 rounded text-muted-foreground">v{imp.parser_version}</span>}
