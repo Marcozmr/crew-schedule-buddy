@@ -110,6 +110,13 @@
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }
 
+  /* Em mobile, mais espaço para o FAB não cobrir conteúdo */
+  @media (max-width: 767px) {
+    .pb-safe-content {
+      padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    }
+  }
+
   .break-anywhere {
     overflow-wrap: anywhere;
     word-break: break-word;

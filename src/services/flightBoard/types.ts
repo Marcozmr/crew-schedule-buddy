@@ -88,6 +88,8 @@ export interface FlightRaw {
   } | null;
   /** Metadado opcional da edge */
   recordSource?: FlightRecordSource;
+  /** Hora de apresentação ISO (report_time) — usada no card mobile */
+  presentationTimeISO?: string | null;
 }
 
 export interface FlightDataSourceFlags {

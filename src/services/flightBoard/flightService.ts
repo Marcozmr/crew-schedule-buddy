@@ -58,6 +58,16 @@ export function normalizeFlightData(
       ? scheduledToTimestamp(dateStr, estimatedTime)
       : null;
 
+  const presentationTime =
+    mode === "departure" && (raw as { presentationTimeISO?: string | null }).presentationTimeISO
+      ? (() => {
+          const iso = (raw as { presentationTimeISO?: string | null }).presentationTimeISO;
+          if (!iso) return null;
+          const m = String(iso).match(/T(\d{1,2}):(\d{2})/);
+          return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
+        })()
+      : null;
+
   return {
     id: raw.id,
     flightNumber: raw.flightNumber,
@@ -77,6 +87,7 @@ export function normalizeFlightData(
     airportInfo: raw.airportInfo ?? null,
     scheduledTimestamp,
     estimatedTimestamp,
+    presentationTime,
   };
 }
 

@@ -140,6 +140,15 @@ function inferCarrierCode(flightNumber: string, airline: string | null): string 
   return "LA";
 }
 
+function toIso(date: string, hhmm: string | null | undefined): string | null {
+  if (!date || !hhmm) return null;
+  const m = String(hhmm).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const hh = m[1].padStart(2, "0");
+  const mm = m[2];
+  return `${date}T${hh}:${mm}:00.000Z`;
+}
+
 /** Converte entrada da escala em FlightRaw (fonte roster) */
 export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
   const origin = normalizeIataCode(entry.departure_airport || entry.departure);
@@ -150,6 +159,7 @@ export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
   const depIso = `${date}T${depTime.padStart(5, "0")}:00.000Z`;
   const arrIso = `${date}T${arrTime.padStart(5, "0")}:00.000Z`;
   const carrier = inferCarrierCode(entry.flight_number, entry.airline);
+  const presentationTimeISO = entry.report_time ? toIso(date, entry.report_time) : null;
 
   return {
     id: entry.id,
@@ -176,6 +186,7 @@ export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
     aircraftCode: entry.aircraft_type ?? null,
     status: "SCHEDULED",
     airportInfo: buildAirportContext(origin, destination),
+    presentationTimeISO: presentationTimeISO ?? undefined,
   };
 }
 
@@ -219,6 +230,7 @@ export function extractPlannedFlightsFromSchedule(
       if (n) {
         departures.push({
           ...n,
+          presentationTime: entry.report_time ?? null,
           aggregateSource: "roster",
           liveTrackingAvailable: Boolean(raw.tracking?.latitude != null),
         });
@@ -229,6 +241,7 @@ export function extractPlannedFlightsFromSchedule(
       if (n) {
         arrivals.push({
           ...n,
+          presentationTime: null,
           aggregateSource: "roster",
           liveTrackingAvailable: Boolean(raw.tracking?.latitude != null),
         });
@@ -384,6 +397,7 @@ export function mergeEnrichmentIntoNormalized(
 
     return {
       ...n,
+      presentationTime: (n as { presentationTime?: string | null }).presentationTime ?? f.presentationTime,
       tracking: ex.tracking ?? n.tracking,
       airportInfo: ex.airportInfo ?? n.airportInfo,
       liveTrackingAvailable: hasLive,
@@ -414,6 +428,7 @@ export function buildNormalizedListsFromEnrichmentRaw(
           r.tracking.longitude != null;
         departures.push({
           ...n,
+          presentationTime: (n as { presentationTime?: string | null }).presentationTime ?? null,
           tracking: r.tracking ?? n.tracking,
           airportInfo: r.airportInfo ?? n.airportInfo,
           liveTrackingAvailable: hasLive,

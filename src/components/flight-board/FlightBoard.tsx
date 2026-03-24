@@ -685,15 +685,16 @@ export function FlightBoard({
         );
       }
       return (
-        <div className="space-y-2">
+        <div className="w-full min-w-0 space-y-2 overflow-hidden pb-2">
           {enrichmentWarning && (
-            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <p className="max-w-full break-words rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               {enrichmentWarning}
             </p>
           )}
           {list.map((flight, index) => (
             <motion.div
               key={flight.id}
+              className="min-w-0"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
@@ -783,15 +784,16 @@ export function FlightBoard({
       }
 
       return (
-        <div className="space-y-2">
+        <div className="w-full min-w-0 space-y-2 overflow-hidden pb-2">
           {enrichmentWarning && (
-            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <p className="max-w-full break-words rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               {enrichmentWarning}
             </p>
           )}
           {list.map((flight, index) => (
             <motion.div
               key={flight.id}
+              className="min-w-0"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
@@ -819,12 +821,12 @@ export function FlightBoard({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm",
+        "w-full min-w-0 max-w-full overflow-x-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm",
         "dark:border-border/40 dark:bg-card/60",
         className
       )}
     >
-      <div className="border-b border-border/60 bg-muted/30 px-4 py-3 sm:px-5">
+      <div className="w-full min-w-0 border-b border-border/60 bg-muted/30 px-4 py-3 sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
             EscalaX Flight Board Pro
@@ -845,7 +847,9 @@ export function FlightBoard({
         </div>
       </div>
 
-      <div className="p-4 sm:p-5">{renderBody()}</div>
+      <div className="w-full min-w-0 max-w-full overflow-x-hidden p-4 sm:p-5">
+        {renderBody()}
+      </div>
     </div>
   );
 }
