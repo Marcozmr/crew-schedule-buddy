@@ -7,6 +7,7 @@
 import { corporatePortalConfig, getResolvedLoginUrl, isLoginUrlConfigured, isTestMode } from '@/lib/corporate-portal-config';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { supabase } from '@/integrations/supabase/client';
+import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import { SessionManager } from '../services/SessionManager';
 import { RosterProvider } from './RosterProvider';
 import type { ConnectionResult, ProviderStatus, RosterSourceInfo, RosterSyncResult } from '../types';
@@ -25,11 +26,12 @@ export class CorporatePortalProvider extends RosterProvider {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('escalax-corporate-connection-changed'));
     }
-    void supabase.auth.getUser().then(({ data: { user } }) => {
+    void supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
+      await UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected');
       emitRosterUpdated({
         userId: user.id,
-        reason: 'roster_connected',
+        reason: 'active_roster_changed',
         at: new Date().toISOString(),
       });
     });
@@ -88,6 +90,11 @@ export class CorporatePortalProvider extends RosterProvider {
 
         if (event.data.success) {
           SessionManager.setCorporatePortalConnected();
+          void supabase.auth.getUser().then(async ({ data: { user } }) => {
+            if (user) {
+              await UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected');
+            }
+          });
           resolve({ success: true });
         } else {
           SessionManager.setCorporatePortalError('Autenticação não concluída');

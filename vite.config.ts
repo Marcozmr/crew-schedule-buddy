@@ -57,6 +57,32 @@ export default defineConfig(({ mode }) => ({
         icons: [
           { src: "/escalax-icon.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
         ],
+        /** PWA instalado (Chrome/Edge): “Abrir com” → launchQueue no cliente (LaunchQueueHandler). */
+        file_handlers: [
+          {
+            action: "/",
+            accept: {
+              "application/pdf": [".pdf"],
+            },
+          },
+        ],
+        /**
+         * Compartilhar → POST para /share-import. Muitos hosts estáticos não repassam POST à SPA;
+         * use rota placeholder + fluxo manual até SW dedicado.
+         */
+        share_target: {
+          action: "/share-import",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: {
+            files: [
+              {
+                name: "files",
+                accept: ["application/pdf", ".pdf"],
+              },
+            ],
+          },
+        },
       },
     }),
   ].filter(Boolean),

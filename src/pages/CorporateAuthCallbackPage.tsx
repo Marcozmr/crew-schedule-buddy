@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { supabase } from '@/integrations/supabase/client';
 import { SessionManager } from '@/modules/roster/services/SessionManager';
+import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
 
 export const AUTH_DONE_EVENT = 'escalax-corporate-auth-done';
 
@@ -29,11 +30,12 @@ export default function CorporateAuthCallbackPage() {
 
   const finishSuccess = useCallback(() => {
     SessionManager.setCorporatePortalConnected();
-    void supabase.auth.getUser().then(({ data: { user } }) => {
+    void supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
+        await UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected');
         emitRosterUpdated({
           userId: user.id,
-          reason: 'roster_connected',
+          reason: 'active_roster_changed',
           at: new Date().toISOString(),
         });
       }

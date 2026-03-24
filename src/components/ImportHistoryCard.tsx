@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
-import { Download, Clock, CheckCircle, AlertCircle, Power, Trash2, Loader2 } from 'lucide-react';
+import { Download, Clock, CheckCircle, AlertCircle, Power, Trash2, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { downloadImportedRosterById } from '@/modules/roster/services/ActiveRosterDownloadService';
+import { importFromStoredOfficialRow } from '@/modules/roster/services/OfficialCrewRosterQuickImportService';
+import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { ROSTER_UX_MESSAGES } from '@/lib/roster/roster-ux-messages';
 
 interface ImportRecord {
@@ -65,6 +67,33 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
       return;
     }
     toast.success(ROSTER_UX_MESSAGES.downloadComplete, { description: result.fileName });
+  };
+
+  const handleReimportOfficial = async (imp: ImportRecord) => {
+    if (!user || !imp.storage_path?.trim() || !imp.is_official_crew_roster_pdf) return;
+    setBusyActionId(`reimport-${imp.id}`);
+    const res = await importFromStoredOfficialRow(user.id, imp.id);
+    setBusyActionId(null);
+    if (res.duplicate) {
+      toast.info(ROSTER_UX_MESSAGES.scaleAlreadyImported);
+      return;
+    }
+    if (res.success && res.insertedCount > 0) {
+      const replaced = (res.debug?.deactivatedRosterIds?.length ?? 0) > 0;
+      toast.success(
+        replaced ? ROSTER_UX_MESSAGES.newCrewRosterDetected : ROSTER_UX_MESSAGES.scaleUpdatedSuccess,
+        replaced ? { description: ROSTER_UX_MESSAGES.previousReplaced } : undefined
+      );
+      emitRosterUpdated({
+        userId: user.id,
+        reason: replaced ? 'roster_replaced' : 'official_pdf_import',
+        at: new Date().toISOString(),
+      });
+      await loadImports();
+      onRosterChanged?.();
+    } else if (res.error) {
+      toast.error(res.error);
+    }
   };
 
   const handleActivate = async (rosterId: string) => {
@@ -160,7 +189,7 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
     <div className="bg-card border border-border rounded-xl p-5 shadow-card">
       <div className="flex items-center gap-2 mb-4">
         <Clock className="w-5 h-5 text-primary" />
-        <h3 className="font-semibold text-foreground">Histórico de Importações</h3>
+        <h3 className="font-semibold text-foreground">Histórico de versões</h3>
       </div>
 
       <div className="space-y-3">
@@ -186,7 +215,7 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
                     <p className="font-medium text-foreground text-sm truncate">{imp.file_name}</p>
                     <p className="text-xs text-muted-foreground">{new Date(imp.created_at).toLocaleString('pt-BR')}</p>
                     {imp.is_active && (
-                      <p className="text-xs font-semibold text-primary mt-0.5">Versão em uso no app</p>
+                      <p className="text-xs font-bold text-primary mt-0.5 uppercase tracking-wide">ATIVA</p>
                     )}
                   </div>
                 </div>
@@ -201,13 +230,13 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
                 <span className="bg-background px-2 py-0.5 rounded text-foreground">{imp.parsed_count ?? 0} parseados</span>
                 <span className="bg-background px-2 py-0.5 rounded text-foreground">{imp.inserted_count ?? 0} inseridos</span>
                 <span className={`px-2 py-0.5 rounded font-medium ${imp.is_active ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'}`}>
-                  {imp.is_active ? 'Escala ativa' : 'Arquivada'}
+                  {imp.is_active ? 'ATIVA no app' : 'Histórico'}
                 </span>
                 {imp.is_official_crew_roster_pdf && (
-                  <span className="px-2 py-0.5 rounded bg-success/10 text-success">PDF oficial</span>
+                  <span className="px-2 py-0.5 rounded bg-success/10 text-success">CrewRosterReport</span>
                 )}
                 {imp.superseded_by_roster_id && (
-                  <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground">Substituída por nova versão</span>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-200 font-medium">SUBSTITUÍDA</span>
                 )}
                 {imp.base_airport && <span className="bg-background px-2 py-0.5 rounded text-muted-foreground">Base: {imp.base_airport}</span>}
                 {imp.roster_start_date && <span className="bg-background px-2 py-0.5 rounded text-muted-foreground">{imp.roster_start_date} — {imp.roster_end_date}</span>}
@@ -215,6 +244,21 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1">
+                {imp.is_official_crew_roster_pdf && imp.storage_path?.trim() && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleReimportOfficial(imp)}
+                    disabled={busyActionId !== null}
+                  >
+                    {busyActionId === `reimport-${imp.id}` ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-3 h-3 mr-1" />
+                    )}
+                    Reimportar do armazenamento
+                  </Button>
+                )}
                 {!imp.is_active && (
                   <Button size="sm" variant="outline" onClick={() => handleActivate(imp.id)} disabled={activating || deleting}>
                     {activating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Power className="w-3 h-3 mr-1" />}

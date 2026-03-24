@@ -469,8 +469,39 @@ function deduplicateEntries(entries: RosterEntry[]): RosterEntry[] {
 
 // ── Main import function ───────────────────────────────
 
-export async function importPdfFile(file: File, userId: string): Promise<PdfImportResult> {
-  const fileName = file.name;
+function duplicateResult(
+  fileName: string,
+  dupId: string,
+  emptyDebug: ImportDebugInfo,
+  emptyStats: ParseStats
+): PdfImportResult {
+  return {
+    success: true,
+    duplicate: true,
+    header: null,
+    parsedCount: 0,
+    insertedCount: 0,
+    rosterId: dupId,
+    fileName,
+    extractedTextPreview: '',
+    parsedEntriesPreview: [],
+    savedRowsPreview: [],
+    debug: { ...emptyDebug, rosterId: dupId },
+    textByDay: {},
+    parseStats: emptyStats,
+    error: null,
+  };
+}
+
+/**
+ * Importa PDF a partir de bytes (upload, armazenamento ou “Abrir com”).
+ * Dedupe: hash SHA-256, depois nome+tamanho, depois mesma storage_path no bucket.
+ */
+export async function importPdfArrayBuffer(
+  fileName: string,
+  arrayBuffer: ArrayBuffer,
+  userId: string
+): Promise<PdfImportResult> {
   const emptyDebug: ImportDebugInfo = { currentUserId: userId, rosterId: null, deactivatedRosterIds: [], activeRoster: null, totalRowsActiveRoster: 0, totalRowsOldRosters: 0 };
   const emptyStats: ParseStats = { totalRawAnchors: 0, totalFlights: 0, totalDO: 0, totalStandby: 0, totalAPR: 0, totalAfterDedup: 0 };
   const emptyResult = (error: string): PdfImportResult => ({
@@ -483,7 +514,6 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const effectiveUserId = authUser?.id || userId;
 
-    const arrayBuffer = await file.arrayBuffer();
     const fileSizeBytes = arrayBuffer.byteLength;
     const contentSha256 = await sha256Hex(arrayBuffer);
 
@@ -492,25 +522,10 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       .select('id')
       .eq('user_id', effectiveUserId)
       .eq('content_sha256', contentSha256)
+      .limit(1)
       .maybeSingle();
     if ((dupByHash as { id: string } | null)?.id) {
-      const dupId = (dupByHash as { id: string }).id;
-      return {
-        success: true,
-        duplicate: true,
-        header: null,
-        parsedCount: 0,
-        insertedCount: 0,
-        rosterId: dupId,
-        fileName,
-        extractedTextPreview: '',
-        parsedEntriesPreview: [],
-        savedRowsPreview: [],
-        debug: { ...emptyDebug, rosterId: dupId },
-        textByDay: {},
-        parseStats: emptyStats,
-        error: null,
-      };
+      return duplicateResult(fileName, (dupByHash as { id: string }).id, emptyDebug, emptyStats);
     }
 
     const { data: dupByMeta } = await supabase
@@ -519,25 +534,11 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
       .eq('user_id', effectiveUserId)
       .eq('file_name', fileName)
       .eq('file_size_bytes', fileSizeBytes)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if ((dupByMeta as { id: string } | null)?.id) {
-      const dupId = (dupByMeta as { id: string }).id;
-      return {
-        success: true,
-        duplicate: true,
-        header: null,
-        parsedCount: 0,
-        insertedCount: 0,
-        rosterId: dupId,
-        fileName,
-        extractedTextPreview: '',
-        parsedEntriesPreview: [],
-        savedRowsPreview: [],
-        debug: { ...emptyDebug, rosterId: dupId },
-        textByDay: {},
-        parseStats: emptyStats,
-        error: null,
-      };
+      return duplicateResult(fileName, (dupByMeta as { id: string }).id, emptyDebug, emptyStats);
     }
 
     const storagePath = `${effectiveUserId}/${Date.now()}-${fileName}`;
@@ -770,4 +771,9 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
   } catch (err) {
     return emptyResult(err instanceof Error ? err.message : 'Erro desconhecido');
   }
+}
+
+export async function importPdfFile(file: File, userId: string): Promise<PdfImportResult> {
+  const arrayBuffer = await file.arrayBuffer();
+  return importPdfArrayBuffer(file.name, arrayBuffer, userId);
 }

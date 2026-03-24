@@ -2,8 +2,13 @@
 
 export const ROSTER_UX_MESSAGES = {
   scaleConnected: 'Escala conectada',
+  /** Banner principal — título único após escala ativa */
+  scaleConnectedBannerTitle: 'Escala conectada ✓',
+  connectionStatusField: 'Status da conexão',
   checkingUpdate: 'Verificando atualização da escala...',
   newOfficialFound: 'Nova escala oficial encontrada',
+  /** Novo PDF oficial substituiu a escala anterior */
+  newCrewRosterDetected: 'Novo CrewRosterReport encontrado',
   scaleUpdatedSuccess: 'Escala atualizada com sucesso',
   scaleAlreadyUpToDate: 'Sua escala já está atualizada',
   lastUpdatedAt: (iso: string) => `Última atualização em ${iso}`,

@@ -43,7 +43,11 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
     if (res.success && res.insertedCount > 0) {
       const official = isOfficialCrewRosterFileName(res.fileName);
       const replaced = (res.debug?.deactivatedRosterIds?.length ?? 0) > 0;
-      if (replaced) {
+      if (replaced && official) {
+        toast.success(ROSTER_UX_MESSAGES.newCrewRosterDetected, {
+          description: ROSTER_UX_MESSAGES.previousReplaced,
+        });
+      } else if (replaced) {
         toast.success(ROSTER_UX_MESSAGES.scaleUpdatedSuccess, {
           description: ROSTER_UX_MESSAGES.previousReplaced,
         });

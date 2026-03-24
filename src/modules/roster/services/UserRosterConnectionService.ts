@@ -10,11 +10,19 @@ export type UserRosterConnectionType =
   | 'manual_fallback'
   | 'future_enterprise_sync';
 
+/** Fluxo produto: portal (manual) → iFlight (manual) → PDF CrewRosterReport importado. */
+export type RosterConnectionState =
+  | 'idle'
+  | 'portal_connected'
+  | 'iflight_accessed'
+  | 'roster_connected';
+
 export interface UserRosterConnectionRow {
   id: string;
   user_id: string;
   connection_type: UserRosterConnectionType;
   connection_status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  roster_connection_state: RosterConnectionState;
   connected_at: string | null;
   last_checked_at: string | null;
   last_successful_import_at: string | null;
@@ -63,7 +71,61 @@ export const UserRosterConnectionService = {
       console.warn('[UserRosterConnectionService] fetch', error.message);
       return null;
     }
-    return data as UserRosterConnectionRow | null;
+    const row = data as UserRosterConnectionRow & { roster_connection_state?: RosterConnectionState };
+    return {
+      ...row,
+      roster_connection_state: row.roster_connection_state ?? 'idle',
+    };
+  },
+
+  /**
+   * Persiste etapa do fluxo (Supabase). `connection_status` = connected somente em roster_connected.
+   */
+  async setRosterConnectionState(userId: string, state: RosterConnectionState): Promise<void> {
+    const existing = await UserRosterConnectionService.fetchByUserId(userId);
+    const now = new Date().toISOString();
+
+    let connection_status: 'disconnected' | 'connecting' | 'connected' | 'error' =
+      existing?.connection_status ?? 'disconnected';
+    if (state === 'roster_connected') connection_status = 'connected';
+    else if (state === 'portal_connected' || state === 'iflight_accessed') connection_status = 'connecting';
+    else if (state === 'idle') connection_status = 'disconnected';
+
+    const { error } = await supabase.from('user_roster_connection').upsert(
+      {
+        user_id: userId,
+        connection_type: existing?.connection_type ?? 'official_pdf',
+        connection_status,
+        roster_connection_state: state,
+        last_checked_at: now,
+        connected_at: existing?.connected_at ?? null,
+        last_successful_import_at: existing?.last_successful_import_at ?? null,
+        current_active_roster_id: existing?.current_active_roster_id ?? null,
+        last_error: null,
+        is_auto_update_enabled: existing?.is_auto_update_enabled ?? true,
+      },
+      { onConflict: 'user_id' }
+    );
+
+    if (error) {
+      console.warn('[UserRosterConnectionService] setRosterConnectionState', error.message);
+    }
+  },
+
+  /** Após desconectar o portal na UI: volta ao idle se ainda não havia escala importada no fluxo. */
+  async clearPortalSessionFlags(userId: string): Promise<void> {
+    const existing = await UserRosterConnectionService.fetchByUserId(userId);
+    if (!existing || existing.roster_connection_state === 'roster_connected') return;
+    const { error } = await supabase
+      .from('user_roster_connection')
+      .update({
+        roster_connection_state: 'idle',
+        connection_status: 'disconnected',
+      })
+      .eq('user_id', userId);
+    if (error) {
+      console.warn('[UserRosterConnectionService] clearPortalSessionFlags', error.message);
+    }
   },
 
   /**
@@ -83,6 +145,7 @@ export const UserRosterConnectionService = {
         user_id: params.userId,
         connection_type: params.connectionType,
         connection_status: 'connected',
+        roster_connection_state: 'roster_connected',
         connected_at: connectedAt,
         last_checked_at: now,
         last_successful_import_at: now,

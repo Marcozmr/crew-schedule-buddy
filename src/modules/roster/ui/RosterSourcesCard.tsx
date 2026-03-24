@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
+import { CrewRosterQuickImportControls } from '@/components/roster/CrewRosterQuickImportControls';
 import { RosterSyncService } from '../services/RosterSyncService';
 import { SessionManager } from '../services/SessionManager';
 import { useAuth } from '@/lib/auth-context';
@@ -24,6 +25,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatDateTimeBR } from '@/lib/date-utils';
 import { Link } from 'react-router-dom';
 import { corporatePortalConfig, isLoginUrlConfigured, isTestMode } from '@/lib/corporate-portal-config';
+import { emitRosterUpdated } from '@/lib/events/roster-events';
+import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
+import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 
 interface RosterSourcesCardProps {
@@ -40,6 +44,7 @@ const PORTAL_BADGE: Record<string, string> = {
 
 export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) {
   const { user } = useAuth();
+  const { connection, activeRosterMeta, refresh: refreshConnection } = useUserRosterConnection();
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [portalStatus, setPortalStatus] = useState<ProviderStatus | null>(null);
   const [iflightStatus, setIFlightStatus] = useState<ProviderStatus | null>(null);
@@ -90,8 +95,9 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
 
   const handleImportComplete = useCallback(() => {
     void loadLastSync();
+    void refreshConnection();
     onImportComplete?.();
-  }, [loadLastSync, onImportComplete]);
+  }, [loadLastSync, onImportComplete, refreshConnection]);
 
   const bump = useCallback(() => setRefreshTrigger((t) => t + 1), []);
 
@@ -103,24 +109,56 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
     } finally {
       setPortalConnecting(false);
       bump();
+      void refreshConnection();
     }
-  }, [bump]);
+  }, [bump, refreshConnection]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
     await provider.disconnect();
+    if (user) {
+      await UserRosterConnectionService.clearPortalSessionFlags(user.id);
+    }
     bump();
-  }, [bump]);
+    void refreshConnection();
+  }, [bump, user, refreshConnection]);
 
   const handleManualPortalConfirm = useCallback(() => {
     SessionManager.setCorporatePortalConnected();
+    if (user) {
+      void UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected').then(() => {
+        emitRosterUpdated({
+          userId: user.id,
+          reason: 'active_roster_changed',
+          at: new Date().toISOString(),
+        });
+        void refreshConnection();
+      });
+    }
     bump();
-  }, [bump]);
+  }, [bump, user, refreshConnection]);
+
+  const handleOpenedIFlight = useCallback(() => {
+    if (!user) return;
+    void UserRosterConnectionService.setRosterConnectionState(user.id, 'iflight_accessed').then(() => {
+      emitRosterUpdated({
+        userId: user.id,
+        reason: 'active_roster_changed',
+        at: new Date().toISOString(),
+      });
+      void refreshConnection();
+    });
+  }, [user, refreshConnection]);
 
   const handleDevMarkConnected = useCallback(() => {
     SessionManager.setCorporatePortalConnected();
+    if (user) {
+      void UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected').then(() =>
+        void refreshConnection()
+      );
+    }
     bump();
-  }, [bump]);
+  }, [bump, user, refreshConnection]);
 
   const handleOpenIFlightModule = useCallback(() => {
     const url = corporatePortalConfig.iflightModuleUrl;
@@ -148,6 +186,13 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
     : portalStatus?.status === 'unavailable' ? PORTAL_BADGE.unavailable
     : PORTAL_BADGE.disconnected;
 
+  const flowState = connection?.roster_connection_state ?? 'idle';
+  const showRosterFlowPanel =
+    corporatePortalConfig.isEnabled &&
+    portalIsConnected &&
+    !activeRosterMeta &&
+    flowState !== 'roster_connected';
+
   const iflightBlocked = !portalIsConnected;
   const iflightBadge = !corporatePortalConfig.iflightEnabled
     ? 'Indisponível'
@@ -157,6 +202,152 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         ? 'Pronto para abrir'
         : 'Integração futura';
 
+  /** Com escala ativa no app: foco em PDF/atualização; portal/iFlight em modo secundário. */
+  const dailyMode = Boolean(activeRosterMeta);
+
+  const integrationSection = (
+    <>
+      {corporateSource && (
+        <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-background/60 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-foreground break-words">Portal corporativo LATAM</p>
+                {isLoginUrlConfigured() ? (
+                  <p className="text-xs text-muted-foreground break-words">
+                    Portal LATAM configurado. Toque em Conectar para abrir o portal corporativo; depois confirme o
+                    login no app se o retorno automático não ocorrer.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground break-words">{corporateSource.description}</p>
+                )}
+                {portalStatus?.message && (
+                  <p className="text-xs text-muted-foreground mt-1 break-words">{portalStatus.message}</p>
+                )}
+                {isTestMode() && corporatePortalConfig.isEnabled && (
+                  <p className="text-xs text-amber-700 dark:text-amber-500/90 mt-1 break-words">
+                    Sem URL no .env — adicione VITE_CORPORATE_PORTAL_LOGIN_URL e reinicie o servidor (npm run dev).
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+              <span
+                className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 ${
+                  portalIsConnected
+                    ? 'text-success bg-success/10'
+                    : portalStatus?.status === 'failed'
+                      ? 'text-destructive bg-destructive/10'
+                      : 'text-muted-foreground bg-muted'
+                }`}
+              >
+                {portalConnecting && <Loader2 className="w-3 h-3 inline animate-spin mr-1" />}
+                {portalBadge}
+              </span>
+              {portalIsConfigured ? (
+                portalIsConnected ? (
+                  <Button variant="outline" size="sm" onClick={handleDisconnectPortal} disabled={portalConnecting}>
+                    <Unlink className="w-4 h-4 mr-1" />
+                    Desconectar
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={handleConnectPortal} disabled={portalConnecting}>
+                    {portalConnecting ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <Link2 className="w-4 h-4 mr-1" />
+                    )}
+                    Conectar
+                  </Button>
+                )
+              ) : (
+                <Button size="sm" disabled>
+                  Conectar
+                </Button>
+              )}
+            </div>
+          </div>
+          {portalIsConfigured && !portalIsConnected && (
+            <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border/60">
+              <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleManualPortalConfirm}>
+                Concluí o login no portal
+              </Button>
+              {import.meta.env.DEV && (
+                <Button type="button" variant="secondary" size="sm" className="w-full sm:w-auto" onClick={handleDevMarkConnected}>
+                  Marcar como conectado (teste)
+                </Button>
+              )}
+            </div>
+          )}
+
+          {showRosterFlowPanel && (
+            <div className="mt-1 pt-3 border-t border-primary/20 space-y-3 rounded-xl bg-primary/5 p-4 border border-primary/15">
+              <p className="text-sm text-foreground font-medium break-words">
+                Faça login no portal LATAM e abra sua escala no iFlight.
+              </p>
+              <p className="text-xs text-muted-foreground">Aguardando confirmação da escala</p>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleOpenedIFlight}>
+                  Já abri minha escala
+                </Button>
+                <PdfImportDialog
+                  onImportComplete={handleImportComplete}
+                  trigger={
+                    <Button type="button" size="sm" className="w-full sm:w-auto">
+                      <Upload className="w-4 h-4 mr-2" />
+                      Importar CrewRosterReport
+                    </Button>
+                  }
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {iflightSource && !corporatePortalConfig.iflightEnabled && (
+        <div className="flex flex-col gap-2 p-4 rounded-xl border border-dashed border-border bg-muted/20 min-w-0">
+          <p className="font-medium text-foreground break-words">iFlight Crew System</p>
+          <p className="text-xs text-muted-foreground">
+            Módulo desabilitado. Defina VITE_IFLIGHT_PROVIDER_ENABLED=true no .env para exibir o fluxo completo.
+          </p>
+        </div>
+      )}
+
+      {iflightSource && corporatePortalConfig.iflightEnabled && (
+        <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-muted/30 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                <Plane className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-foreground break-words">iFlight Crew System</p>
+                <p className="text-xs text-muted-foreground break-words">Sistema operacional de escala</p>
+                {iflightStatus?.message && (
+                  <p className="text-xs text-muted-foreground mt-1 break-words">{iflightStatus.message}</p>
+                )}
+              </div>
+            </div>
+            <span className="text-xs font-medium px-3 py-1.5 rounded-lg bg-muted shrink-0 self-start">{iflightBadge}</span>
+          </div>
+          {!iflightBlocked && iflightModuleUrl && (
+            <Button type="button" variant="default" size="sm" className="w-full sm:w-auto" onClick={handleOpenIFlightModule}>
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Abrir módulo iFlight
+            </Button>
+          )}
+          {!iflightBlocked && !iflightModuleUrl && (
+            <p className="text-xs text-muted-foreground">Módulo preparado — integração futura de roster.</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="glass p-5 sm:p-6 min-w-0 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
@@ -165,9 +356,13 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             <Cloud className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-foreground break-words">Fontes de escala</h3>
+            <h3 className="font-semibold text-foreground break-words">
+              {dailyMode ? 'Atualizar sua escala' : 'Fontes de escala'}
+            </h3>
             <p className="text-sm text-muted-foreground break-words mt-0.5">
-              Escolha como deseja importar sua escala. O módulo iFlight depende do portal LATAM.
+              {dailyMode
+                ? 'Sua escala já está no EscalaX. Para uma nova versão, importe o CrewRosterReport. Portal e iFlight ficam abaixo apenas para reconfiguração.'
+                : 'Escolha como deseja importar sua escala. O módulo iFlight depende do portal LATAM.'}
             </p>
           </div>
         </div>
@@ -209,10 +404,21 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
               trigger={
                 <Button className="w-full sm:w-auto shrink-0">
                   <Upload className="w-4 h-4 mr-2" />
-                  Selecionar PDF
+                  Importar CrewRosterReport
                 </Button>
               }
             />
+          </div>
+        )}
+
+        {user && (
+          <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 min-w-0 space-y-2">
+            <p className="text-sm font-medium text-foreground">CrewRosterReport rápido</p>
+            <p className="text-xs text-muted-foreground">
+              Reprocessa o último PDF oficial já autorizado no armazenamento EscalaX (mesmo arquivo = “Escala já
+              importada”).
+            </p>
+            <CrewRosterQuickImportControls onImportDone={handleImportComplete} showRecentList />
           </div>
         )}
 
@@ -233,120 +439,16 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
           </Link>
         )}
 
-        {corporateSource && (
-          <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-background/60 min-w-0">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Lock className="w-5 h-5 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground break-words">Portal corporativo LATAM</p>
-                  {isLoginUrlConfigured() ? (
-                    <p className="text-xs text-muted-foreground break-words">
-                      Portal LATAM configurado. Toque em Conectar para abrir o portal corporativo; depois confirme o
-                      login no app se o retorno automático não ocorrer.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground break-words">{corporateSource.description}</p>
-                  )}
-                  {portalStatus?.message && (
-                    <p className="text-xs text-muted-foreground mt-1 break-words">{portalStatus.message}</p>
-                  )}
-                  {isTestMode() && corporatePortalConfig.isEnabled && (
-                    <p className="text-xs text-amber-700 dark:text-amber-500/90 mt-1 break-words">
-                      Sem URL no .env — adicione VITE_CORPORATE_PORTAL_LOGIN_URL e reinicie o servidor (npm run dev).
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
-                <span
-                  className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 ${
-                    portalIsConnected
-                      ? 'text-success bg-success/10'
-                      : portalStatus?.status === 'failed'
-                        ? 'text-destructive bg-destructive/10'
-                        : 'text-muted-foreground bg-muted'
-                  }`}
-                >
-                  {portalConnecting && <Loader2 className="w-3 h-3 inline animate-spin mr-1" />}
-                  {portalBadge}
-                </span>
-                {portalIsConfigured ? (
-                  portalIsConnected ? (
-                    <Button variant="outline" size="sm" onClick={handleDisconnectPortal} disabled={portalConnecting}>
-                      <Unlink className="w-4 h-4 mr-1" />
-                      Desconectar
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={handleConnectPortal} disabled={portalConnecting}>
-                      {portalConnecting ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      ) : (
-                        <Link2 className="w-4 h-4 mr-1" />
-                      )}
-                      Conectar
-                    </Button>
-                  )
-                ) : (
-                  <Button size="sm" disabled>
-                    Conectar
-                  </Button>
-                )}
-              </div>
-            </div>
-            {portalIsConfigured && !portalIsConnected && (
-              <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border/60">
-                <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleManualPortalConfirm}>
-                  Concluí o login no portal
-                </Button>
-                {import.meta.env.DEV && (
-                  <Button type="button" variant="secondary" size="sm" className="w-full sm:w-auto" onClick={handleDevMarkConnected}>
-                    Marcar como conectado (teste)
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {iflightSource && !corporatePortalConfig.iflightEnabled && (
-          <div className="flex flex-col gap-2 p-4 rounded-xl border border-dashed border-border bg-muted/20 min-w-0">
-            <p className="font-medium text-foreground break-words">iFlight Crew System</p>
-            <p className="text-xs text-muted-foreground">
-              Módulo desabilitado. Defina VITE_IFLIGHT_PROVIDER_ENABLED=true no .env para exibir o fluxo completo.
-            </p>
-          </div>
-        )}
-
-        {iflightSource && corporatePortalConfig.iflightEnabled && (
-          <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-muted/30 min-w-0">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                  <Plane className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground break-words">iFlight Crew System</p>
-                  <p className="text-xs text-muted-foreground break-words">Sistema operacional de escala</p>
-                  {iflightStatus?.message && (
-                    <p className="text-xs text-muted-foreground mt-1 break-words">{iflightStatus.message}</p>
-                  )}
-                </div>
-              </div>
-              <span className="text-xs font-medium px-3 py-1.5 rounded-lg bg-muted shrink-0 self-start">{iflightBadge}</span>
-            </div>
-            {!iflightBlocked && iflightModuleUrl && (
-              <Button type="button" variant="default" size="sm" className="w-full sm:w-auto" onClick={handleOpenIFlightModule}>
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Abrir módulo iFlight
-              </Button>
-            )}
-            {!iflightBlocked && !iflightModuleUrl && (
-              <p className="text-xs text-muted-foreground">Módulo preparado — integração futura de roster.</p>
-            )}
-          </div>
+        {dailyMode ? (
+          <details className="group rounded-xl border border-border/60 bg-muted/15 open:bg-muted/25 transition-colors">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden select-none">
+              <span>Integração corporativa (portal LATAM e iFlight)</span>
+              <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90 text-muted-foreground" />
+            </summary>
+            <div className="px-3 pb-4 pt-1 space-y-3 border-t border-border/50">{integrationSection}</div>
+          </details>
+        ) : (
+          integrationSection
         )}
       </div>
     </div>

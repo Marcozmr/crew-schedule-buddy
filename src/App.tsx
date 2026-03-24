@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { LaunchQueueHandler } from "@/components/roster/LaunchQueueHandler";
 import { getThemeByLocalTime } from "./lib/themeByTime";
 
 // Eager-load auth pages (first paint)
@@ -38,6 +39,7 @@ const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const CorporateAuthCallbackPage = lazy(() => import("./pages/CorporateAuthCallbackPage"));
+const ShareImportPlaceholderPage = lazy(() => import("./pages/ShareImportPlaceholderPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -213,6 +215,14 @@ const AppRoutes = () => (
         }
       />
       <Route path="/auth/corporate-callback" element={<CorporateAuthCallbackPage />} />
+      <Route
+        path="/share-import"
+        element={
+          <ProtectedRoute>
+            <ShareImportPlaceholderPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/support" element={<SupportPage />} />
@@ -240,6 +250,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <LaunchQueueHandler />
           <TooltipProvider>
             <Sonner />
             <PWAUpdatePrompt />

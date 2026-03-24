@@ -892,6 +892,7 @@ export type Database = {
           user_id: string
           connection_type: string
           connection_status: string
+          roster_connection_state: string
           connected_at: string | null
           last_checked_at: string | null
           last_successful_import_at: string | null
@@ -906,6 +907,7 @@ export type Database = {
           user_id: string
           connection_type: string
           connection_status?: string
+          roster_connection_state?: string
           connected_at?: string | null
           last_checked_at?: string | null
           last_successful_import_at?: string | null
@@ -920,6 +922,7 @@ export type Database = {
           user_id?: string
           connection_type?: string
           connection_status?: string
+          roster_connection_state?: string
           connected_at?: string | null
           last_checked_at?: string | null
           last_successful_import_at?: string | null
