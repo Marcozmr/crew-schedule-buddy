@@ -4,6 +4,7 @@
  */
 
 import type { FlightOperationalStatus } from "./operationalStatus";
+import type { OperationalCodeId } from "@/lib/roster/flight-role-labels";
 
 export type EnrichmentFallbackReason =
   | "NO_LIVE_DATA"
@@ -90,6 +91,8 @@ export interface FlightRaw {
   recordSource?: FlightRecordSource;
   /** Hora de apresentação ISO (report_time) — usada no card mobile */
   presentationTimeISO?: string | null;
+  /** Siglas operacionais extraídas da escala (CC, CCM, PS, OP, …) */
+  operationalCodes?: OperationalCodeId[];
 }
 
 export interface FlightDataSourceFlags {
@@ -133,6 +136,8 @@ export interface FlightNormalized {
   enrichmentFallback?: EnrichmentFallbackReason;
   /** Label legível do fallback (PT) */
   enrichmentFallbackLabel?: string;
+  /** Siglas operacionais deste trecho (escala importada) */
+  operationalCodes?: OperationalCodeId[];
 }
 
 export type FlightBoardData = {

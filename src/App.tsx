@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { lazy, Suspense, useEffect } from "react";
+import React, { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -8,7 +8,8 @@ import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { LaunchQueueHandler } from "@/components/roster/LaunchQueueHandler";
-import { getThemeByLocalTime } from "./lib/themeByTime";
+import { ThemeProvider } from "next-themes";
+import { UserThemeSync } from "@/components/UserThemeSync";
 
 // Eager-load auth pages (first paint)
 import LoginPage from "./pages/LoginPage";
@@ -241,32 +242,21 @@ const AppRoutes = () => (
 );
 
 const App = () => {
-  useEffect(() => {
-    const applyTheme = () => {
-      const theme = getThemeByLocalTime();
-      document.documentElement.classList.remove("light", "dark");
-      document.documentElement.classList.add(theme);
-    };
-
-    applyTheme();
-
-    const interval = window.setInterval(applyTheme, 60000);
-
-    return () => window.clearInterval(interval);
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <LaunchQueueHandler />
-          <TooltipProvider>
-            <Sonner />
-            <PWAUpdatePrompt />
-            <AppRoutes />
-          </TooltipProvider>
-        </AuthProvider>
-      </BrowserRouter>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="escalax-theme" disableTransitionOnChange>
+        <BrowserRouter>
+          <AuthProvider>
+            <UserThemeSync />
+            <LaunchQueueHandler />
+            <TooltipProvider>
+              <Sonner />
+              <PWAUpdatePrompt />
+              <AppRoutes />
+            </TooltipProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };

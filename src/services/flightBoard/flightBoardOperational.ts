@@ -9,6 +9,7 @@
  */
 
 import type { ScheduleEntry } from "@/hooks/useScheduleData";
+import { extractOperationalCodesFromScheduleEntry } from "@/lib/roster/flight-role-labels";
 import type { FlightRaw, FlightNormalized } from "./types";
 import { normalizeFlightData } from "./flightService";
 
@@ -160,6 +161,7 @@ export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
   const arrIso = `${date}T${arrTime.padStart(5, "0")}:00.000Z`;
   const carrier = inferCarrierCode(entry.flight_number, entry.airline);
   const presentationTimeISO = entry.report_time ? toIso(date, entry.report_time) : null;
+  const operationalCodes = extractOperationalCodesFromScheduleEntry(entry);
 
   return {
     id: entry.id,
@@ -187,6 +189,7 @@ export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
     status: "SCHEDULED",
     airportInfo: buildAirportContext(origin, destination),
     presentationTimeISO: presentationTimeISO ?? undefined,
+    operationalCodes: operationalCodes.length ? operationalCodes : undefined,
   };
 }
 
@@ -369,6 +372,7 @@ export function mergeEnrichmentIntoNormalized(
     if (!ex) {
       return {
         ...f,
+        operationalCodes: f.operationalCodes,
         liveTrackingAvailable: false,
         aggregateSource: "roster",
       };
@@ -383,6 +387,7 @@ export function mergeEnrichmentIntoNormalized(
         ex.tracking.longitude != null;
       return {
         ...f,
+        operationalCodes: f.operationalCodes,
         airportInfo: ex.airportInfo ?? f.airportInfo,
         tracking: ex.tracking ?? f.tracking,
         liveTrackingAvailable: hasLive,
@@ -397,6 +402,8 @@ export function mergeEnrichmentIntoNormalized(
 
     return {
       ...n,
+      operationalCodes:
+        f.operationalCodes && f.operationalCodes.length > 0 ? f.operationalCodes : n.operationalCodes,
       presentationTime: (n as { presentationTime?: string | null }).presentationTime ?? f.presentationTime,
       tracking: ex.tracking ?? n.tracking,
       airportInfo: ex.airportInfo ?? n.airportInfo,

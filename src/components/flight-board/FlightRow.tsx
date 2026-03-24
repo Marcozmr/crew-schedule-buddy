@@ -4,6 +4,7 @@ import { FlightStatusBadge } from "./FlightStatusBadge";
 import { FlightCountdown } from "./FlightCountdown";
 import type { FlightNormalized } from "@/services/flightBoard/types";
 import { cn } from "@/lib/utils";
+import { OperationalCodeBadges } from "./OperationalCodeBadges";
 
 interface FlightRowProps {
   flight: FlightNormalized;
@@ -62,10 +63,15 @@ export function FlightRow({
         />
       </div>
 
-      {/* 3. Rota */}
-      <p className="mt-2 truncate font-mono text-base font-semibold text-foreground">
-        {flight.origin} → {flight.destination}
-      </p>
+      {/* 3. Rota + siglas operacionais */}
+      <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <p className="truncate font-mono text-base font-semibold text-foreground">
+          {flight.origin} → {flight.destination}
+        </p>
+        {flight.operationalCodes && flight.operationalCodes.length > 0 && (
+          <OperationalCodeBadges codes={flight.operationalCodes} className="sm:justify-end" />
+        )}
+      </div>
 
       {/* 4. Horários */}
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">

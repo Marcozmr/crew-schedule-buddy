@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { AppLayout } from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +17,7 @@ import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const { setTheme } = useTheme();
   const [form, setForm] = useState({
     name: '', base_airport: '', crew_role: '', company_name: '', timezone: 'America/Sao_Paulo',
     notifications_enabled: true, theme: 'system',
@@ -26,6 +28,7 @@ export default function SettingsPage() {
     if (!user) return;
     supabase.from('user_settings').select('*').eq('user_id', user.id).maybeSingle().then(({ data }) => {
       if (data) {
+        const th = data.theme || 'system';
         setForm({
           name: profile?.name || '',
           base_airport: data.base_airport || '',
@@ -33,13 +36,14 @@ export default function SettingsPage() {
           company_name: data.company_name || '',
           timezone: data.timezone || 'America/Sao_Paulo',
           notifications_enabled: data.notifications_enabled ?? true,
-          theme: data.theme || 'system',
+          theme: th,
         });
+        if (th === 'light' || th === 'dark' || th === 'system') setTheme(th);
       } else {
         setForm((current) => ({ ...current, name: profile?.name || '', company_name: profile?.airline || '' }));
       }
     });
-  }, [user, profile]);
+  }, [user, profile, setTheme]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -115,7 +119,13 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs">Tema</Label>
-                <Select value={form.theme} onValueChange={(value) => setForm((current) => ({ ...current, theme: value }))}>
+                <Select
+                  value={form.theme}
+                  onValueChange={(value) => {
+                    setForm((current) => ({ ...current, theme: value }));
+                    setTheme(value);
+                  }}
+                >
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="system">Sistema</SelectItem>

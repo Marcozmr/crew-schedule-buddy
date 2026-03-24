@@ -21,6 +21,9 @@ export const ROSTER_UX_MESSAGES = {
   scaleAlreadyImported: 'Escala já importada (mesmo arquivo).',
   csvFallbackHint: 'Exportamos a escala em CSV (arquivo original não encontrável no armazenamento).',
   activeFileLabel: 'Arquivo ativo',
+  /** Reforço de produto: escala como cache no servidor */
+  scaleConnectedProductLine:
+    'A última escala válida fica guardada para você — use o app no dia a dia sem passar pelo portal.',
 } as const;
 
 /** Fluxo corporativo LATAM → SAB → iFlight → CrewRosterReport (sem retorno automático do portal). */

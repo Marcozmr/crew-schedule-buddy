@@ -34,7 +34,7 @@ export function RosterConnectionBanner() {
 
   return (
     <div
-      className="mb-6 rounded-2xl border border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.06] px-4 py-4 sm:px-5 sm:py-5 shadow-sm ring-1 ring-primary/10"
+      className="mb-6 rounded-2xl border border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.06] px-4 py-4 sm:px-5 sm:py-5 shadow-md ring-1 ring-primary/10"
       role="region"
       aria-label="Escala conectada"
     >
@@ -47,6 +47,9 @@ export function RosterConnectionBanner() {
             <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
               {ROSTER_UX_MESSAGES.scaleConnectedBannerTitle}
             </h2>
+            <p className="text-xs text-muted-foreground/95 leading-snug border-l-2 border-primary/30 pl-2.5">
+              {ROSTER_UX_MESSAGES.scaleConnectedProductLine}
+            </p>
             <p className="text-xs text-muted-foreground leading-snug">
               <span className="font-medium text-foreground/90">{ROSTER_UX_MESSAGES.connectionStatusField}:</span>{' '}
               {statusLine}

@@ -9,6 +9,7 @@ import {
 import type { FlightNormalized, FlightFilters, FlightRaw } from "@/services/flightBoard/types";
 import { FlightFilters as FlightFiltersComponent } from "./FlightFilters";
 import { FlightRow } from "./FlightRow";
+import { OperationalCodesLegend } from "./OperationalCodesLegend";
 import { FlightBoardSkeleton } from "./FlightBoardSkeleton";
 import { FlightBoardEmpty } from "./FlightBoardEmpty";
 import { FlightBoardError } from "./FlightBoardError";
@@ -691,6 +692,9 @@ export function FlightBoard({
               {enrichmentWarning}
             </p>
           )}
+          {filters.boardMode === "my_schedule" && list.length > 0 && (
+            <OperationalCodesLegend />
+          )}
           {list.map((flight, index) => (
             <motion.div
               key={flight.id}
@@ -789,6 +793,9 @@ export function FlightBoard({
             <p className="max-w-full break-words rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               {enrichmentWarning}
             </p>
+          )}
+          {filters.boardMode === "my_schedule" && list.length > 0 && (
+            <OperationalCodesLegend />
           )}
           {list.map((flight, index) => (
             <motion.div
