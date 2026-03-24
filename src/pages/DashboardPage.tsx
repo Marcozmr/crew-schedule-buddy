@@ -51,6 +51,7 @@ import { useScheduleData } from "../hooks/useScheduleData";
 import { useOperationalPreferences } from "../hooks/useOperationalPreferences";
 import { useOperationalClock } from "../hooks/useOperationalClock";
 import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
+import { CorporateRosterFlowBanner } from "@/components/roster/CorporateRosterFlowBanner";
 
 const statusCardMeta = {
   regular: {
@@ -240,6 +241,7 @@ export default function DashboardPage() {
       <div className="pb-10">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
+        <CorporateRosterFlowBanner />
         <RosterConnectionBanner />
 
         <motion.div {...fade(0)} className="mb-8 min-w-0">

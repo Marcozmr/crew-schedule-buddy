@@ -8,6 +8,7 @@ import {
   Upload,
   Cloud,
   ChevronRight,
+  ArrowLeft,
   Lock,
   Plane,
   Loader2,
@@ -23,12 +24,13 @@ import { SessionManager } from '../services/SessionManager';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDateTimeBR } from '@/lib/date-utils';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { corporatePortalConfig, isLoginUrlConfigured, isTestMode } from '@/lib/corporate-portal-config';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
+import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
 
 interface RosterSourcesCardProps {
   onImportComplete?: () => void;
@@ -43,6 +45,7 @@ const PORTAL_BADGE: Record<string, string> = {
 };
 
 export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { connection, activeRosterMeta, refresh: refreshConnection } = useUserRosterConnection();
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -126,7 +129,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const handleManualPortalConfirm = useCallback(() => {
     SessionManager.setCorporatePortalConnected();
     if (user) {
-      void UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected').then(() => {
+      void UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id).then(() => {
         emitRosterUpdated({
           userId: user.id,
           reason: 'active_roster_changed',
@@ -153,9 +156,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const handleDevMarkConnected = useCallback(() => {
     SessionManager.setCorporatePortalConnected();
     if (user) {
-      void UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected').then(() =>
-        void refreshConnection()
-      );
+      void UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id).then(() => void refreshConnection());
     }
     bump();
   }, [bump, user, refreshConnection]);
@@ -189,9 +190,15 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const flowState = connection?.roster_connection_state ?? 'idle';
   const showRosterFlowPanel =
     corporatePortalConfig.isEnabled &&
-    portalIsConnected &&
     !activeRosterMeta &&
-    flowState !== 'roster_connected';
+    flowState !== 'roster_connected' &&
+    (portalIsConnected ||
+      flowState === 'awaiting_iflight_roster' ||
+      flowState === 'iflight_accessed' ||
+      flowState === 'portal_connected');
+
+  const showAwaitingIFlightGuidance = showRosterFlowPanel && flowState !== 'iflight_accessed';
+  const showImportAfterIFlight = showRosterFlowPanel && flowState === 'iflight_accessed';
 
   const iflightBlocked = !portalIsConnected;
   const iflightBadge = !corporatePortalConfig.iflightEnabled
@@ -218,8 +225,8 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 <p className="font-medium text-foreground break-words">Portal corporativo LATAM</p>
                 {isLoginUrlConfigured() ? (
                   <p className="text-xs text-muted-foreground break-words">
-                    Portal LATAM configurado. Toque em Conectar para abrir o portal corporativo; depois confirme o
-                    login no app se o retorno automático não ocorrer.
+                    Toque em Conectar para abrir o portal. Depois volte ao EscalaX e siga os passos indicados — SAB,
+                    iFlight e importação do CrewRosterReport (o app não fecha o portal automaticamente).
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground break-words">{corporateSource.description}</p>
@@ -283,25 +290,70 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             </div>
           )}
 
-          {showRosterFlowPanel && (
+          {showAwaitingIFlightGuidance && (
             <div className="mt-1 pt-3 border-t border-primary/20 space-y-3 rounded-xl bg-primary/5 p-4 border border-primary/15">
-              <p className="text-sm text-foreground font-medium break-words">
-                Faça login no portal LATAM e abra sua escala no iFlight.
-              </p>
-              <p className="text-xs text-muted-foreground">Aguardando confirmação da escala</p>
-              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+              <p className="text-sm text-foreground font-semibold break-words">{CORPORATE_ROSTER_FLOW.awaitingTitle}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{CORPORATE_ROSTER_FLOW.awaitingLead}</p>
+              <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
+                <li>{CORPORATE_ROSTER_FLOW.awaitingStepLogin}</li>
+                <li>{CORPORATE_ROSTER_FLOW.awaitingStepSab}</li>
+                <li>{CORPORATE_ROSTER_FLOW.awaitingStepIFlight}</li>
+              </ul>
+              <p className="text-xs text-foreground/90 font-medium">{CORPORATE_ROSTER_FLOW.awaitingReturnHint}</p>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-1">
                 <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleOpenedIFlight}>
                   Já abri minha escala
                 </Button>
                 <PdfImportDialog
                   onImportComplete={handleImportComplete}
                   trigger={
-                    <Button type="button" size="sm" className="w-full sm:w-auto">
+                    <Button type="button" variant="secondary" size="sm" className="w-full sm:w-auto">
                       <Upload className="w-4 h-4 mr-2" />
                       Importar CrewRosterReport
                     </Button>
                   }
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full sm:w-auto text-muted-foreground"
+                  onClick={() => navigate('/home')}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  {CORPORATE_ROSTER_FLOW.voltar}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {showImportAfterIFlight && (
+            <div className="mt-1 pt-3 border-t border-primary/30 space-y-3 rounded-xl bg-primary/[0.07] p-4 border border-primary/20">
+              <p className="text-sm text-foreground font-semibold break-words">{CORPORATE_ROSTER_FLOW.importPrimaryTitle}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{CORPORATE_ROSTER_FLOW.importPrimaryLead}</p>
+              <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-3">
+                {CORPORATE_ROSTER_FLOW.importPrimaryReassurance}
+              </p>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                <PdfImportDialog
+                  onImportComplete={handleImportComplete}
+                  trigger={
+                    <Button type="button" size="sm" className="w-full sm:w-auto gap-1.5">
+                      <Upload className="w-4 h-4" />
+                      Importar CrewRosterReport
+                    </Button>
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full sm:w-auto text-muted-foreground"
+                  onClick={() => navigate('/home')}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  {CORPORATE_ROSTER_FLOW.voltar}
+                </Button>
               </div>
             </div>
           )}

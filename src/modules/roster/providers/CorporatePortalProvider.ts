@@ -28,7 +28,7 @@ export class CorporatePortalProvider extends RosterProvider {
     }
     void supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
-      await UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected');
+      await UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id);
       emitRosterUpdated({
         userId: user.id,
         reason: 'active_roster_changed',
@@ -92,7 +92,12 @@ export class CorporatePortalProvider extends RosterProvider {
           SessionManager.setCorporatePortalConnected();
           void supabase.auth.getUser().then(async ({ data: { user } }) => {
             if (user) {
-              await UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected');
+              await UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id);
+              emitRosterUpdated({
+                userId: user.id,
+                reason: 'active_roster_changed',
+                at: new Date().toISOString(),
+              });
             }
           });
           resolve({ success: true });

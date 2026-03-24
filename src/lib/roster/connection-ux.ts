@@ -14,6 +14,9 @@ export function getRosterBannerStatusLine(
   if (rosterState === 'iflight_accessed') {
     return 'Conclua com um CrewRosterReport para fixar a escala';
   }
+  if (rosterState === 'awaiting_iflight_roster') {
+    return 'Conclua no portal (SAB e iFlight) e importe o CrewRosterReport no EscalaX';
+  }
   if (rosterState === 'portal_connected') {
     return 'Portal reconhecido — importe o PDF oficial';
   }

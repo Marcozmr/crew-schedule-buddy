@@ -32,7 +32,7 @@ export default function CorporateAuthCallbackPage() {
     SessionManager.setCorporatePortalConnected();
     void supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
-        await UserRosterConnectionService.setRosterConnectionState(user.id, 'portal_connected');
+        await UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id);
         emitRosterUpdated({
           userId: user.id,
           reason: 'active_roster_changed',
@@ -46,7 +46,7 @@ export default function CorporateAuthCallbackPage() {
       window.setTimeout(() => window.close(), 900);
     } else {
       window.setTimeout(() => {
-        window.location.href = '/download-roster';
+        window.location.href = '/conectar-escala';
       }, 1200);
     }
   }, []);
@@ -59,7 +59,7 @@ export default function CorporateAuthCallbackPage() {
       window.setTimeout(() => window.close(), 2000);
     } else {
       window.setTimeout(() => {
-        window.location.href = '/download-roster';
+        window.location.href = '/conectar-escala';
       }, 2000);
     }
   }, []);

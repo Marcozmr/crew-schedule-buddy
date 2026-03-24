@@ -21,6 +21,7 @@ const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
 const HomePage = lazy(() => import("./pages/HomePage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const DownloadRosterPage = lazy(() => import("./pages/DownloadRosterPage"));
+const ConnectRosterPage = lazy(() => import("./pages/ConnectRosterPage"));
 const SchedulePage = lazy(() => import("./pages/SchedulePage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
@@ -107,6 +108,14 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute>
             <DownloadRosterPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/conectar-escala"
+        element={
+          <ProtectedRoute>
+            <ConnectRosterPage />
           </ProtectedRoute>
         }
       />

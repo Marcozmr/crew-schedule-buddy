@@ -10,10 +10,11 @@ export type UserRosterConnectionType =
   | 'manual_fallback'
   | 'future_enterprise_sync';
 
-/** Fluxo produto: portal (manual) → iFlight (manual) → PDF CrewRosterReport importado. */
+/** Fluxo produto: portal → SAB/iFlight (manual) → PDF CrewRosterReport importado. */
 export type RosterConnectionState =
   | 'idle'
   | 'portal_connected'
+  | 'awaiting_iflight_roster'
   | 'iflight_accessed'
   | 'roster_connected';
 
@@ -88,7 +89,12 @@ export const UserRosterConnectionService = {
     let connection_status: 'disconnected' | 'connecting' | 'connected' | 'error' =
       existing?.connection_status ?? 'disconnected';
     if (state === 'roster_connected') connection_status = 'connected';
-    else if (state === 'portal_connected' || state === 'iflight_accessed') connection_status = 'connecting';
+    else if (
+      state === 'portal_connected' ||
+      state === 'awaiting_iflight_roster' ||
+      state === 'iflight_accessed'
+    )
+      connection_status = 'connecting';
     else if (state === 'idle') connection_status = 'disconnected';
 
     const { error } = await supabase.from('user_roster_connection').upsert(
@@ -110,6 +116,14 @@ export const UserRosterConnectionService = {
     if (error) {
       console.warn('[UserRosterConnectionService] setRosterConnectionState', error.message);
     }
+  },
+
+  /**
+   * Após autenticação no portal reconhecida: próximo passo manual é SAB → iFlight → voltar ao app.
+   * (Fluxo lógico: portal_connected → awaiting_iflight_roster — aqui persistimos awaiting_iflight_roster.)
+   */
+  async advancePortalToAwaitingIFlight(userId: string): Promise<void> {
+    await UserRosterConnectionService.setRosterConnectionState(userId, 'awaiting_iflight_roster');
   },
 
   /** Após desconectar o portal na UI: volta ao idle se ainda não havia escala importada no fluxo. */

@@ -22,3 +22,22 @@ export const ROSTER_UX_MESSAGES = {
   csvFallbackHint: 'Exportamos a escala em CSV (arquivo original não encontrável no armazenamento).',
   activeFileLabel: 'Arquivo ativo',
 } as const;
+
+/** Fluxo corporativo LATAM → SAB → iFlight → CrewRosterReport (sem retorno automático do portal). */
+export const CORPORATE_ROSTER_FLOW = {
+  awaitingTitle: 'Faça login no portal, acesse o SAB e abra sua escala no iFlight.',
+  awaitingLead:
+    'O EscalaX não controla o login corporativo nem força o retorno do navegador ao app. Siga os passos abaixo e volte ao EscalaX para concluir — não dependemos de fechamento automático do portal.',
+  awaitingStepLogin: 'Faça login no portal LATAM (Google ou método da empresa, se solicitado).',
+  awaitingStepSab: 'Entre no SAB a partir do portal.',
+  awaitingStepIFlight: 'Abra sua escala no iFlight e visualize o roster.',
+  awaitingReturnHint:
+    'Depois de abrir sua escala, volte ao EscalaX para concluir a conexão.',
+  importPrimaryTitle: 'Importe o CrewRosterReport',
+  importPrimaryLead:
+    'Você já indicou que abriu sua escala no iFlight. Agora importe o PDF oficial (CrewRosterReport) para ativar a escala no EscalaX.',
+  importPrimaryReassurance:
+    'Após a primeira conexão, sua escala ficará disponível automaticamente nos próximos acessos.',
+  dashboardHintCta: 'Continuar conexão da escala',
+  voltar: 'Voltar',
+} as const;
