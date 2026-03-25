@@ -74,16 +74,21 @@ export function FeedbackFAB() {
         route: location.pathname,
       });
 
-      if (result.success && result.emailSent) {
-        toast.success('E-mail enviado com sucesso.');
+      if (result.outcome === 'email_sent') {
+        toast.success(result.userMessage);
         close();
         return;
       }
 
-      toast.error(result.stored ? 'Mensagem registrada, mas o e-mail não foi entregue.' : result.error || 'Erro ao enviar. Tente novamente.', {
-        description: result.technicalError || result.error,
-      });
-    } catch {
+      if (result.outcome === 'saved_email_failed' || result.outcome === 'saved_smtp_not_configured') {
+        toast(result.userMessage, { duration: 9000 });
+        close();
+        return;
+      }
+
+      toast.error(result.userMessage);
+    } catch (err) {
+      console.error('[FeedbackFAB] submitSupport', err);
       toast.error('Erro inesperado. Tente novamente.');
     } finally {
       setSending(false);

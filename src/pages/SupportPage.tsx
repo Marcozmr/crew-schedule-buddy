@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
-import { Mail, Send, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Mail, Send, Loader2, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,8 +16,8 @@ export default function SupportPage() {
   const [email, setEmail] = useState(profile?.email || '');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [status, setStatus] = useState<'idle' | 'success' | 'warning' | 'error'>('idle');
+  const [feedbackMsg, setFeedbackMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +25,7 @@ export default function SupportPage() {
 
     setSending(true);
     setStatus('idle');
-    setErrorMsg('');
+    setFeedbackMsg('');
 
     const result = await submitSupport({
       name,
@@ -38,18 +38,21 @@ export default function SupportPage() {
 
     setSending(false);
 
-    if (result.success && result.emailSent) {
+    if (result.outcome === 'email_sent') {
       setStatus('success');
+      setFeedbackMsg(result.userMessage);
       setMessage('');
       return;
     }
 
+    if (result.outcome === 'saved_email_failed' || result.outcome === 'saved_smtp_not_configured') {
+      setStatus('warning');
+      setFeedbackMsg(result.userMessage);
+      return;
+    }
+
     setStatus('error');
-    setErrorMsg(
-      result.stored
-        ? `Mensagem registrada, mas o envio do e-mail falhou. ${result.error || ''}`.trim()
-        : result.error || 'Erro ao enviar. Tente novamente.',
-    );
+    setFeedbackMsg(result.userMessage);
   };
 
   return (
@@ -91,14 +94,25 @@ export default function SupportPage() {
             </div>
 
             {status === 'success' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-sm text-success bg-success/10 p-3 rounded-xl">
-                <CheckCircle className="w-4 h-4" /> E-mail enviado com sucesso.
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-2 text-sm text-success bg-success/10 p-3 rounded-xl">
+                <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{feedbackMsg}</span>
+              </motion.div>
+            )}
+            {status === 'warning' && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-100 bg-amber-500/15 border border-amber-500/25 p-3 rounded-xl"
+              >
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{feedbackMsg}</span>
               </motion.div>
             )}
             {status === 'error' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-xl">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{errorMsg}</span>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-xl">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{feedbackMsg}</span>
               </motion.div>
             )}
 
@@ -126,11 +140,13 @@ export default function SupportPage() {
           </div>
         </motion.div>
 
-        <footer className="pt-6 text-center">
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} EscalaX</p>
-          <div className="flex justify-center gap-4 mt-2">
-            <Link to="/privacy" className="text-xs text-primary hover:underline">Privacidade</Link>
-            <Link to="/terms" className="text-xs text-primary hover:underline">Termos</Link>
+        <footer className="pt-6 text-center space-y-2">
+          <p className="text-xs text-muted-foreground">© 2026 EscalaX · Todos os direitos reservados</p>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+            <Link to="/legal/terms" className="text-xs text-primary hover:underline">Termos</Link>
+            <Link to="/legal/privacy" className="text-xs text-primary hover:underline">Privacidade</Link>
+            <Link to="/legal/lgpd" className="text-xs text-primary hover:underline">LGPD</Link>
+            <Link to="/about" className="text-xs text-primary hover:underline">Sobre</Link>
           </div>
         </footer>
       </div>

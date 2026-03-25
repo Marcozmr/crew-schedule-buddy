@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Settings, Save, LogOut } from 'lucide-react';
+import { Settings, Save, LogOut, ChevronRight, FileText, HelpCircle, Info, Scale, Shield } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { APP_VERSION } from '@/components/legal/LegalDocument';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
 
 export default function SettingsPage() {
@@ -79,6 +80,36 @@ export default function SettingsPage() {
         </motion.h1>
 
         <RosterSourcesCard />
+
+        <div className="glass p-5 sm:p-6 min-w-0">
+          <h3 className="font-semibold text-foreground mb-1">Sistema</h3>
+          <p className="text-xs text-muted-foreground mb-4">Informações legais e suporte</p>
+          <div className="divide-y divide-border rounded-xl border border-border/60 overflow-hidden bg-secondary/20">
+            {[
+              { to: '/about', label: 'Sobre EscalaX', icon: Info },
+              { to: '/legal/terms', label: 'Termos de Uso', icon: FileText },
+              { to: '/legal/privacy', label: 'Política de Privacidade', icon: Shield },
+              { to: '/legal/lgpd', label: 'Política LGPD', icon: Scale },
+              { to: '/support', label: 'Suporte', icon: HelpCircle },
+            ].map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className="flex items-center justify-between gap-3 px-4 py-3.5 min-h-[48px] hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
+              >
+                <span className="flex items-center gap-3 min-w-0">
+                  <Icon className="w-4 h-4 text-primary shrink-0" aria-hidden />
+                  <span className="text-sm text-foreground break-words">{label}</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
+              </Link>
+            ))}
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5 min-h-[48px]">
+              <span className="text-sm text-foreground">Versão do app</span>
+              <span className="text-sm text-muted-foreground tabular-nums">{APP_VERSION}</span>
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
           <div className="glass p-5 sm:p-6 min-w-0">

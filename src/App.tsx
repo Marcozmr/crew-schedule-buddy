@@ -37,8 +37,8 @@ const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UploadPage = lazy(() => import("./pages/UploadPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
-const TermsPage = lazy(() => import("./pages/TermsPage"));
+const LegalPage = lazy(() => import("./pages/LegalPage"));
+const AboutPage = lazy(() => import("./pages/AboutPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const CorporateAuthCallbackPage = lazy(() => import("./pages/CorporateAuthCallbackPage"));
 const ShareImportPlaceholderPage = lazy(() => import("./pages/ShareImportPlaceholderPage"));
@@ -233,8 +233,11 @@ const AppRoutes = () => (
           </ProtectedRoute>
         }
       />
-      <Route path="/privacy" element={<PrivacyPage />} />
-      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
+      <Route path="/privacy" element={<Navigate to="/legal/privacy" replace />} />
+      <Route path="/legal" element={<Navigate to="/legal/lgpd" replace />} />
+      <Route path="/legal/:document" element={<LegalPage />} />
+      <Route path="/about" element={<AboutPage />} />
       <Route path="/support" element={<SupportPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

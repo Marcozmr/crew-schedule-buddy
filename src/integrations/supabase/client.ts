@@ -2,13 +2,23 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+/** Anon/public key — aceita nome usado no Dashboard (anon) ou publishable do .env.example */
+const SUPABASE_ANON_OR_PUBLISHABLE =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ||
+  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
+  '';
+
+if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_OR_PUBLISHABLE)) {
+  console.warn(
+    '[EscalaX] Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ou VITE_SUPABASE_PUBLISHABLE_KEY) no .env.local — Edge Functions e auth não funcionarão sem isso.',
+  );
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient<Database>(SUPABASE_URL ?? '', SUPABASE_ANON_OR_PUBLISHABLE, {
   auth: {
     storage: localStorage,
     persistSession: true,
