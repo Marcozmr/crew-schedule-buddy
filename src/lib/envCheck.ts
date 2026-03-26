@@ -27,4 +27,5 @@ export function logEnvValidationOnBoot(): void {
       '[EscalaX] VITE_SUPABASE_ANON_KEY (ou VITE_SUPABASE_PUBLISHABLE_KEY) está ausente. Defina no painel de build. A app inicia com chave de fallback até corrigir.',
     );
   }
+  console.log('[EscalaX boot] env ok');
 }

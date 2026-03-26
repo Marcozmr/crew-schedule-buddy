@@ -61,11 +61,19 @@ const Loading = () => (
   </div>
 );
 
+/** Log de router após BrowserRouter montar (evita referência órfã — BootTrace tem de existir). */
+function BootTrace() {
+  useEffect(() => {
+    console.log("[EscalaX boot] router init ok");
+  }, []);
+  return null;
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
 
   if (loading) return <Loading />;
-  if (!session) return <Navigate to="/" replace />;
+  if (!session) return <Navigate to="/login" replace />;
 
   return <>{children}</>;
 }
@@ -245,6 +253,9 @@ const AppRoutes = () => (
 );
 
 const App = () => {
+  useEffect(() => {
+    console.log("[EscalaX boot] app mount ok");
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="escalax-theme" disableTransitionOnChange>

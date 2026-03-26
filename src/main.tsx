@@ -3,7 +3,7 @@ import { registerBootErrorListeners, unregisterBootServiceWorkers } from "./lib/
 import { logEnvValidationOnBoot } from "./lib/envCheck";
 
 registerBootErrorListeners();
-console.log("EscalaX boot start");
+console.log("[EscalaX boot] boot start");
 logEnvValidationOnBoot();
 
 void (async () => {

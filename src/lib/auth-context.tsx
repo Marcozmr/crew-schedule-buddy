@@ -231,6 +231,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.id);
   };
 
+  useEffect(() => {
+    console.log('[EscalaX boot] auth init ok');
+  }, []);
+
   return (
     <AuthContext.Provider value={{ session, user, profile, loading, providerToken, signUp, signIn, signOut, refreshProfile }}>
       {children}
