@@ -3,7 +3,7 @@ import { CalendarOff, Plane } from "lucide-react";
 interface FlightBoardNeutralProps {
   title: string;
   subtitle?: string;
-  /** Quando o dia não tem voo mas há contexto de base/aeroporto */
+  /** Quando o dia não tem voo mas há contexto de aeroporto (filtro) / minha base (escala) */
   airportHint?: string;
   variant?:
     | "no_flight_day"

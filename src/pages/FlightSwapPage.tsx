@@ -243,7 +243,7 @@ export default function FlightSwapPage() {
       {userBase && (
         <div className="flex items-center gap-1.5 mb-3 text-xs">
           <MapPin className="w-3.5 h-3.5 text-primary" />
-          <span className="text-muted-foreground">Sua base:</span>
+          <span className="text-muted-foreground">Minha base:</span>
           <Badge variant="secondary" className="text-xs">{userBase}</Badge>
         </div>
       )}

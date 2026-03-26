@@ -144,7 +144,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
             <NumericInput value={postFlightMinutes} onValueChange={setPostFlightMinutes} min={0} max={120} decimals={0} blurDefault={30} />
           </div>
           <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Base</Label>
+            <Label className="text-[11px] text-muted-foreground">Minha base</Label>
             <Input value={baseAirport} onChange={(event) => setBaseAirport(event.target.value.toUpperCase())} maxLength={4} />
           </div>
           <div className="space-y-1.5 min-w-0">

@@ -1,5 +1,5 @@
 /**
- * Detecção da base operacional a partir da escala importada.
+ * Detecção da minha base (contratual) a partir da escala importada.
  * Heurística conservadora: sem chute fraco (retorna null).
  */
 

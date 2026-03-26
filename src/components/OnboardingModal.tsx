@@ -10,7 +10,14 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from 'next-themes';
 import { Plane, User, Settings, Upload, Bell, CheckCircle2, ChevronRight, ChevronLeft, X } from 'lucide-react';
+import { applyResolvedThemePreference, normalizeThemePreference } from '@/lib/themeByTime';
+import {
+  getTimezoneLabel,
+  isKnownOperationalTimezone,
+  OPERATIONAL_TIMEZONE_OPTIONS,
+} from '@/lib/timezone-options';
 
 const SESSION_DISMISSED_KEY = 'escalax_onboarding_dismissed';
 
@@ -48,6 +55,7 @@ interface Props {
 }
 
 export function OnboardingModal({ open, onClose }: Props) {
+  const { setTheme } = useTheme();
   const { user, profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
@@ -56,7 +64,7 @@ export function OnboardingModal({ open, onClose }: Props) {
     name: '', airline: '', crewRole: '', baseAirport: '', registration: '',
   });
   const [prefsForm, setPrefsForm] = useState({
-    timezone: 'America/Sao_Paulo', notificationsEnabled: true, theme: 'system',
+    timezone: 'America/Sao_Paulo', notificationsEnabled: true, theme: 'auto',
   });
   const [notifPrefs, setNotifPrefs] = useState({
     push: true, dutyAlerts: true, scheduleAlerts: true, weeklySummary: true, activityReminder: true,
@@ -181,7 +189,7 @@ export function OnboardingModal({ open, onClose }: Props) {
                           <SelectContent><SelectItem value="Comandante">Comandante</SelectItem><SelectItem value="Copiloto">Copiloto</SelectItem><SelectItem value="Comissário">Comissário(a)</SelectItem><SelectItem value="Outro">Outro</SelectItem></SelectContent>
                         </Select>
                       </div>
-                      <div><Label className="text-xs text-muted-foreground">Base operacional</Label><Input value={profileForm.baseAirport} onChange={e => setProfileForm(f => ({ ...f, baseAirport: e.target.value.toUpperCase() }))} placeholder="GRU, CGH..." maxLength={4} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Minha base</Label><Input value={profileForm.baseAirport} onChange={e => setProfileForm(f => ({ ...f, baseAirport: e.target.value.toUpperCase() }))} placeholder="GRU, CGH..." maxLength={4} /></div>
                       <div><Label className="text-xs text-muted-foreground">Matrícula <span className="opacity-50">(opcional)</span></Label><Input value={profileForm.registration} onChange={e => setProfileForm(f => ({ ...f, registration: e.target.value }))} placeholder="12345" /></div>
                     </div>
                   </div>
@@ -198,16 +206,53 @@ export function OnboardingModal({ open, onClose }: Props) {
                     <div className="space-y-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Fuso horário</Label>
-                        <Select value={prefsForm.timezone} onValueChange={v => setPrefsForm(f => ({ ...f, timezone: v }))}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="America/Sao_Paulo">Brasília (BRT)</SelectItem><SelectItem value="America/Manaus">Manaus (AMT)</SelectItem><SelectItem value="America/Belem">Belém (BRT)</SelectItem><SelectItem value="America/Cuiaba">Cuiabá (AMT)</SelectItem><SelectItem value="America/Rio_Branco">Rio Branco (ACT)</SelectItem></SelectContent>
+                        <Select
+                          value={prefsForm.timezone}
+                          onValueChange={(v) => {
+                            setPrefsForm((f) => {
+                              const next = { ...f, timezone: v };
+                              if (next.theme === 'auto') {
+                                queueMicrotask(() => applyResolvedThemePreference('auto', next.timezone, setTheme));
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Fuso horário" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {OPERATIONAL_TIMEZONE_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                            {prefsForm.timezone.trim() !== '' && !isKnownOperationalTimezone(prefsForm.timezone) && (
+                              <SelectItem value={prefsForm.timezone}>{getTimezoneLabel(prefsForm.timezone)}</SelectItem>
+                            )}
+                          </SelectContent>
                         </Select>
                       </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">Tema</Label>
-                        <Select value={prefsForm.theme} onValueChange={v => setPrefsForm(f => ({ ...f, theme: v }))}>
+                        <Select
+                          value={prefsForm.theme}
+                          onValueChange={(v) => {
+                            setPrefsForm((f) => {
+                              const next = { ...f, theme: v };
+                              queueMicrotask(() =>
+                                applyResolvedThemePreference(normalizeThemePreference(next.theme), next.timezone, setTheme),
+                              );
+                              return next;
+                            });
+                          }}
+                        >
                           <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="system">Automático</SelectItem><SelectItem value="light">Claro</SelectItem><SelectItem value="dark">Escuro</SelectItem></SelectContent>
+                          <SelectContent>
+                            <SelectItem value="auto">Automático (horário)</SelectItem>
+                            <SelectItem value="light">Claro</SelectItem>
+                            <SelectItem value="dark">Escuro</SelectItem>
+                          </SelectContent>
                         </Select>
                       </div>
                       <div className="flex items-center justify-between py-1"><Label>Notificações</Label><Switch checked={prefsForm.notificationsEnabled} onCheckedChange={v => setPrefsForm(f => ({ ...f, notificationsEnabled: v }))} /></div>

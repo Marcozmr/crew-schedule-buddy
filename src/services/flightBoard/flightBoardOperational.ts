@@ -40,7 +40,7 @@ export type FlightBoardUiKind =
 
 export interface FlightBoardResolvedState {
   uiKind: FlightBoardUiKind;
-  /** Voos normalizados a partir da escala (base) */
+  /** Voos normalizados a partir da escala importada */
   departures: FlightNormalized[];
   arrivals: FlightNormalized[];
   classification: DayClassification;
@@ -354,7 +354,7 @@ export function resolveFlightBoardState(args: {
         : "Nenhuma operação neste aeroporto nesta data",
       neutralDetail: allBases
         ? "A escala do dia não tem trechos com aeroportos reconhecidos, ou só há atividades sem voo (folga, reserva etc.)."
-        : "Sua escala tem voos em outras bases nesta data, ou apenas atividades sem trecho neste aeroporto.",
+        : "Sua escala tem voos em outros aeroportos nesta data, ou apenas atividades sem trecho neste aeroporto.",
     };
   }
 
@@ -428,7 +428,7 @@ export function mergeEnrichmentIntoNormalized(
 }
 
 /**
- * Modo "Base operacional": lista derivada diretamente do payload da edge (mesmos IDs da escala no servidor).
+ * Modo Aeroporto (airport_base): lista derivada diretamente do payload da edge (mesmos IDs da escala no servidor).
  */
 export function buildNormalizedListsFromEnrichmentRaw(
   raw: FlightRaw[],

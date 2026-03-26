@@ -88,6 +88,86 @@ function absoluteMinutes(date: string, time: string | null | undefined, refDate:
   return dayOffset * 1440 + mins;
 }
 
+/** Minutos após último block-on (chegada) contados na jornada. */
+const POST_BLOCK_DUTY_MIN = 30;
+
+/**
+ * Instante local da escala (date + HH:mm). Usado para jornada absoluta com virada de dia.
+ */
+function parseLocalDateTimeToMs(dateStr: string, time: string | null | undefined): number | null {
+  if (!time?.trim()) return null;
+  const t = time.trim();
+  if (!/^\d{1,2}:\d{2}$/.test(t)) return null;
+  const d = new Date(`${dateStr}T${t}:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getTime();
+}
+
+/** Quando o roster repete o mesmo `date` em todas as pernas mas a chegada é no dia seguinte, avança até o fim ser ≥ início. */
+function advanceEndUntilAfterStartMs(endMs: number, startMs: number): number {
+  let t = endMs;
+  let guard = 0;
+  while (t < startMs && guard++ < 5) {
+    t += 86400000;
+  }
+  return t;
+}
+
+function fallbackDutyMinutesFromLegs(legs: ScheduleEntry[]): number {
+  const flightsOnly = legs.filter((l) => l.is_flight);
+  if (flightsOnly.length === 1 && flightsOnly[0].duty_hours != null && flightsOnly[0].duty_hours > 0) {
+    return flightsOnly[0].duty_hours * 60;
+  }
+  return 0;
+}
+
+/**
+ * Jornada = apresentação (ou primeiro horário operacional) até fim da sequência:
+ * última chegada (block-on), com +30 min pós block-on; se houver debrief depois disso, usa o mais tardio.
+ * Trata virada de dia quando `arrival_time` < `report_time` no mesmo `date` ou quando datas estão desalinhadas.
+ */
+function computeTotalDutyMinutes(legs: ScheduleEntry[]): number {
+  const first = legs[0];
+  const dutyStartTime = first.report_time || first.departure_time;
+  if (!dutyStartTime) {
+    return fallbackDutyMinutesFromLegs(legs);
+  }
+
+  const startMs = parseLocalDateTimeToMs(first.date, dutyStartTime);
+  if (startMs == null) {
+    return fallbackDutyMinutesFromLegs(legs);
+  }
+
+  const lastFlight = [...legs].reverse().find((l) => l.is_flight);
+  const endLeg = lastFlight ?? legs[legs.length - 1];
+  const endTime = endLeg.arrival_time ?? endLeg.debrief_time;
+  if (!endTime) {
+    return fallbackDutyMinutesFromLegs(legs);
+  }
+
+  let endMs = parseLocalDateTimeToMs(endLeg.date, endTime);
+  if (endMs == null && endLeg.sort_datetime) {
+    const p = Date.parse(endLeg.sort_datetime);
+    if (!Number.isNaN(p)) endMs = p;
+  }
+  if (endMs == null) {
+    return fallbackDutyMinutesFromLegs(legs);
+  }
+
+  endMs = advanceEndUntilAfterStartMs(endMs, startMs);
+
+  if (lastFlight?.debrief_time) {
+    const debMsRaw = parseLocalDateTimeToMs(lastFlight.date, lastFlight.debrief_time);
+    if (debMsRaw != null) {
+      const debMs = advanceEndUntilAfterStartMs(debMsRaw, startMs);
+      endMs = Math.max(endMs, debMs);
+    }
+  }
+
+  const spanMin = (endMs - startMs) / 60000;
+  return Math.max(0, spanMin + POST_BLOCK_DUTY_MIN);
+}
+
 // ── Chaining validation ──
 
 function getConnectionGapMinutes(
@@ -337,22 +417,8 @@ function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
   const dutyStartTime = first.report_time || first.departure_time;
   const endLeg = lastFlight ?? last;
   const endTime = endLeg.arrival_time;
-  const endDate = endLeg.date || first.date;
 
-  const startAbs = dateTimeToAbsMin(first.date, dutyStartTime);
-  const endAbs = dateTimeToAbsMin(endDate, endTime);
-
-  let rawDutyMins: number;
-  if (startAbs >= 0 && endAbs >= 0 && endAbs >= startAbs) {
-    rawDutyMins = endAbs - startAbs + 30;
-  } else {
-    const flightsOnly = legs.filter(l => l.is_flight);
-    if (flightsOnly.length === 1 && flightsOnly[0].duty_hours != null && flightsOnly[0].duty_hours > 0) {
-      rawDutyMins = flightsOnly[0].duty_hours * 60;
-    } else {
-      rawDutyMins = 0;
-    }
-  }
+  const rawDutyMins = computeTotalDutyMinutes(legs);
   const totalDutyHours = Math.round((rawDutyMins / 60) * 100) / 100;
 
   const crossesMidnight = legs.some(l => l.crosses_midnight)

@@ -11,12 +11,13 @@ import {
   BedDouble,
   Settings,
   Gauge,
+  Radar,
 } from "lucide-react";
 
 import { AppLayout } from "../components/AppLayout";
-import { RouteErrorBoundary } from "../components/RouteErrorBoundary";
-import { FlightBoard } from "../components/flight-board";
 import { PdfImportDialog } from "../components/PdfImportDialog";
+import { DashboardPersonalStrip } from "../components/dashboard/DashboardPersonalStrip";
+import { DashboardNextPresentationCard } from "../components/dashboard/DashboardNextPresentationCard";
 import {
   OnboardingModal,
   useOnboardingModal,
@@ -237,6 +238,18 @@ export default function DashboardPage() {
       ? `Excedente de ${formatHoursMinutes(Math.abs(monthlyBalanceHours))}.`
       : `Restam ${formatHoursMinutes(Math.max(monthlyBalanceHours, 0))}.`;
 
+  const operationalDateLabel = useMemo(
+    () =>
+      now.toLocaleDateString("pt-BR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: safeTz,
+      }),
+    [now, safeTz]
+  );
+
   const dutyStatusByKey = useMemo(
     () =>
       new Map(
@@ -256,35 +269,35 @@ export default function DashboardPage() {
         <CorporateRosterFlowBanner />
         <RosterConnectionBanner />
 
-        <motion.div {...fade(0)} className="mb-8 min-w-0">
-          <h1 className="break-words text-xl font-semibold text-foreground lg:text-2xl">
-            {greeting()},{" "}
-            <span className="text-primary">
-              {profile?.name?.split(" ")[0] || "Tripulante"}
-            </span>
-          </h1>
+        <motion.div {...fade(0)} className="mb-6 min-w-0 space-y-4">
+          <div>
+            <h1 className="break-words text-xl font-semibold text-foreground lg:text-2xl">
+              {greeting()},{" "}
+              <span className="text-primary">
+                {profile?.name?.split(" ")[0] || "Tripulante"}
+              </span>
+            </h1>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Seu dia operacional na escala importada
+            </p>
+          </div>
 
-          <p className="mt-1 break-words text-sm text-muted-foreground">
-            {now.toLocaleDateString("pt-BR", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-              timeZone: safeTz,
-            })}
-          </p>
-        </motion.div>
+          <DashboardPersonalStrip
+            operationalDateIso={todayStr}
+            dateLabel={operationalDateLabel}
+            homeBase={homeBase}
+            trailing={
+              dashboardRosterSource?.sourceLabel ? (
+                <p className="max-w-[220px] text-[10px] text-muted-foreground sm:max-w-xs">
+                  Escala: {dashboardRosterSource.sourceLabel}
+                </p>
+              ) : null
+            }
+          />
 
-        <motion.div {...fade(0.03)} className="mb-6">
-          <RouteErrorBoundary scope="Flight Board Pro">
-            <FlightBoard
-              schedule={schedule}
-              scheduleLoading={loading}
-              operationalTodayIso={todayStr}
-              operationalTimezone={safeTz}
-              scheduleSourceLabel={dashboardRosterSource?.sourceLabel}
-            />
-          </RouteErrorBoundary>
+          {!loading && (
+            <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
+          )}
         </motion.div>
 
         {loading && (
@@ -368,13 +381,19 @@ export default function DashboardPage() {
                 Comece agora
               </h2>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                 {[
                   {
                     title: "Importar escala",
                     desc: "Envie seu PDF",
                     icon: Upload,
                     action: "import",
+                  },
+                  {
+                    title: "Pro Board",
+                    desc: "Consulta aeroporto e ao vivo",
+                    icon: Radar,
+                    path: "/pro-board",
                   },
                   {
                     title: "Calcular jornada",
@@ -571,7 +590,7 @@ export default function DashboardPage() {
             <motion.div {...fade(0.1)}>
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-sm font-semibold text-foreground">
-                  Operações de hoje
+                  Meu dia operacional
                 </h2>
 
                 <PdfImportDialog
@@ -640,6 +659,12 @@ export default function DashboardPage() {
               className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
             >
               {[
+                {
+                  label: "Pro Board",
+                  path: "/pro-board",
+                  icon: Radar,
+                  desc: "Consulta aeroporto e voos ao vivo",
+                },
                 {
                   label: "Calendário da escala",
                   path: "/schedule",

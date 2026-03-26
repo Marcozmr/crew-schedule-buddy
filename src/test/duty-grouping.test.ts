@@ -143,4 +143,50 @@ describe('duty grouping', () => {
     expect(ordered[0].legs[0].departure).toBe('BSB');
     expect(ordered[0].homeBasePriority).toBe(true);
   });
+
+  it('jornada multiperna não fica 0min quando a chegada final é madrugada no mesmo date do roster (GRU→…→GRU)', () => {
+    const apr = makeFlight({
+      id: 'apr',
+      date: '2026-03-20',
+      flight_number: 'APR',
+      departure: 'GRU',
+      arrival: 'GRU',
+      departure_time: '22:43',
+      arrival_time: '23:00',
+      is_flight: false,
+      activity_type: 'APR',
+      report_time: '22:43',
+      duty_hours: null,
+      flight_hours: null,
+    });
+    const leg1 = makeFlight({
+      id: 'l1',
+      date: '2026-03-20',
+      flight_number: 'LA1',
+      departure: 'GRU',
+      arrival: 'SSA',
+      departure_time: '23:50',
+      arrival_time: '02:10',
+      report_time: null,
+      crosses_midnight: true,
+      flight_hours: 2.3,
+    });
+    const leg2 = makeFlight({
+      id: 'l2',
+      date: '2026-03-20',
+      flight_number: 'LA2',
+      departure: 'SSA',
+      arrival: 'GRU',
+      departure_time: '03:40',
+      arrival_time: '05:25',
+      report_time: null,
+      crosses_midnight: true,
+      flight_hours: 2.9,
+    });
+
+    const duties = groupIntoDutyPeriods([leg2, leg1, apr]);
+    expect(duties).toHaveLength(1);
+    expect(duties[0].totalDutyHours).toBeGreaterThan(0);
+    expect(duties[0].totalDutyHours).toBeGreaterThan(5);
+  });
 });

@@ -20,6 +20,7 @@ const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
 const HomePage = lazy(() => import("./pages/HomePage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const ProBoardPage = lazy(() => import("./pages/ProBoardPage"));
 const DownloadRosterPage = lazy(() => import("./pages/DownloadRosterPage"));
 const ConnectRosterPage = lazy(() => import("./pages/ConnectRosterPage"));
 const SchedulePage = lazy(() => import("./pages/SchedulePage"));
@@ -108,6 +109,16 @@ const AppRoutes = () => (
           <ProtectedRoute>
             <RouteErrorBoundary scope="Dashboard">
               <DashboardPage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pro-board"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Pro Board">
+              <ProBoardPage />
             </RouteErrorBoundary>
           </ProtectedRoute>
         }
@@ -258,7 +269,7 @@ const App = () => {
   }, []);
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="escalax-theme" disableTransitionOnChange>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="escalax-theme" disableTransitionOnChange>
         <BrowserRouter>
           <BootTrace />
           <AuthProvider>

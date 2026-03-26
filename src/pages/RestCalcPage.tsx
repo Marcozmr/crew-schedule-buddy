@@ -114,7 +114,7 @@ export default function RestCalcPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-[11px] text-muted-foreground">Base</Label>
+                <Label className="text-[11px] text-muted-foreground">Minha base</Label>
                 <Input value={baseAirport} onChange={(event) => setBaseAirport(event.target.value.toUpperCase())} maxLength={4} />
               </div>
               <div className="space-y-1.5">

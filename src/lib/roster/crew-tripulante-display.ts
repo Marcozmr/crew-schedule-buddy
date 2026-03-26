@@ -1,10 +1,10 @@
 /**
- * Camada de apresentação para o tripulante — sem siglas cruas (OP/PS/CC) na UI final.
- * Códigos técnicos permanecem em `operation_type` / `crew_role` no banco.
+ * Camada de apresentação para o tripulante — rótulos amigáveis + siglas oficiais do roster.
  */
 
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
 import type { CrewSituationDisplay } from '@/services/flightBoard/types';
+import { buildCrewAbbrevPairFromLeg } from '@/lib/roster/crew-display-abbrev';
 import { cn } from '@/lib/utils';
 
 const BADGE_BASE = 'text-[10px] font-medium px-2 py-0.5 rounded-md border whitespace-nowrap';
@@ -58,10 +58,13 @@ export function crewRoleBadgeClass(): string {
 export function buildCrewSituationDisplayFromEntry(entry: ScheduleEntry): CrewSituationDisplay | null {
   if (!entry.is_flight) return null;
   const trip = getTripStatusUserFriendly(entry.operation_type);
+  const pair = buildCrewAbbrevPairFromLeg(entry);
   return {
     tripStatusLabel: trip.label,
     tripStatusVariant: trip.variant,
     roleLabel: getCrewRoleUserFriendly(entry.crew_role),
     minimizeRole: shouldMinimizeRoleForExtraRemunerado(entry.operation_type),
+    tripStatusSigla: pair.situation,
+    roleSigla: pair.role,
   };
 }

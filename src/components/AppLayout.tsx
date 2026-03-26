@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, Home, HelpCircle } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, Home, HelpCircle, Radar } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,7 +10,8 @@ import { ConnectedRosterLifecycle } from '@/components/roster/ConnectedRosterLif
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 const navItems = [
-  { path: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/pro-board', label: 'Pro Board', icon: Radar },
   { path: '/schedule', label: 'Calendário da escala', icon: Calendar },
   { path: '/duty-calc', label: 'Calcular jornada', icon: Clock },
   { path: '/rest-calc', label: 'Calcular descanso', icon: BedDouble },

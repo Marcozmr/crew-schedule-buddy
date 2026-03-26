@@ -15,6 +15,15 @@ import { APP_VERSION } from '@/components/legal/LegalDocument';
 import { motion } from 'framer-motion';
 import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
 import { dispatchOperationalPreferencesChanged } from '@/lib/events/operational-preferences-events';
+import {
+  applyResolvedThemePreference,
+  normalizeThemePreference,
+} from '@/lib/themeByTime';
+import {
+  getTimezoneLabel,
+  isKnownOperationalTimezone,
+  OPERATIONAL_TIMEZONE_OPTIONS,
+} from '@/lib/timezone-options';
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
@@ -22,7 +31,7 @@ export default function SettingsPage() {
   const { setTheme } = useTheme();
   const [form, setForm] = useState({
     name: '', base_airport: '', crew_role: '', company_name: '', timezone: 'America/Sao_Paulo',
-    notifications_enabled: true, theme: 'system',
+    notifications_enabled: true, theme: 'auto',
   });
   const [saving, setSaving] = useState(false);
 
@@ -30,7 +39,7 @@ export default function SettingsPage() {
     if (!user) return;
     supabase.from('user_settings').select('*').eq('user_id', user.id).maybeSingle().then(({ data }) => {
       if (data) {
-        const th = data.theme || 'system';
+        const th = normalizeThemePreference(data.theme);
         setForm({
           name: profile?.name || '',
           base_airport: data.base_airport || '',
@@ -40,7 +49,7 @@ export default function SettingsPage() {
           notifications_enabled: data.notifications_enabled ?? true,
           theme: th,
         });
-        if (th === 'light' || th === 'dark' || th === 'system') setTheme(th);
+        applyResolvedThemePreference(th, data.timezone, setTheme);
       } else {
         setForm((current) => ({ ...current, name: profile?.name || '', company_name: profile?.airline || '' }));
       }
@@ -127,7 +136,7 @@ export default function SettingsPage() {
                 <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
               </div>
               <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Base</Label>
+                <Label className="text-xs">Minha base</Label>
                 <Input value={form.base_airport} onChange={(event) => setForm((current) => ({ ...current, base_airport: event.target.value }))} placeholder="BSB" />
               </div>
               <div className="space-y-1.5 min-w-0">
@@ -146,12 +155,30 @@ export default function SettingsPage() {
             <div className="space-y-4 min-w-0">
               <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs">Fuso horário</Label>
-                <Select value={form.timezone} onValueChange={(value) => setForm((current) => ({ ...current, timezone: value }))}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <Select
+                  value={form.timezone}
+                  onValueChange={(value) => {
+                    setForm((current) => {
+                      const next = { ...current, timezone: value };
+                      if (next.theme === 'auto') {
+                        queueMicrotask(() => applyResolvedThemePreference('auto', next.timezone, setTheme));
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Fuso horário" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="America/Sao_Paulo">America/Sao_Paulo (BRT)</SelectItem>
-                    <SelectItem value="America/Manaus">America/Manaus (AMT)</SelectItem>
-                    <SelectItem value="America/Belem">America/Belem (BRT)</SelectItem>
+                    {OPERATIONAL_TIMEZONE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                    {form.timezone.trim() !== '' && !isKnownOperationalTimezone(form.timezone) && (
+                      <SelectItem value={form.timezone}>{getTimezoneLabel(form.timezone)}</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -160,13 +187,18 @@ export default function SettingsPage() {
                 <Select
                   value={form.theme}
                   onValueChange={(value) => {
-                    setForm((current) => ({ ...current, theme: value }));
-                    setTheme(value);
+                    setForm((current) => {
+                      const next = { ...current, theme: value as 'auto' | 'light' | 'dark' };
+                      queueMicrotask(() =>
+                        applyResolvedThemePreference(normalizeThemePreference(next.theme), next.timezone, setTheme),
+                      );
+                      return next;
+                    });
                   }}
                 >
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="system">Sistema</SelectItem>
+                    <SelectItem value="auto">Automático (horário)</SelectItem>
                     <SelectItem value="light">Claro</SelectItem>
                     <SelectItem value="dark">Escuro</SelectItem>
                   </SelectContent>

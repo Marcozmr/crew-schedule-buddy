@@ -12,6 +12,9 @@ export interface CrewSituationDisplay {
   tripStatusVariant: "tripulando" | "extra_remunerado";
   roleLabel: string;
   minimizeRole: boolean;
+  /** Siglas oficiais do roster/PDF — preferidas na UI compacta */
+  tripStatusSigla?: string;
+  roleSigla?: string;
 }
 
 export type EnrichmentFallbackReason =
@@ -138,7 +141,7 @@ export interface FlightNormalized {
   liveTrackingAvailable?: boolean;
   /** Status operacional agregado (tracking + horário + atraso) */
   operationalStatus?: FlightOperationalStatus;
-  /** Chips de origem (escala, OpenSky, aeroporto, base) */
+  /** Chips de origem (escala, OpenSky, aeroporto, minha base) */
   dataSources?: FlightDataSourceFlags;
   /** Match OpenSky explícito para UI */
   openSkyMatch?: "matched" | "no_match" | "unavailable" | "not_attempted";
@@ -171,7 +174,7 @@ export type FlightBoardData = {
 };
 
 export interface FlightFilters {
-  /** IATA 3 letras ou `FLIGHT_BOARD_ALL_AIRPORTS` (todas as bases). */
+  /** IATA 3 letras ou `FLIGHT_BOARD_ALL_AIRPORTS` (todos os aeroportos no filtro). */
   airportCode: string;
   airlineCode: string;
   flightNumber: string;
@@ -179,7 +182,7 @@ export interface FlightFilters {
   mode: "departures" | "arrivals";
   /**
    * Minha escala: lista alinhada à escala local + merge com edge.
-   * Base operacional: lista montada a partir do payload da edge (mesmos voos da escala no servidor, prioriza status/aeroporto do servidor).
+   * Aeroporto: lista montada a partir do payload da edge (mesmos voos da escala no servidor, prioriza status/aeroporto do servidor).
    */
   boardMode: "my_schedule" | "airport_base";
 }

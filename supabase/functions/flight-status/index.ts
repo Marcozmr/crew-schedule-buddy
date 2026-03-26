@@ -428,7 +428,7 @@ serve(async (req) => {
 
     const now = Date.now();
 
-    /** Base operacional: não usa schedule_entries — OpenSky flights by airport (ICAO) */
+    /** Modo Aeroporto (airport_base): não usa schedule_entries — OpenSky flights by airport (ICAO) */
     if (boardMode === "airport_base") {
       const abKey = `ab|${userId}|${airportCode}|${carrierCode}|${flightNumber}|${scheduledDepartureDate}`;
       const abCached = airportBaseCache.get(abKey);

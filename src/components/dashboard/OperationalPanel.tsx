@@ -56,7 +56,7 @@ export function OperationalPanel({ schedule, airline }: OperationalPanelProps) {
             <MapPin className="w-4 h-4 text-success" />
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Painel Operacional</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Resumo operacional</p>
             <p className="text-[10px] text-efb-text-dim">Baseado na sua escala</p>
           </div>
         </div>

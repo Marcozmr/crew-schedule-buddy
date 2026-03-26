@@ -15,7 +15,7 @@ export function FlightBoardEmpty({ mode }: FlightBoardEmptyProps) {
       <Plane className="mb-3 h-10 w-10 text-muted-foreground/35" />
       <p className="text-sm font-medium text-foreground">{label}</p>
       <p className="mt-2 max-w-[min(100%,320px)] text-xs leading-relaxed text-muted-foreground">
-        Nada a exibir com os filtros atuais. Tente outra data, outra base no seletor ou limpe companhia/número do
+        Nada a exibir com os filtros atuais. Tente outra data, outro aeroporto no seletor ou limpe companhia/número do
         voo.
       </p>
     </div>

@@ -40,6 +40,41 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 221 83% 53%;
   }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 14%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 14%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --primary-glow: 217 91% 65%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 48%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --border: 217 33% 22%;
+    --input: 217 33% 22%;
+    --ring: 224 76% 55%;
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 22%;
+    --sidebar-ring: 224 76% 55%;
+  }
 }
 
 @layer base {
@@ -123,17 +158,25 @@
   }
 
   .glass {
-    background: hsl(0 0% 100%);
-    border: 1px solid hsl(220 13% 91%);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 16px;
     box-shadow: 0 1px 3px hsl(0 0% 0% / 0.04), 0 1px 2px hsl(0 0% 0% / 0.06);
   }
 
+  .dark .glass {
+    box-shadow: 0 1px 3px hsl(0 0% 0% / 0.35), 0 1px 2px hsl(0 0% 0% / 0.2);
+  }
+
   .glass-elevated {
-    background: hsl(0 0% 100%);
-    border: 1px solid hsl(220 13% 91%);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 16px;
     box-shadow: 0 4px 6px -1px hsl(0 0% 0% / 0.05), 0 10px 15px -3px hsl(0 0% 0% / 0.05);
+  }
+
+  .dark .glass-elevated {
+    box-shadow: 0 4px 6px -1px hsl(0 0% 0% / 0.35), 0 10px 15px -3px hsl(0 0% 0% / 0.25);
   }
 
   .gradient-primary {
@@ -180,7 +223,7 @@
   }
 
   .skeleton {
-    background: linear-gradient(90deg, hsl(210 16% 93%) 25%, hsl(210 18% 96%) 50%, hsl(210 16% 93%) 75%);
+    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--secondary)) 50%, hsl(var(--muted)) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
     border-radius: 8px;

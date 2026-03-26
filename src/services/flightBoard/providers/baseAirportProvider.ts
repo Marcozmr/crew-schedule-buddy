@@ -1,5 +1,5 @@
 /**
- * Base operacional — voos gerais do aeroporto (payload da edge com recordSource opensky_airport_base).
+ * Modo Aeroporto — voos gerais do aeroporto (payload da edge com recordSource opensky_airport_base).
  */
 
 import type { FlightRaw } from "../types";

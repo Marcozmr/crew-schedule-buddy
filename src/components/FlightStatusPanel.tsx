@@ -103,69 +103,69 @@ export default function FlightStatusPanel() {
   }, []);
 
   return (
-    <div className="rounded-xl border bg-white p-5">
-      <h2 className="mb-3 text-xl font-semibold">Painel de voos</h2>
+    <div className="rounded-xl border border-border bg-card p-5 text-card-foreground">
+      <h2 className="mb-3 text-xl font-semibold text-foreground">Painel de voos</h2>
 
       <form onSubmit={loadFlights} className="grid gap-3 md:grid-cols-5">
         <input
           placeholder="Aeroporto (GRU, CGH, BSB)"
           value={airportCode}
           onChange={(e) => setAirportCode(e.target.value.toUpperCase())}
-          className="rounded-lg border px-3 py-2"
+          className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground"
         />
 
         <input
           placeholder="Companhia (LA / G3 / AD)"
           value={carrierCode}
           onChange={(e) => setCarrierCode(e.target.value.toUpperCase())}
-          className="rounded-lg border px-3 py-2"
+          className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground"
         />
 
         <input
           placeholder="Número do voo"
           value={flightNumber}
           onChange={(e) => setFlightNumber(e.target.value)}
-          className="rounded-lg border px-3 py-2"
+          className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground"
         />
 
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="rounded-lg border px-3 py-2"
+          className="rounded-lg border border-input bg-background px-3 py-2 text-foreground"
         />
 
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-black text-white"
+          className="rounded-lg bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
         >
           {loading ? "Buscando..." : "Consultar"}
         </button>
       </form>
 
       {error && (
-        <div className="mt-4 rounded bg-red-50 p-3 text-red-600">{error}</div>
+        <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive">{error}</div>
       )}
 
       {!error && flights.length === 0 && !loading && (
-        <div className="mt-4 rounded bg-gray-50 p-3 text-gray-500">
+        <div className="mt-4 rounded-md bg-muted p-3 text-muted-foreground">
           Nenhum voo encontrado.
         </div>
       )}
 
       <div className="mt-4 space-y-4">
         {flights.map((flight) => (
-          <div key={flight.id} className="rounded-xl border p-4">
+          <div key={flight.id} className="rounded-xl border border-border bg-background/50 p-4">
             <div className="flex justify-between gap-3">
               <div>
-                <div className="font-semibold">{flight.flightNumber}</div>
-                <div className="text-sm text-gray-500">
+                <div className="font-semibold text-foreground">{flight.flightNumber}</div>
+                <div className="text-sm text-muted-foreground">
                   {flight.origin} → {flight.destination}
                 </div>
               </div>
 
-              <div className="rounded border px-3 py-1 text-sm">
+              <div className="rounded border border-border px-3 py-1 text-sm text-foreground">
                 {flight.status}
               </div>
             </div>
@@ -192,7 +192,7 @@ export default function FlightStatusPanel() {
       </div>
 
       {updated && (
-        <div className="mt-3 text-xs text-gray-400">
+        <div className="mt-3 text-xs text-muted-foreground">
           Atualizado: {new Date(updated).toLocaleString("pt-BR")}
         </div>
       )}

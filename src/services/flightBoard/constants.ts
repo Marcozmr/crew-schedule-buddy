@@ -34,7 +34,7 @@ export const STATUS_MAP: Record<string, string> = {
   "Destino disponível": "Destino disponível",
 };
 
-/** Filtro “todas as bases” na minha escala (Flight Board Pro). */
+/** Filtro “todos os aeroportos” na minha escala (Flight Board Pro). */
 export const FLIGHT_BOARD_ALL_AIRPORTS = "__ALL__" as const;
 
 export const DEFAULT_AIRPORTS = [

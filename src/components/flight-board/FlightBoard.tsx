@@ -128,21 +128,21 @@ function buildAirportBaseBanner(args: {
   const { raw, meta, builtDep, builtArr } = args;
   if (meta.skipped) {
     if (meta.reason === "no_supabase_env") {
-      return "Base operacional: variáveis VITE_SUPABASE_* ausentes; não é possível chamar a edge.";
+      return "Aeroporto: variáveis VITE_SUPABASE_* ausentes; não é possível chamar a edge.";
     }
     if (meta.reason === "no_session") {
-      return "Base operacional: sessão ausente — faça login para carregar voos do aeroporto.";
+      return "Aeroporto: sessão ausente — faça login para carregar voos do aeroporto.";
     }
     return null;
   }
   if (meta.reason === "http_error") {
     if (meta.httpStatus === 401) {
-      return "Base operacional: faça login para carregar voos do aeroporto.";
+      return "Aeroporto: faça login para carregar voos do aeroporto.";
     }
     if (meta.httpStatus === 404) {
-      return "Base operacional: função flight-status não encontrada (404) — verifique o deploy.";
+      return "Aeroporto: função flight-status não encontrada (404) — verifique o deploy.";
     }
-    return `Base operacional: HTTP ${meta.httpStatus ?? "?"}.`;
+    return `Aeroporto: HTTP ${meta.httpStatus ?? "?"}.`;
   }
   if (meta.reason === "network") {
     const detail = meta.serverErrorDetail
@@ -158,19 +158,19 @@ function buildAirportBaseBanner(args: {
           }
         })()
       : "";
-    return `Base operacional: falha de rede ao contatar o servidor${detail}.`;
+    return `Aeroporto: falha de rede ao contatar o servidor${detail}.`;
   }
   if (meta.airportBaseReason === "opensky_credentials_required") {
-    return "Base operacional: configure OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET na função flight-status (OpenSky OAuth).";
+    return "Aeroporto: configure OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET na função flight-status (OpenSky OAuth).";
   }
   if (meta.airportBaseReason === "unknown_airport_iata") {
-    return "Base operacional: código IATA não mapeado para ICAO (amplie IATA_TO_ICAO na edge).";
+    return "Aeroporto: código IATA não mapeado para ICAO (amplie IATA_TO_ICAO na edge).";
   }
   if (raw.length === 0) {
-    return "Base operacional: OpenSky não retornou voos para esta janela. Dados ao vivo disponíveis apenas para voos que já partiram ou chegaram no dia (UTC). Verifique data e credenciais.";
+    return "Aeroporto: OpenSky não retornou voos para esta janela. Dados ao vivo disponíveis apenas para voos que já partiram ou chegaram no dia (UTC). Verifique data e credenciais.";
   }
   if (builtDep + builtArr === 0) {
-    return "Base operacional: resposta recebida, mas nenhum voo passou nos filtros de partida/chegada na base.";
+    return "Aeroporto: resposta recebida, mas nenhum voo passou nos filtros de partida/chegada neste aeroporto.";
   }
   return null;
 }
@@ -256,7 +256,7 @@ export function FlightBoard({
     );
   }, [todayFromDashboard]);
 
-  /** Com “todas as bases” ou ao escolher de novo “todas”, alinha ao aeroporto da base do usuário. */
+  /** Com “Todos os aeroportos” no filtro ou ao reabrir, alinha ao IATA da minha base quando disponível. */
   useEffect(() => {
     if (!homeBase) return;
     if (filters.airportCode !== FLIGHT_BOARD_ALL_AIRPORTS) return;
@@ -302,7 +302,7 @@ export function FlightBoard({
     setTechnicalError(null);
     setEnrichmentWarning(null);
 
-    /** Base operacional: não depende da escala importada — só edge + OpenSky airport */
+    /** Modo Aeroporto: não depende da escala importada — só edge + OpenSky por aeroporto */
     if (filters.boardMode === "airport_base") {
       setLoading(true);
       const airportForApi =
@@ -399,7 +399,7 @@ export function FlightBoard({
           builtArr: arr.length,
         });
         if (filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS) {
-          const extra = `Filtro “Todas as bases”: dados ao vivo carregados para ${airportForApi}. Escolha um aeroporto para fixar a base.`;
+          const extra = `Filtro “Todos os aeroportos”: dados ao vivo carregados para ${airportForApi}. Escolha um aeroporto no seletor para fixar o painel.`;
           airBanner = airBanner ? `${extra} ${airBanner}` : extra;
         }
         setEnrichmentWarning(airBanner);
@@ -542,7 +542,7 @@ export function FlightBoard({
         arr,
       });
       if (filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS) {
-        const note = `Todas as bases: enriquecimento ao vivo usa ${enrichmentAirport}.`;
+        const note = `Filtro “Todos os aeroportos”: enriquecimento ao vivo usa ${enrichmentAirport}.`;
         enrichBanner = enrichBanner ? `${note} ${enrichBanner}` : note;
       }
       setEnrichmentWarning(enrichBanner);
@@ -584,7 +584,7 @@ export function FlightBoard({
       setFatalError(
         err instanceof Error
           ? err.message
-          : "Falha ao montar o painel operacional. Tente novamente."
+          : "Falha ao carregar o Flight Board. Tente novamente."
       );
       setTechnicalError(err instanceof Error ? err.message : null);
       setDepartures([]);
@@ -679,12 +679,15 @@ export function FlightBoard({
 
   const airportContextHint =
     filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS
-      ? "Mostrando todos os trechos da escala nesta data (todas as bases)."
-      : homeBase && filters.airportCode
-        ? `Base selecionada: ${filters.airportCode}${
-            homeBase === filters.airportCode ? " (sua base operacional)" : ""
-          }`
-        : undefined;
+      ? "Mostrando todos os trechos da escala nesta data (filtro de aeroporto: todos)."
+      : [
+          homeBase ? `Minha base (escala): ${homeBase}.` : null,
+          `Aeroporto no painel: ${filters.airportCode}${
+            homeBase === filters.airportCode ? " (coincide com a minha base)" : ""
+          }.`,
+        ]
+          .filter(Boolean)
+          .join(" ");
 
   const renderBody = () => {
     if (fatalError) {
@@ -697,7 +700,7 @@ export function FlightBoard({
       );
     }
 
-    /** Base operacional: UI não depende da escala importada */
+    /** Modo Aeroporto: UI não depende da escala importada */
     if (filters.boardMode === "airport_base") {
       if (loading && list.length === 0) {
         return <FlightBoardSkeleton />;
@@ -706,7 +709,7 @@ export function FlightBoard({
         return (
           <FlightBoardNeutral
             variant="airport_base_empty"
-            title="Nenhum voo na base para esta data (modo operacional)"
+            title="Nenhum voo neste aeroporto para esta data (modo Aeroporto)"
             subtitle={
               enrichmentWarning ??
               "Confira credenciais OpenSky na edge, data (UTC) e filtros de companhia/número."
@@ -887,7 +890,6 @@ export function FlightBoard({
             isLoading={loading}
             lastUpdated={lastUpdated}
             homeBase={homeBase}
-            operationalTimezone={tzResolved}
           />
         </div>
       </div>

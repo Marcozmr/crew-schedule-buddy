@@ -1,6 +1,7 @@
 import React from "react";
 import { RefreshCw, Plane, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -21,7 +22,6 @@ interface FlightFiltersProps {
   isLoading: boolean;
   lastUpdated?: string;
   homeBase?: string | null;
-  operationalTimezone?: string;
   className?: string;
 }
 
@@ -32,14 +32,13 @@ export function FlightFilters({
   isLoading,
   lastUpdated,
   homeBase,
-  operationalTimezone,
   className,
 }: FlightFiltersProps) {
   const airportOptions = [
-    { code: FLIGHT_BOARD_ALL_AIRPORTS, name: "Todas as bases" },
+    { code: FLIGHT_BOARD_ALL_AIRPORTS, name: "Todos os aeroportos" },
     ...(homeBase
       ? [
-          { code: homeBase, name: `Base (${homeBase})` },
+          { code: homeBase, name: `Minha base (${homeBase})` },
           ...DEFAULT_AIRPORTS.filter((a) => a.code !== homeBase),
         ]
       : DEFAULT_AIRPORTS),
@@ -76,7 +75,7 @@ export function FlightFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="my_schedule">Minha escala</SelectItem>
-            <SelectItem value="airport_base">Base operacional</SelectItem>
+            <SelectItem value="airport_base">Aeroporto</SelectItem>
           </SelectContent>
         </Select>
 
@@ -104,16 +103,25 @@ export function FlightFilters({
         </div>
       </div>
 
+      {homeBase && (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Minha base:{" "}
+          <span className="font-semibold text-foreground">{homeBase}</span>
+          <span className="text-muted-foreground"> · detectada da escala</span>
+        </p>
+      )}
+
       {/* Mobile: coluna única | Tablet: 2 cols | Desktop: 5 cols */}
       <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
+          <Label className="text-[10px] text-muted-foreground">Aeroporto</Label>
           <Select
             value={filters.airportCode}
             onValueChange={(v) => onChange({ airportCode: v })}
           >
             <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0 touch-manipulation sm:h-9 sm:min-h-0">
               <MapPin className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="Aeroporto" />
+              <SelectValue placeholder="Escolha o aeroporto" />
             </SelectTrigger>
             <SelectContent>
               {airportOptions.map((a) => (
@@ -145,18 +153,13 @@ export function FlightFilters({
           />
         </div>
 
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0">
           <Input
             type="date"
             value={filters.date}
             onChange={(e) => onChange({ date: e.target.value })}
             className="h-9 w-full min-w-0"
           />
-          {operationalTimezone && (
-            <p className="truncate text-[10px] leading-tight text-muted-foreground">
-              Fuso: {operationalTimezone}
-            </p>
-          )}
         </div>
       </div>
     </div>
