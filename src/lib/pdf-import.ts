@@ -1,13 +1,20 @@
 import { supabase } from '@/integrations/supabase/client';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
+import {
+  normalizeCrewRosterPdfText,
+  parseCrewRosterEntries,
+  parseRosterDateToken,
+  PARSER_VERSION,
+  type CrewRosterParsedEntry,
+  type CrewRosterParseStats,
+} from '@/lib/roster/crew-roster-parser';
 import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
 import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
+import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
-
-const PARSER_VERSION = '4.0-latam-iflight';
 
 async function sha256Hex(buf: ArrayBuffer): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', buf);
@@ -54,6 +61,10 @@ export interface RosterEntry {
   crossesMidnight: boolean;
   overnight: boolean;
   sortDatetime: string;
+  entryType: string;
+  crewStatusCode: string;
+  crewStatusLabel: string;
+  activityLabel: string;
 }
 
 export interface ImportDebugInfo {
@@ -83,16 +94,42 @@ export interface PdfImportResult {
   error: string | null;
 }
 
-export interface ParseStats {
-  totalRawAnchors: number;
-  totalFlights: number;
-  totalDO: number;
-  totalStandby: number;
-  totalAPR: number;
-  totalAfterDedup: number;
-}
+export type ParseStats = CrewRosterParseStats;
+
+export const EMPTY_PARSE_STATS: ParseStats = {
+  totalEntries: 0,
+  totalRawAnchors: 0,
+  totalFlights: 0,
+  totalDO: 0,
+  totalStandby: 0,
+  totalAPR: 0,
+  totalReserve: 0,
+  totalOnCall: 0,
+  totalPresentation: 0,
+  totalAfterDedup: 0,
+  unrecognizedSnippetCount: 0,
+};
 
 // ── PDF Text Extraction ────────────────────────────────
+/** pdf.js devolve itens em ordem arbitrária; ordenar por Y (linha) e X (coluna) evita “zero” em PDFs tabulares. */
+type PdfTextItem = { str?: string; transform?: number[] };
+
+function sortPdfTextItems(items: PdfTextItem[]): Array<{ str: string; x: number; y: number }> {
+  const pieces: Array<{ str: string; x: number; y: number }> = [];
+  for (const item of items) {
+    const raw = item.str;
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    const t = item.transform;
+    if (!t || t.length < 6) continue;
+    pieces.push({ str: raw.trim(), x: t[4], y: t[5] });
+  }
+  const lineTol = 6;
+  pieces.sort((a, b) => {
+    if (Math.abs(a.y - b.y) > lineTol) return b.y - a.y;
+    return a.x - b.x;
+  });
+  return pieces;
+}
 
 async function extractTextFromPdf(pdfBytes: ArrayBuffer): Promise<string> {
   const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
@@ -100,34 +137,11 @@ async function extractTextFromPdf(pdfBytes: ArrayBuffer): Promise<string> {
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const content = await page.getTextContent();
-    const pageText = content.items
-      .map(item => ('str' in item ? (item as { str: string }).str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const sorted = sortPdfTextItems(content.items as PdfTextItem[]);
+    const pageText = sorted.map((it) => it.str).join(' ').replace(/\s+/g, ' ').trim();
     if (pageText) chunks.push(pageText);
   }
   return chunks.join('\n');
-}
-
-// ── Month name map ─────────────────────────────────────
-
-const MONTH_MAP: Record<string, string> = {
-  JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
-  JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
-  FEV: '02', ABR: '04', MAI: '05', AGO: '08', SET: '09', OUT: '10', DEZ: '12',
-};
-
-function parseRosterDate(raw: string): string | null {
-  const m = raw.match(/(\d{1,2})[\s\-]([A-Z]{3})[\s\-](\d{2,4})/i);
-  if (!m) return null;
-  const day = m[1].padStart(2, '0');
-  const monthKey = m[2].toUpperCase();
-  const month = MONTH_MAP[monthKey];
-  if (!month) return null;
-  let year = m[3];
-  if (year.length === 2) year = `20${year}`;
-  return `${year}-${month}-${day}`;
 }
 
 function parseHoursMinutes(val: string): number {
@@ -170,10 +184,10 @@ function parseHeader(text: string): RosterHeader {
     if (pipeRole) header.crewRole = pipeRole[1].toUpperCase();
   }
 
-  const periodMatch = text.match(/(\d{1,2}[\s\-][A-Z]{3}[\s\-]\d{2,4})\s*(?:[-–to]+)\s*(\d{1,2}[\s\-][A-Z]{3}[\s\-]\d{2,4})/i);
+  const periodMatch = text.match(/(\d{1,2}[\s-][A-Za-z]{3}[\s-]\d{2,4})\s*(?:[-–to]+)\s*(\d{1,2}[\s-][A-Za-z]{3}[\s-]\d{2,4})/i);
   if (periodMatch) {
-    header.rosterStartDate = parseRosterDate(periodMatch[1]) || periodMatch[1];
-    header.rosterEndDate = parseRosterDate(periodMatch[2]) || periodMatch[2];
+    header.rosterStartDate = parseRosterDateToken(periodMatch[1].replace(/\s+/g, '-')) || periodMatch[1];
+    header.rosterEndDate = parseRosterDateToken(periodMatch[2].replace(/\s+/g, '-')) || periodMatch[2];
   }
 
   const fhMatch = text.match(/(?:FLYING|Flight)\s*(?:HRS?|Hours?|Time)[:\s|]*(\d+:\d{2})/i);
@@ -195,276 +209,36 @@ function parseHeader(text: string): RosterHeader {
   return header;
 }
 
-// ── CREW ROLES for regex ───────────────────────────────
-const CREW_ROLES = 'CC|CA|FO|SO|CM|FA|PUR|INS|CHK|OBS|CCP|TCA|TCP';
-
-// ── Non-flight codes ──────────────────────────────────
-const NON_FLIGHT_CODES = ['DO', 'HSB', 'HSBE', 'ASB', 'APR', 'OFF', 'SBY', 'X', 'TRN', 'SIM', 'GND', 'REC', 'VAC', 'LIC', 'FER', 'ADM', 'RES', 'RSV', 'AVL', 'FOLGA', 'CURSO', 'REST'];
-const STANDBY_CODES = new Set(['HSB', 'HSBE', 'ASB', 'SBY']);
-const DAYOFF_CODES = new Set(['DO', 'OFF', 'FOLGA', 'X']);
-
-// ── Aircraft pattern ──────────────────────────────────
-const AIRCRAFT_RE = /^(319|320|321|330|340|350|380|737|738|747|757|767|777|787|E\d{2,3})$/i;
-
-// ── Entry Parser v4 ───────────────────────────────────
-
-function parseEntries(text: string): { entries: RosterEntry[]; stats: ParseStats; textByDay: Record<string, string> } {
-  const normalized = text.replace(/\r\n?/g, ' ').replace(/\s+/g, ' ');
-
-  // Step 1: Find all date positions for lookback
-  const dateRegex = /(\d{1,2}-[A-Z]{3}-\d{4})/gi;
-  const datePositions: { date: string; pos: number }[] = [];
-  let dm;
-  while ((dm = dateRegex.exec(normalized)) !== null) {
-    const parsed = parseRosterDate(dm[1]);
-    if (parsed) datePositions.push({ date: parsed, pos: dm.index });
-  }
-
-  function getDateForPosition(pos: number): string {
-    let best = '';
-    for (const dp of datePositions) {
-      if (dp.pos <= pos) best = dp.date;
-      else break;
-    }
-    return best;
-  }
-
-  // Step 2: Group raw text by day for debug
-  const textByDay: Record<string, string> = {};
-  for (let i = 0; i < datePositions.length; i++) {
-    const start = datePositions[i].pos;
-    const end = i + 1 < datePositions.length ? datePositions[i + 1].pos : normalized.length;
-    const segment = normalized.substring(start, end).trim();
-    const date = datePositions[i].date;
-    if (textByDay[date]) {
-      textByDay[date] += ' | ' + segment;
-    } else {
-      textByDay[date] = segment;
-    }
-  }
-
-  const entries: RosterEntry[] = [];
-  let totalRawAnchors = 0;
-
-  // Step 3: Find ALL flights using the definitive pattern:
-  // LAxxxx ROLE (OP|PS) APT HH:MM APT HH:MM
-  // This only matches the Item column occurrence, NOT pairing codes (which have slashes)
-  const flightRegex = new RegExp(
-    `(LA\\d{3,5})\\s+(${CREW_ROLES})\\s+(OP|PS)\\s+([A-Z]{3})\\s+(\\d{2}:\\d{2})\\s+([A-Z]{3})\\s+(\\d{2}:\\d{2})`,
-    'gi'
-  );
-
-  let fm;
-  while ((fm = flightRegex.exec(normalized)) !== null) {
-    totalRawAnchors++;
-    const matchPos = fm.index;
-    const matchEnd = matchPos + fm[0].length;
-    const date = getDateForPosition(matchPos);
-    if (!date) continue;
-
-    const flightNumber = fm[1].toUpperCase();
-    const crewRole = fm[2].toUpperCase();
-    const operationType = fm[3].toUpperCase();
-    const depAirport = fm[4].toUpperCase();
-    const depTime = fm[5];
-    const arrAirport = fm[6].toUpperCase();
-    const arrTime = fm[7];
-
-    // Get report time: look for HH:MM immediately before the flight number
-    const beforeFlight = normalized.substring(Math.max(0, matchPos - 8), matchPos);
-    const reportMatch = beforeFlight.match(/(\d{2}:\d{2})\s+$/);
-    const reportTime = reportMatch ? reportMatch[1] : '';
-
-    // Parse remaining tokens after arrival time until next anchor
-    const afterMatch = normalized.substring(matchEnd, Math.min(matchEnd + 80, normalized.length));
-    const tokens = afterMatch.trim().split(/\s+/);
-
-    let crossesMidnight = false;
-    const clockTimes: string[] = [];
-    const durationTimes: string[] = [];
-    let aircraftType = '';
-    let idx = 0;
-
-    // Check (+1) right after arr_time
-    if (tokens[idx] === '(+1)') {
-      crossesMidnight = true;
-      idx++;
-    }
-
-    while (idx < tokens.length) {
-      const t = tokens[idx];
-      if (/^\d{2}:\d{2}$/.test(t)) {
-        if (idx + 1 < tokens.length && tokens[idx + 1] === '(+1)') {
-          clockTimes.push(t);
-          crossesMidnight = true;
-          idx += 2;
-        } else {
-          durationTimes.push(t);
-          idx++;
-        }
-      } else if (AIRCRAFT_RE.test(t)) {
-        aircraftType = t;
-        break;
-      } else if (/^\d{1,2}-[A-Z]{3}-\d{4}$/i.test(t)) {
-        break;
-      } else if (/^LA\d{3,5}$/i.test(t)) {
-        break;
-      } else if (NON_FLIGHT_CODES.includes(t.toUpperCase())) {
-        break;
-      } else {
-        idx++;
-      }
-    }
-
-    // Classify times
-    let debriefTime = '';
-    let flightHours: number | null = null;
-    let dutyHours: number | null = null;
-
-    // Clock times with (+1) are debrief
-    if (clockTimes.length > 0) {
-      debriefTime = clockTimes[clockTimes.length - 1];
-    }
-
-    // For duration times: distinguish debrief (clock) from FH (duration)
-    if (durationTimes.length >= 2 && !debriefTime) {
-      // Check if first duration is actually a debrief (close to and after arr_time)
-      const arrMinutes = timeToMinutes(arrTime);
-      const firstMinutes = timeToMinutes(durationTimes[0]);
-      const diff = firstMinutes - arrMinutes;
-      if (diff >= 0 && diff <= 120) {
-        // First time is debrief (within 2h after arrival, same day)
-        debriefTime = durationTimes[0];
-        flightHours = parseHoursMinutes(durationTimes[1]);
-        dutyHours = durationTimes.length > 2 ? parseHoursMinutes(durationTimes[2]) : null;
-      } else {
-        flightHours = parseHoursMinutes(durationTimes[0]);
-        dutyHours = parseHoursMinutes(durationTimes[1]);
-      }
-    } else if (durationTimes.length === 1) {
-      flightHours = parseHoursMinutes(durationTimes[0]);
-    } else if (durationTimes.length >= 2 && debriefTime) {
-      flightHours = parseHoursMinutes(durationTimes[0]);
-      dutyHours = durationTimes.length > 1 ? parseHoursMinutes(durationTimes[1]) : null;
-    }
-
-    // For passive flights (PS), flight_hours should be 0
-    if (operationType === 'PS' && flightHours === 0) {
-      // Keep 0, it's correct for passive
-    }
-
-    const sortDatetime = `${date}T${depTime}:00`;
-
-    entries.push({
-      date,
-      activityType: 'flight',
-      isFlight: true,
-      flightNumber,
-      pairingCode: '',
-      crewRole,
-      operationType,
-      reportTime,
-      departureAirport: depAirport,
-      departureTime: depTime,
-      arrivalAirport: arrAirport,
-      arrivalTime: arrTime,
-      debriefTime,
-      flightHours,
-      dutyHours,
-      aircraftType,
-      hotelName: '',
-      assignment: '',
-      comments: '',
-      rawLine: normalized.substring(matchPos, Math.min(matchPos + 120, normalized.length)),
-      crossesMidnight,
-      overnight: crossesMidnight,
-      sortDatetime,
-    });
-  }
-
-  // Step 4: Find non-flight activities
-  // Match standalone DO/HSB/ASB/HSBE/APR NOT part of pairing codes (no -/ after)
-  const nonFlightCodes = NON_FLIGHT_CODES.join('|');
-  const nfRegex = new RegExp(`\\b(${nonFlightCodes})\\b(?![\\/-])`, 'gi');
-  let nfm;
-  while ((nfm = nfRegex.exec(normalized)) !== null) {
-    const code = nfm[1].toUpperCase();
-    const pos = nfm.index;
-
-    // Skip if preceded by slash or hyphen (part of pairing like ASB-20/ or LA3953/)
-    const charBefore = pos > 0 ? normalized[pos - 1] : ' ';
-    if (charBefore === '/' || charBefore === '-') continue;
-
-    // Skip if this is within a flight match context (e.g., "APR" month in dates)
-    // Check: is this followed by date-like pattern? (DD-APR-YYYY)
-    const charAfter = pos + code.length < normalized.length ? normalized[pos + code.length] : ' ';
-    if (charAfter === '-') continue; // Part of date like "01-APR-2026"
-
-    // Skip column header occurrences
-    const before20 = normalized.substring(Math.max(0, pos - 20), pos).toLowerCase();
-    if (before20.includes('assignment') || before20.includes('comments') || before20.includes('hotel')) continue;
-
-    const date = getDateForPosition(pos);
-    if (!date) continue;
-
-    totalRawAnchors++;
-
-    entries.push({
-      date,
-      activityType: code,
-      isFlight: false,
-      flightNumber: code,
-      pairingCode: '',
-      crewRole: '',
-      operationType: '',
-      reportTime: '',
-      departureAirport: '',
-      departureTime: '',
-      arrivalAirport: '',
-      arrivalTime: '',
-      debriefTime: '',
-      flightHours: null,
-      dutyHours: null,
-      aircraftType: '',
-      hotelName: '',
-      assignment: '',
-      comments: '',
-      rawLine: normalized.substring(pos, Math.min(pos + 80, normalized.length)),
-      crossesMidnight: false,
-      overnight: false,
-      sortDatetime: `${date}T00:00:00`,
-    });
-  }
-
-  // Step 5: Deduplicate
-  const deduped = deduplicateEntries(entries);
-
-  // Stats
-  const stats: ParseStats = {
-    totalRawAnchors,
-    totalFlights: deduped.filter(e => e.isFlight).length,
-    totalDO: deduped.filter(e => DAYOFF_CODES.has(e.activityType)).length,
-    totalStandby: deduped.filter(e => STANDBY_CODES.has(e.activityType)).length,
-    totalAPR: deduped.filter(e => e.activityType === 'APR').length,
-    totalAfterDedup: deduped.length,
+function mapParsedToRosterEntry(p: CrewRosterParsedEntry): RosterEntry {
+  return {
+    date: p.date,
+    activityType: p.activityType,
+    isFlight: p.isFlight,
+    flightNumber: p.flightNumber,
+    pairingCode: p.pairingCode,
+    crewRole: p.crewRole,
+    operationType: p.operationType,
+    reportTime: p.reportTime,
+    departureAirport: p.departureAirport,
+    departureTime: p.departureTime,
+    arrivalAirport: p.arrivalAirport,
+    arrivalTime: p.arrivalTime,
+    debriefTime: p.debriefTime,
+    flightHours: p.flightHours,
+    dutyHours: p.dutyHours,
+    aircraftType: p.aircraftType,
+    hotelName: p.hotelName,
+    assignment: p.assignment,
+    comments: p.comments,
+    rawLine: p.rawLine,
+    crossesMidnight: p.crossesMidnight,
+    overnight: p.overnight,
+    sortDatetime: p.sortDatetime,
+    entryType: p.entryType,
+    crewStatusCode: p.crewStatusCode,
+    crewStatusLabel: p.crewStatusLabel,
+    activityLabel: p.activityLabel,
   };
-
-  return { entries: deduped, stats, textByDay };
-}
-
-function timeToMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return h * 60 + m;
-}
-
-function deduplicateEntries(entries: RosterEntry[]): RosterEntry[] {
-  const seen = new Set<string>();
-  return entries.filter(e => {
-    const key = `${e.date}|${e.activityType}|${e.flightNumber}|${e.departureAirport}|${e.departureTime}|${e.arrivalAirport}|${e.arrivalTime}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 // ── Main import function ───────────────────────────────
@@ -503,7 +277,7 @@ export async function importPdfArrayBuffer(
   userId: string
 ): Promise<PdfImportResult> {
   const emptyDebug: ImportDebugInfo = { currentUserId: userId, rosterId: null, deactivatedRosterIds: [], activeRoster: null, totalRowsActiveRoster: 0, totalRowsOldRosters: 0 };
-  const emptyStats: ParseStats = { totalRawAnchors: 0, totalFlights: 0, totalDO: 0, totalStandby: 0, totalAPR: 0, totalAfterDedup: 0 };
+  const emptyStats = EMPTY_PARSE_STATS;
   const emptyResult = (error: string): PdfImportResult => ({
     success: false, header: null, parsedCount: 0, insertedCount: 0, rosterId: null, fileName,
     extractedTextPreview: '', parsedEntriesPreview: [], savedRowsPreview: [],
@@ -557,14 +331,52 @@ export async function importPdfArrayBuffer(
     }
 
     const header = parseHeader(extractedText);
-    const { entries, stats, textByDay } = parseEntries(extractedText);
+    const normalized = normalizeCrewRosterPdfText(extractedText);
+    const { entries: parsed, stats, textByDay, devUnrecognizedLines } = parseCrewRosterEntries(normalized);
+    const entries = parsed.map(mapParsedToRosterEntry);
+
+    if (import.meta.env.DEV) {
+      console.log('Using parser:', PARSER_VERSION);
+      console.log('PDF text length:', extractedText.length);
+      console.log('RAW PDF TEXT:', extractedText.slice(0, 1000));
+      console.log('Normalized text sample:', normalized.slice(0, 500));
+      const flights = entries.filter((e) => e.isFlight);
+      const activities = entries.filter((e) => !e.isFlight);
+      console.log('Entries detected:', entries.length);
+      console.log('Flights detected:', flights.length);
+      console.log('Activities detected:', activities.length);
+      console.log('Parsed entries:', entries);
+    }
+
+    if (import.meta.env.DEV && devUnrecognizedLines.length > 0) {
+      console.debug('[pdf-import] parser diagnóstico:', devUnrecognizedLines);
+    }
+
+    const parseStats: ParseStats =
+      entries.length > 0
+        ? { ...stats, totalEntries: entries.length, totalAfterDedup: entries.length }
+        : stats;
 
     if (entries.length === 0) {
+      const devMsg =
+        'PDF importado, mas nenhuma linha operacional foi reconhecida pelo parser. Verifique o texto extraído ou o formato.';
+      if (import.meta.env.DEV) {
+        console.warn('[pdf-import]', devMsg, { preview: extractedText.substring(0, 1200), stats });
+      }
       return {
-        success: false, header, parsedCount: 0, insertedCount: 0, rosterId: null, fileName,
-        extractedTextPreview: extractedText.substring(0, 2000), parsedEntriesPreview: [], savedRowsPreview: [],
-        debug: { ...emptyDebug, currentUserId: effectiveUserId }, textByDay, parseStats: stats,
-        error: 'Nenhum voo ou atividade identificado no PDF.',
+        success: false,
+        header,
+        parsedCount: 0,
+        insertedCount: 0,
+        rosterId: null,
+        fileName,
+        extractedTextPreview: extractedText.substring(0, 2000),
+        parsedEntriesPreview: [],
+        savedRowsPreview: [],
+        debug: { ...emptyDebug, currentUserId: effectiveUserId },
+        textByDay,
+        parseStats,
+        error: import.meta.env.DEV ? devMsg : 'Nenhum voo ou atividade identificado no PDF.',
       };
     }
 
@@ -661,21 +473,46 @@ export async function importPdfArrayBuffer(
       crosses_midnight: e.crossesMidnight,
       overnight: e.overnight,
       sort_datetime: e.sortDatetime || null,
+      entry_type: e.entryType,
+      crew_status_code: e.crewStatusCode || null,
+      crew_status_label: e.crewStatusLabel || null,
+      activity_label: e.activityLabel || null,
     }));
+
+    const { rows: insertRows, removed: dedupeRemoved } = dedupeScheduleEntryRows(rows);
+    if (import.meta.env.DEV && dedupeRemoved > 0) {
+      console.warn(`[pdf-import] dedupe: ${dedupeRemoved} linha(s) repetida(s) removida(s) antes do insert`);
+    }
 
     // Insert
     let insertedCount = 0;
-    if (rows.length > 0) {
+    if (insertRows.length > 0) {
+      if (import.meta.env.DEV) {
+        console.log('INSERT PAYLOAD (first row sample):', insertRows[0]);
+        console.log('INSERT PAYLOAD row count:', insertRows.length);
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: insertError } = await (supabase.from('schedule_entries') as any).insert(rows);
+      const { error: insertError } = await (supabase.from('schedule_entries') as any).insert(insertRows);
+      if (import.meta.env.DEV) {
+        console.log('INSERT RESULT (bulk):', insertError ? 'failed' : 'ok', insertRows.length, 'rows');
+        console.log('INSERT ERROR (bulk):', insertError);
+      }
       if (insertError) {
-        for (const row of rows) {
+        for (const row of insertRows) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase.from('schedule_entries') as any).insert([row]);
-          if (!error) insertedCount++;
+          const { error: rowErr } = await (supabase.from('schedule_entries') as any).insert([row]);
+          if (import.meta.env.DEV && rowErr) {
+            const isDup = (rowErr as { code?: string }).code === '23505';
+            if (isDup) {
+              console.warn('[pdf-import] insert ignorado (duplicata no banco):', row.flight_number, row.date);
+            } else {
+              console.error('INSERT ERROR (row):', rowErr, 'row sample:', row);
+            }
+          }
+          if (!rowErr) insertedCount++;
         }
       } else {
-        insertedCount = rows.length;
+        insertedCount = insertRows.length;
       }
     }
 
@@ -719,7 +556,7 @@ export async function importPdfArrayBuffer(
     // Fetch diagnostics
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: savedPreview } = await (supabase.from('schedule_entries') as any)
-      .select('date, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, activity_type, is_flight, raw_line, aircraft_type, flight_hours, duty_hours, sort_datetime')
+      .select('date, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, activity_type, is_flight, raw_line, aircraft_type, flight_hours, duty_hours, sort_datetime, entry_type, crew_status_code, crew_status_label, activity_label')
       .eq('user_id', effectiveUserId)
       .eq('roster_id', rosterId)
       .order('sort_datetime', { ascending: true })
@@ -765,7 +602,7 @@ export async function importPdfArrayBuffer(
         totalRowsOldRosters: oldCount ?? 0,
       },
       textByDay,
-      parseStats: stats,
+      parseStats,
       error: null,
     };
   } catch (err) {

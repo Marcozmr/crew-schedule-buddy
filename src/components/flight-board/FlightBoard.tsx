@@ -36,6 +36,7 @@ import {
   getOperationalTodayIso,
 } from "@/lib/operational-date";
 import { resolveSafeIANATimezone } from "@/lib/date-utils";
+import { FLIGHT_BOARD_ALL_AIRPORTS } from "@/services/flightBoard/constants";
 import {
   finalizeNormalizedFlights,
   computePipelineMetrics,
@@ -186,6 +187,8 @@ export interface FlightBoardProps {
   operationalTodayIso?: string;
   /** IANA, ex.: America/Sao_Paulo — mesmas preferências do dashboard */
   operationalTimezone?: string;
+  /** Rótulo da fonte vencedora após consolidação (portal / PDF / manual). */
+  scheduleSourceLabel?: string | null;
 }
 
 export function FlightBoard({
@@ -194,6 +197,7 @@ export function FlightBoard({
   scheduleLoading,
   operationalTodayIso,
   operationalTimezone,
+  scheduleSourceLabel,
 }: FlightBoardProps) {
   const safeSchedule = schedule ?? [];
   const tzResolved = useMemo(
@@ -221,7 +225,7 @@ export function FlightBoard({
         ? operationalTodayIso.trim()
         : getOperationalTodayIso(tz);
     return {
-      airportCode: "GRU",
+      airportCode: FLIGHT_BOARD_ALL_AIRPORTS,
       airlineCode: "",
       flightNumber: "",
       date: initialDate,
@@ -229,6 +233,13 @@ export function FlightBoard({
       boardMode: "my_schedule",
     };
   });
+
+  const enrichmentAirport = useMemo(() => {
+    if (filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS) {
+      return homeBase || "GRU";
+    }
+    return filters.airportCode;
+  }, [filters.airportCode, homeBase]);
 
   /** Avança o filtro para o novo “hoje” operacional só se o usuário ainda estava no dia anterior */
   const lastOperationalDayRef = useRef<string | null>(null);
@@ -244,6 +255,17 @@ export function FlightBoard({
       f.date === previousDay ? { ...f, date: todayFromDashboard } : f
     );
   }, [todayFromDashboard]);
+
+  /** Com “todas as bases” ou ao escolher de novo “todas”, alinha ao aeroporto da base do usuário. */
+  useEffect(() => {
+    if (!homeBase) return;
+    if (filters.airportCode !== FLIGHT_BOARD_ALL_AIRPORTS) return;
+    setFilters((f) => {
+      if (f.airportCode !== FLIGHT_BOARD_ALL_AIRPORTS) return f;
+      if (f.airportCode === homeBase) return f;
+      return { ...f, airportCode: homeBase };
+    });
+  }, [homeBase, filters.airportCode]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -283,12 +305,16 @@ export function FlightBoard({
     /** Base operacional: não depende da escala importada — só edge + OpenSky airport */
     if (filters.boardMode === "airport_base") {
       setLoading(true);
+      const airportForApi =
+        filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS
+          ? homeBase || "GRU"
+          : filters.airportCode;
       try {
         let raw: FlightRaw[] = [];
         let meta: EnrichmentFetchMeta = { skipped: true, reason: "no_supabase_env" };
         try {
           const result = await fetchFlightStatusEnrichment({
-            airportCode: filters.airportCode,
+            airportCode: airportForApi,
             date: filters.date,
             airlineCode: filters.airlineCode || undefined,
             flightNumber: filters.flightNumber || undefined,
@@ -312,7 +338,7 @@ export function FlightBoard({
         const built = buildNormalizedListsFromEnrichmentRaw(
           raw,
           filters.date,
-          filters.airportCode
+          airportForApi
         );
         const rawById = new Map(raw.map((r) => [r.id, r]));
         let dep = finalizeNormalizedFlights(built.departures, rawById, {
@@ -333,13 +359,13 @@ export function FlightBoard({
         });
 
         logFlightBoardAirportMode({
-          airportSelected: filters.airportCode,
+          airportSelected: airportForApi,
           date: filters.date,
           companyFilter: filters.airlineCode,
           flightFilter: filters.flightNumber,
           payloadSent: {
             boardMode: "airport_base",
-            airportCode: filters.airportCode,
+            airportCode: airportForApi,
             scheduledDepartureDate: filters.date,
           },
           flightsReturned: raw.length,
@@ -366,14 +392,17 @@ export function FlightBoard({
         setDepartures(dep);
         setArrivals(arr);
         setLastUpdated(new Date().toISOString());
-        setEnrichmentWarning(
-          buildAirportBaseBanner({
-            raw,
-            meta,
-            builtDep: dep.length,
-            builtArr: arr.length,
-          })
-        );
+        let airBanner = buildAirportBaseBanner({
+          raw,
+          meta,
+          builtDep: dep.length,
+          builtArr: arr.length,
+        });
+        if (filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS) {
+          const extra = `Filtro “Todas as bases”: dados ao vivo carregados para ${airportForApi}. Escolha um aeroporto para fixar a base.`;
+          airBanner = airBanner ? `${extra} ${airBanner}` : extra;
+        }
+        setEnrichmentWarning(airBanner);
       } catch (err) {
         console.error("[FlightBoard] airport_base", err);
         setDepartures([]);
@@ -452,7 +481,7 @@ export function FlightBoard({
       let meta: EnrichmentFetchMeta = { skipped: true, reason: "no_supabase_env" };
       try {
         const result = await fetchFlightStatusEnrichment({
-          airportCode: filters.airportCode,
+          airportCode: enrichmentAirport,
           date: filters.date,
           airlineCode: filters.airlineCode || undefined,
           flightNumber: filters.flightNumber || undefined,
@@ -477,21 +506,21 @@ export function FlightBoard({
         resolved.departures,
         raw,
         filters.date,
-        filters.airportCode
+        enrichmentAirport
       );
       const arrMerged = mergeEnrichmentIntoNormalized(
         resolved.arrivals,
         raw,
         filters.date,
-        filters.airportCode
+        enrichmentAirport
       );
 
       const rawById = new Map(raw.map((r) => [r.id, r]));
-      let dep = finalizeNormalizedFlights(depMerged, rawById, {
+      const dep = finalizeNormalizedFlights(depMerged, rawById, {
         boardMode: "my_schedule",
         meta,
       });
-      let arr = finalizeNormalizedFlights(arrMerged, rawById, {
+      const arr = finalizeNormalizedFlights(arrMerged, rawById, {
         boardMode: "my_schedule",
         meta,
       });
@@ -505,15 +534,18 @@ export function FlightBoard({
       const hasPlanned = dep.length + arr.length > 0;
       const anyLive = [...dep, ...arr].some((f) => f.liveTrackingAvailable);
 
-      setEnrichmentWarning(
-        buildEnrichmentBanner({
-          hasPlanned,
-          raw,
-          meta,
-          dep,
-          arr,
-        })
-      );
+      let enrichBanner = buildEnrichmentBanner({
+        hasPlanned,
+        raw,
+        meta,
+        dep,
+        arr,
+      });
+      if (filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS) {
+        const note = `Todas as bases: enriquecimento ao vivo usa ${enrichmentAirport}.`;
+        enrichBanner = enrichBanner ? `${note} ${enrichBanner}` : note;
+      }
+      setEnrichmentWarning(enrichBanner);
 
       logFlightBoardPipeline(
         computePipelineMetrics({
@@ -570,17 +602,13 @@ export function FlightBoard({
     filters.boardMode,
     tzResolved,
     todayFromDashboard,
+    enrichmentAirport,
+    homeBase,
   ]);
 
   useEffect(() => {
     void loadFlights();
   }, [loadFlights]);
-
-  useEffect(() => {
-    if (homeBase) {
-      setFilters((p) => ({ ...p, airportCode: homeBase }));
-    }
-  }, [homeBase]);
 
   const filteredDepartures = useMemo(
     () =>
@@ -650,11 +678,13 @@ export function FlightBoard({
     (f.delayMinutes ?? 0) > 0;
 
   const airportContextHint =
-    homeBase && filters.airportCode
-      ? `Base selecionada: ${filters.airportCode}${
-          homeBase === filters.airportCode ? " (sua base operacional)" : ""
-        }`
-      : undefined;
+    filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS
+      ? "Mostrando todos os trechos da escala nesta data (todas as bases)."
+      : homeBase && filters.airportCode
+        ? `Base selecionada: ${filters.airportCode}${
+            homeBase === filters.airportCode ? " (sua base operacional)" : ""
+          }`
+        : undefined;
 
   const renderBody = () => {
     if (fatalError) {
@@ -834,10 +864,18 @@ export function FlightBoard({
       )}
     >
       <div className="w-full min-w-0 border-b border-border/60 bg-muted/30 px-4 py-3 sm:px-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-            EscalaX Flight Board Pro
-          </h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+              EscalaX Flight Board Pro
+            </h2>
+            {scheduleSourceLabel && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Fonte no painel:{" "}
+                <span className="font-medium text-foreground">{scheduleSourceLabel}</span>
+              </p>
+            )}
+          </div>
         </div>
         <div className="mt-3">
           <FlightFiltersComponent

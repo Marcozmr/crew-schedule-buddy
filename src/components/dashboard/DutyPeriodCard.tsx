@@ -11,6 +11,24 @@ import type { DutyPeriod } from '@/lib/duty-grouping';
 import { formatDutyTime } from '@/lib/duty-grouping';
 import { formatHoursMinutes } from '@/lib/date-utils';
 import type { DashboardStatusSummary } from '@/lib/operational-analysis';
+import type { ScheduleEntry } from '@/hooks/useScheduleData';
+import {
+  crewStatusBadgeClassName,
+  formatCrewRoleLabel,
+  resolveCrewStatusFromFlightOperation,
+} from '@/lib/roster/crew-status-labels';
+import { buildCrewSituationDisplayFromEntry } from '@/lib/roster/crew-tripulante-display';
+import { CrewTripulanteSummary } from '@/components/flight-board/CrewTripulanteSummary';
+import { isPresentationEntry } from '@/lib/schedule-entry-sort';
+
+function legSituationLabel(leg: ScheduleEntry): string {
+  if (leg.crew_status_label?.trim()) return leg.crew_status_label;
+  if (leg.is_flight && leg.operation_type) {
+    return resolveCrewStatusFromFlightOperation(leg.operation_type).label;
+  }
+  if (leg.activity_label?.trim()) return leg.activity_label;
+  return '—';
+}
 
 interface Props {
   duty: DutyPeriod;
@@ -28,6 +46,8 @@ const footerStatusTone = {
 export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
   const [expanded, setExpanded] = useState(duty.legCount > 1);
   const isMultiLeg = duty.legCount > 1;
+  const firstLeg = duty.legs[0];
+  const singlePresentationOnly = duty.legCount === 1 && !firstLeg.is_flight && isPresentationEntry(firstLeg);
   const dutyMins = Math.round(duty.totalDutyHours * 60);
   const isLongDuty = duty.totalDutyHours > 11;
   const displayStatus = statusSummary ?? {
@@ -57,7 +77,7 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
             )}
             {!isMultiLeg && (
               <span className="text-xs font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded-md whitespace-nowrap">
-                {duty.legs[0].flight_number}
+                {singlePresentationOnly ? 'Apresentação' : duty.legs[0].flight_number}
               </span>
             )}
             {duty.crossesMidnight && (
@@ -111,7 +131,7 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
       {isMultiLeg && expanded && (
         <div className="border-t border-border">
           {duty.legs.map((leg, li) => (
-            <div key={leg.id}>
+              <div key={leg.id}>
               <div className="px-4 sm:px-5 py-4">
                 <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -119,12 +139,13 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
                       Trecho {li + 1}
                     </span>
                     <span className="text-xs font-medium text-muted-foreground break-words">
-                      {leg.flight_number}
+                      {isPresentationEntry(leg) && !leg.is_flight ? 'Apresentação' : leg.flight_number}
                     </span>
                   </div>
                   {leg.crosses_midnight && <span className="text-[9px] text-warning font-medium whitespace-nowrap">+1 dia</span>}
                 </div>
 
+                {leg.is_flight ? (
                 <div className="flex items-center justify-between gap-3 min-w-0">
                   <div className="text-center min-w-[52px] sm:min-w-[60px]">
                     <p className="text-lg sm:text-xl font-bold text-foreground break-words">{leg.departure}</p>
@@ -144,6 +165,42 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
                     <p className="text-lg sm:text-xl font-bold text-foreground break-words">{leg.arrival}</p>
                     <p className="text-xs font-mono text-muted-foreground mt-0.5 whitespace-nowrap">{leg.arrival_time}</p>
                   </div>
+                </div>
+                ) : (
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <div className="text-center min-w-[52px] sm:min-w-[60px]">
+                    <p className="text-lg sm:text-xl font-bold text-foreground break-words">{leg.departure}</p>
+                    <p className="text-xs font-mono text-muted-foreground mt-0.5 whitespace-nowrap">{leg.departure_time}</p>
+                  </div>
+                  <div className="flex-1 min-w-0 mx-2 sm:mx-4 flex flex-col items-center justify-center">
+                    <Clock className="w-4 h-4 text-primary" />
+                    <span className="text-[10px] text-muted-foreground mt-1 font-medium">Apresentação</span>
+                  </div>
+                  <div className="text-center min-w-[52px] sm:min-w-[60px]">
+                    <p className="text-lg sm:text-xl font-bold text-foreground break-words">{leg.arrival}</p>
+                    <p className="text-xs font-mono text-muted-foreground mt-0.5 whitespace-nowrap">{leg.arrival_time}</p>
+                  </div>
+                </div>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  {(() => {
+                    const tripCrew = leg.is_flight ? buildCrewSituationDisplayFromEntry(leg) : null;
+                    return tripCrew ? (
+                      <CrewTripulanteSummary crew={tripCrew} />
+                    ) : (
+                      <>
+                        <span className="whitespace-nowrap">Situação:</span>
+                        <span className={crewStatusBadgeClassName(legSituationLabel(leg))}>{legSituationLabel(leg)}</span>
+                        {leg.crew_role && (
+                          <>
+                            <span className="text-border">·</span>
+                            <span className="whitespace-nowrap">Função:</span>
+                            <span className="font-medium text-foreground">{formatCrewRoleLabel(leg.crew_role)}</span>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -179,7 +236,49 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
         </div>
       )}
 
-      {!isMultiLeg && (
+      {!isMultiLeg && singlePresentationOnly && (
+        <div className="px-4 sm:px-5 pb-5">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="text-center min-w-[52px]">
+              <p className="text-2xl lg:text-3xl font-bold text-foreground break-words">{duty.legs[0].departure}</p>
+              <p className="text-xs font-mono text-muted-foreground mt-1 whitespace-nowrap">{duty.legs[0].departure_time}</p>
+            </div>
+            <div className="flex-1 min-w-0 mx-3 sm:mx-4 flex flex-col items-center justify-center">
+              <Clock className="w-5 h-5 text-primary" />
+              <span className="text-[10px] text-muted-foreground mt-1 font-medium">Apresentação</span>
+            </div>
+            <div className="text-center min-w-[52px]">
+              <p className="text-2xl lg:text-3xl font-bold text-foreground break-words">{duty.legs[0].arrival}</p>
+              <p className="text-xs font-mono text-muted-foreground mt-1 whitespace-nowrap">{duty.legs[0].arrival_time}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            {(() => {
+              const leg0 = duty.legs[0];
+              const tripCrew = leg0.is_flight ? buildCrewSituationDisplayFromEntry(leg0) : null;
+              return tripCrew ? (
+                <CrewTripulanteSummary crew={tripCrew} />
+              ) : (
+                <>
+                  <span className="whitespace-nowrap">Situação:</span>
+                  <span className={crewStatusBadgeClassName(legSituationLabel(leg0))}>
+                    {legSituationLabel(leg0)}
+                  </span>
+                  {leg0.crew_role && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span className="whitespace-nowrap">Função:</span>
+                      <span className="font-medium text-foreground">{formatCrewRoleLabel(leg0.crew_role)}</span>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {!isMultiLeg && !singlePresentationOnly && (
         <div className="px-4 sm:px-5 pb-5">
           <div className="flex items-center justify-between gap-3 min-w-0">
             <div className="text-center min-w-[52px]">
@@ -198,6 +297,29 @@ export function DutyPeriodCard({ duty, index, statusSummary }: Props) {
             </div>
           </div>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            {(() => {
+              const leg0 = duty.legs[0];
+              const tripCrew = leg0.is_flight ? buildCrewSituationDisplayFromEntry(leg0) : null;
+              return tripCrew ? (
+                <CrewTripulanteSummary crew={tripCrew} />
+              ) : (
+                <>
+                  <span className="whitespace-nowrap">Situação:</span>
+                  <span className={crewStatusBadgeClassName(legSituationLabel(leg0))}>
+                    {legSituationLabel(leg0)}
+                  </span>
+                  {leg0.crew_role && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span className="whitespace-nowrap">Função:</span>
+                      <span className="font-medium text-foreground">{formatCrewRoleLabel(leg0.crew_role)}</span>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
           {(duty.totalBlockHours > 0 || duty.totalDutyHours > 0) && (
             <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-border min-w-0">
               {duty.totalBlockHours > 0 && (

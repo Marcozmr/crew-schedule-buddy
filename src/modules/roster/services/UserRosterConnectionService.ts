@@ -3,6 +3,13 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import {
+  classifyDashboardRosterSource,
+  dashboardSourceLabel,
+  pickDashboardRosterId,
+  type DashboardScheduleSourceKind,
+  type ImportedRosterForDashboardPick,
+} from '@/lib/roster/dashboard-schedule-consolidation';
 
 export type UserRosterConnectionType =
   | 'corporate_pdf'
@@ -34,7 +41,74 @@ export interface UserRosterConnectionRow {
   updated_at: string;
 }
 
+function normalizeUserRosterRow(
+  data: unknown,
+): UserRosterConnectionRow {
+  const row = data as UserRosterConnectionRow & { roster_connection_state?: RosterConnectionState };
+  return {
+    ...row,
+    roster_connection_state: row.roster_connection_state ?? 'idle',
+  };
+}
+
 export const UserRosterConnectionService = {
+  /**
+   * Garante uma linha em `user_roster_connection` para o usuário (novo usuário / migração).
+   * Idempotente: se já existir, devolve a linha atual.
+   */
+  async ensureDefaultUserRosterConnection(userId: string): Promise<UserRosterConnectionRow | null> {
+    if (import.meta.env.DEV) {
+      console.info(
+        '[UserRosterConnectionService] user_roster_connection ausente — criando registro padrão (manual_fallback / idle)',
+        userId,
+      );
+    }
+
+    const { data: inserted, error } = await supabase
+      .from('user_roster_connection')
+      .insert({
+        user_id: userId,
+        connection_type: 'manual_fallback',
+        connection_status: 'disconnected',
+        roster_connection_state: 'idle',
+        is_auto_update_enabled: true,
+      })
+      .select('*')
+      .single();
+
+    if (!error && inserted) {
+      if (import.meta.env.DEV) {
+        console.info('[UserRosterConnectionService] registro padrão criado', (inserted as { id?: string }).id);
+      }
+      return normalizeUserRosterRow(inserted);
+    }
+
+    const code = (error as { code?: string } | null)?.code;
+    const msg = error?.message ?? '';
+    const isDuplicate =
+      code === '23505' || /duplicate key|unique constraint/i.test(msg);
+    if (isDuplicate) {
+      const { data: again, error: fetchErr } = await supabase
+        .from('user_roster_connection')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (fetchErr) {
+        console.warn('[UserRosterConnectionService] ensureDefault fetch after race', fetchErr.message);
+        return null;
+      }
+      if (again) {
+        if (import.meta.env.DEV) {
+          console.info('[UserRosterConnectionService] registro já existia (corrida) — usando linha existente');
+        }
+        return normalizeUserRosterRow(again);
+      }
+    }
+
+    console.warn('[UserRosterConnectionService] ensureDefault insert failed', msg);
+    return null;
+  },
+
   /**
    * Roster ativo: alinha `user_roster_connection.current_active_roster_id` com `imported_rosters.is_active`.
    */
@@ -62,6 +136,61 @@ export const UserRosterConnectionService = {
     return (active as { id: string } | null)?.id ?? null;
   },
 
+  /**
+   * Roster que alimenta dashboard / Flight Board Pro / cartões operacionais.
+   * Prioriza portal/sincronizado sobre PDF e manual quando há dados utilizáveis.
+   * Não substitui `resolveActiveRosterId` (automação e downloads podem continuar usando aquela).
+   */
+  async resolveDashboardRosterId(userId: string): Promise<string | null> {
+    const ctx = await UserRosterConnectionService.resolveDashboardRosterContext(userId);
+    return ctx.rosterId;
+  },
+
+  /** Contexto da fonte vencedora (cartões / Flight Board / rastreabilidade na UI). */
+  async resolveDashboardRosterContext(userId: string): Promise<{
+    rosterId: string | null;
+    sourceKind: DashboardScheduleSourceKind;
+    sourceLabel: string;
+  }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.from('imported_rosters') as any)
+      .select(
+        'id, is_active, inserted_count, parsed_count, import_status, roster_provider, source_type, roster_source, import_origin, portal_connection_id, connector_key, synced_at, last_sync_at, is_official_crew_roster_pdf, superseded_by_roster_id, created_at',
+      )
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(48);
+
+    if (error) {
+      console.warn('[UserRosterConnectionService] resolveDashboardRosterContext', error.message);
+      const fallback = await UserRosterConnectionService.resolveActiveRosterId(userId);
+      return {
+        rosterId: fallback,
+        sourceKind: 'unknown',
+        sourceLabel: dashboardSourceLabel('unknown'),
+      };
+    }
+
+    const rows = (data ?? []) as ImportedRosterForDashboardPick[];
+    const picked = pickDashboardRosterId(rows);
+    if (!picked) {
+      const fallback = await UserRosterConnectionService.resolveActiveRosterId(userId);
+      return {
+        rosterId: fallback,
+        sourceKind: 'unknown',
+        sourceLabel: dashboardSourceLabel('unknown'),
+      };
+    }
+
+    const row = rows.find((r) => r.id === picked);
+    const sourceKind = row ? classifyDashboardRosterSource(row) : 'unknown';
+    return {
+      rosterId: picked,
+      sourceKind,
+      sourceLabel: dashboardSourceLabel(sourceKind),
+    };
+  },
+
   async fetchByUserId(userId: string): Promise<UserRosterConnectionRow | null> {
     const { data, error } = await supabase
       .from('user_roster_connection')
@@ -72,11 +201,13 @@ export const UserRosterConnectionService = {
       console.warn('[UserRosterConnectionService] fetch', error.message);
       return null;
     }
-    const row = data as UserRosterConnectionRow & { roster_connection_state?: RosterConnectionState };
-    return {
-      ...row,
-      roster_connection_state: row.roster_connection_state ?? 'idle',
-    };
+    if (data) {
+      return normalizeUserRosterRow(data);
+    }
+    if (import.meta.env.DEV) {
+      console.info('[UserRosterConnectionService] fetchByUserId: sem linha — usando ensureDefaultUserRosterConnection');
+    }
+    return UserRosterConnectionService.ensureDefaultUserRosterConnection(userId);
   },
 
   /**

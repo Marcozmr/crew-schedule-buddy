@@ -9,6 +9,12 @@
 
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
 import { resolveSafeIANATimezone } from '@/lib/date-utils';
+import { countsAsOperationalFlightBlockHours } from '@/lib/operational-flight-hours';
+import {
+  compareScheduleEntries,
+  isPresentationEntry,
+  operationalSortKey,
+} from '@/lib/schedule-entry-sort';
 
 export interface DutyPeriod {
   id: string;
@@ -71,15 +77,6 @@ function shiftDateStr(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
-}
-
-/**
- * Prioriza APR/report_time; sort_datetime fica como fallback apenas.
- */
-function getEffectiveSortKey(e: ScheduleEntry): string {
-  const aprOrDep = e.report_time || e.departure_time || '00:00';
-  if (e.date) return `${e.date}T${aprOrDep}`;
-  return e.sort_datetime || '';
 }
 
 function absoluteMinutes(date: string, time: string | null | undefined, refDate: string): number {
@@ -180,18 +177,54 @@ function findBestForwardCandidateIndex(
 
 // ── Main grouping ──
 
+/**
+ * Anexa cada APR ao primeiro grupo (por horário de primeiro voo) do mesmo dia
+ * em que o voo ocorre depois da apresentação.
+ */
+function assignPresentationsToFlightGroups(
+  groupsSorted: ScheduleEntry[][],
+  presentations: ScheduleEntry[],
+): Map<number, ScheduleEntry[]> {
+  const map = new Map<number, ScheduleEntry[]>();
+  for (const p of [...presentations].sort(compareScheduleEntries)) {
+    let bestIdx = -1;
+    let bestFirstKey = '';
+    for (let i = 0; i < groupsSorted.length; i++) {
+      const first = groupsSorted[i][0];
+      if (first.date !== p.date) continue;
+      if (compareScheduleEntries(p, first) >= 0) continue;
+      const fk = operationalSortKey(first);
+      if (bestIdx < 0 || fk.localeCompare(bestFirstKey) < 0) {
+        bestIdx = i;
+        bestFirstKey = fk;
+      }
+    }
+    if (bestIdx >= 0) {
+      const arr = map.get(bestIdx) ?? [];
+      arr.push(p);
+      map.set(bestIdx, arr);
+    }
+  }
+  for (const arr of map.values()) arr.sort(compareScheduleEntries);
+  return map;
+}
+
 export function groupIntoDutyPeriods(
   entries: ScheduleEntry[],
   gapThresholdMinutes = 600,
 ): DutyPeriod[] {
+  const presentations = entries.filter(isPresentationEntry);
   const flights = entries
     .filter(e => e.is_flight)
-    .sort((a, b) => getEffectiveSortKey(a).localeCompare(getEffectiveSortKey(b)));
+    .sort(compareScheduleEntries);
 
-  if (flights.length === 0) return [];
+  if (flights.length === 0) {
+    const onlyPres = [...presentations].sort(compareScheduleEntries);
+    const duties = onlyPres.map(p => buildDutyPeriod([p]));
+    duties.sort((a, b) => a.dutyStartAbsoluteMin - b.dutyStartAbsoluteMin);
+    return duties;
+  }
 
-  // Build groups by expanding both directions to recover correct operational sequence
-  // even when input order is inconsistent around midnight.
   const pool = [...flights];
   const groups: ScheduleEntry[][] = [];
 
@@ -219,43 +252,111 @@ export function groupIntoDutyPeriods(
     groups.push(group);
   }
 
-  // Build duty periods and sort by absolute start time
-  const duties = groups.map(legs => buildDutyPeriod(legs));
+  const groupsSorted = [...groups].sort((a, b) => compareScheduleEntries(a[0], b[0]));
+  const prependMap = assignPresentationsToFlightGroups(groupsSorted, presentations);
+
+  const usedPres = new Set<string>();
+  prependMap.forEach(arr => arr.forEach(p => usedPres.add(p.id)));
+
+  const augmented: ScheduleEntry[][] = groupsSorted.map((g, i) => {
+    const prep = prependMap.get(i) ?? [];
+    return [...prep, ...g];
+  });
+
+  const standalonePres = presentations
+    .filter(p => !usedPres.has(p.id))
+    .sort(compareScheduleEntries);
+
+  const duties: DutyPeriod[] = [
+    ...augmented.map(legs => buildDutyPeriod(legs)),
+    ...standalonePres.map(p => buildDutyPeriod([p])),
+  ];
   duties.sort((a, b) => a.dutyStartAbsoluteMin - b.dutyStartAbsoluteMin);
   return duties;
 }
 
 // ── Build duty period ──
 
+function buildRouteSummaryFromLegs(legs: ScheduleEntry[]): string {
+  const parts: string[] = [];
+  for (const leg of legs) {
+    const d = normalizeAirport(leg.departure);
+    const a = normalizeAirport(leg.arrival);
+    if (parts.length === 0 && d) parts.push(d);
+    if (a && a !== parts[parts.length - 1]) parts.push(a);
+  }
+  if (parts.length > 0) return parts.join(' → ');
+  return legs.map(l => l.flight_number).join(' · ');
+}
+
+/** Horas de bloco por trecho: prioriza horários da escala (evita somar o mesmo valor “oficial” repetido em cada perna). */
+export function segmentBlockHoursFromTimes(leg: ScheduleEntry): number | null {
+  if (!leg.is_flight) return null;
+  const d = timeToMinutes(leg.departure_time);
+  const a = timeToMinutes(leg.arrival_time);
+  if (d < 0 || a < 0) return null;
+  let arr = a;
+  if (arr < d) arr += 1440;
+  return (arr - d) / 60;
+}
+
+function gapBetweenLegs(prev: ScheduleEntry, next: ScheduleEntry): number {
+  const g = getConnectionGapMinutes(prev, next, 24 * 60);
+  if (g != null) return g;
+  const ta = Date.parse(operationalSortKey(prev));
+  const tb = Date.parse(operationalSortKey(next));
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+  return Math.max(0, Math.round((tb - ta) / 60000));
+}
+
 function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
   const first = legs[0];
   const last = legs[legs.length - 1];
+  const lastFlight = [...legs].reverse().find(l => l.is_flight);
 
-  const airports: string[] = [first.departure];
-  for (const leg of legs) airports.push(leg.arrival);
-  const routeSummary = airports.join(' → ');
+  const routeSummary = buildRouteSummaryFromLegs(legs);
 
   const connectionTimes: number[] = [];
   for (let i = 1; i < legs.length; i++) {
-    const gap = getConnectionGapMinutes(legs[i - 1], legs[i], 24 * 60);
-    connectionTimes.push(gap ?? 0);
+    connectionTimes.push(gapBetweenLegs(legs[i - 1], legs[i]));
   }
 
-  const totalBlockHours = legs.reduce((s, l) => s + (l.flight_hours || 0), 0);
+  const totalBlockHours = legs
+    .filter(l => l.is_flight && countsAsOperationalFlightBlockHours(l))
+    .reduce((s, leg) => {
+      const fromTimes = segmentBlockHoursFromTimes(leg);
+      if (fromTimes != null && Number.isFinite(fromTimes) && fromTimes >= 0) {
+        return s + fromTimes;
+      }
+      if (leg.flight_hours != null && leg.flight_hours > 0) {
+        return s + leg.flight_hours;
+      }
+      return s;
+    }, 0);
 
   const dutyStartTime = first.report_time || first.departure_time;
-  const reportMin = timeToMinutes(dutyStartTime);
-  let lastArrMin = timeToMinutes(last.arrival_time);
-  if (reportMin >= 0 && lastArrMin >= 0 && lastArrMin < reportMin) {
-    lastArrMin += 1440;
+  const endLeg = lastFlight ?? last;
+  const endTime = endLeg.arrival_time;
+  const endDate = endLeg.date || first.date;
+
+  const startAbs = dateTimeToAbsMin(first.date, dutyStartTime);
+  const endAbs = dateTimeToAbsMin(endDate, endTime);
+
+  let rawDutyMins: number;
+  if (startAbs >= 0 && endAbs >= 0 && endAbs >= startAbs) {
+    rawDutyMins = endAbs - startAbs + 30;
+  } else {
+    const flightsOnly = legs.filter(l => l.is_flight);
+    if (flightsOnly.length === 1 && flightsOnly[0].duty_hours != null && flightsOnly[0].duty_hours > 0) {
+      rawDutyMins = flightsOnly[0].duty_hours * 60;
+    } else {
+      rawDutyMins = 0;
+    }
   }
-  const rawDutyMins = (reportMin >= 0 && lastArrMin >= 0)
-    ? (lastArrMin - reportMin + 30)
-    : legs.reduce((s, l) => s + (l.duty_hours || 0) * 60, 0);
   const totalDutyHours = Math.round((rawDutyMins / 60) * 100) / 100;
 
   const crossesMidnight = legs.some(l => l.crosses_midnight)
-    || legs.some(l => didCrossMidnight(l.departure_time, l.arrival_time))
+    || legs.some(l => l.is_flight && didCrossMidnight(l.departure_time, l.arrival_time))
     || (first.date !== last.date);
 
   const hasMadrugada = legs.some(l =>
@@ -270,7 +371,7 @@ function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
     routeSummary,
     reportTime: first.report_time || null,
     dutyStartTime,
-    dutyEndTime: last.arrival_time,
+    dutyEndTime: endTime,
     dutyStartDate: first.date,
     dutyStartAbsoluteMin,
     legCount: legs.length,
@@ -279,7 +380,7 @@ function buildDutyPeriod(legs: ScheduleEntry[]): DutyPeriod {
     crossesMidnight,
     hasMadrugada,
     connectionTimes,
-    debriefTime: last.debrief_time || null,
+    debriefTime: lastFlight?.debrief_time ?? last.debrief_time ?? null,
     homeBasePriority: false,
   };
 }
@@ -301,8 +402,10 @@ export function getTodayDutyPeriods(
       return false;
     })
     .map(dp => {
+      const firstFlight = dp.legs.find(l => l.is_flight);
+      const depForBase = firstFlight?.departure ?? dp.legs[0]?.departure;
       const startsFromBase = normalizedBase.length > 0
-        && normalizeAirport(dp.legs[0]?.departure) === normalizedBase;
+        && normalizeAirport(depForBase) === normalizedBase;
 
       return {
         ...dp,

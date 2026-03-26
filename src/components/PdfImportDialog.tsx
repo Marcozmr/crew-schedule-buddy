@@ -132,10 +132,13 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
               {result.parseStats && (
                 <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Voos</p><p className="font-bold text-foreground">{result.parseStats.totalFlights}</p></div>
-                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">DO/OFF</p><p className="font-bold text-foreground">{result.parseStats.totalDO}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Folgas</p><p className="font-bold text-foreground">{result.parseStats.totalDO}</p></div>
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Standby</p><p className="font-bold text-foreground">{result.parseStats.totalStandby}</p></div>
-                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">APR</p><p className="font-bold text-foreground">{result.parseStats.totalAPR}</p></div>
-                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Após limpeza</p><p className="font-bold text-foreground">{result.parseStats.totalAfterDedup}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Reserva</p><p className="font-bold text-foreground">{result.parseStats.totalReserve}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Sobreaviso</p><p className="font-bold text-foreground">{result.parseStats.totalOnCall}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Apresentação</p><p className="font-bold text-foreground">{result.parseStats.totalPresentation}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">APR (cód.)</p><p className="font-bold text-foreground">{result.parseStats.totalAPR}</p></div>
+                  <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Total linhas</p><p className="font-bold text-foreground">{result.parseStats.totalAfterDedup}</p></div>
                   <div className="bg-background rounded-lg p-2 text-center"><p className="text-muted-foreground">Marcos</p><p className="font-bold text-foreground">{result.parseStats.totalRawAnchors}</p></div>
                 </div>
               )}

@@ -9,7 +9,10 @@ import {
   type RuleResult,
   type ScheduleWindow,
 } from '@/regulation';
+import type { ScheduleEntry } from '@/hooks/useScheduleData';
 import { groupIntoDutyPeriods, type DutyPeriod } from '@/lib/duty-grouping';
+import { countsAsOperationalFlightBlockHours } from '@/lib/operational-flight-hours';
+import type { ActivityType } from '@/regulation/types';
 
 export interface OperationalScheduleEntry {
   id: string;
@@ -40,6 +43,9 @@ export interface OperationalScheduleEntry {
   sort_datetime: string | null;
   hotel_name: string | null;
   raw_line: string | null;
+  entry_type?: string | null;
+  crew_status_code?: string | null;
+  crew_status_label?: string | null;
 }
 
 export interface OperationalAnalysis {
@@ -269,16 +275,24 @@ function mapDutyPeriodToInput(
   duty: DutyPeriod,
   timezone: string,
   homeBase?: string | null,
-): DutyPeriodInput {
-  const offsets = resolveDutyLegOffsets(duty);
-  const firstDate = duty.dutyStartDate;
-  const firstLeg = duty.legs[0];
-  const lastLeg = duty.legs[duty.legs.length - 1];
+): DutyPeriodInput | null {
+  const flightLegs = duty.legs.filter((l) => l.is_flight);
+  if (flightLegs.length === 0) return null;
 
-  const legs = duty.legs.map((leg, index) => {
+  const offsets = resolveDutyLegOffsets({ ...duty, legs: flightLegs });
+  const firstDate = duty.dutyStartDate;
+  const firstLeg = flightLegs[0];
+  const lastLeg = flightLegs[flightLegs.length - 1];
+
+  const legs = flightLegs.map((leg, index) => {
     const departureTime = leg.departure_time || '00:00';
     const arrivalTime = leg.arrival_time || departureTime;
     const { depDayOffset, arrDayOffset } = offsets[index];
+
+    const se = leg as ScheduleEntry;
+    const code = (se.crew_status_code || '').toUpperCase().trim();
+    const activityType: ActivityType =
+      code === 'PS' || code === 'PSB' || code === 'PSI' ? 'positioning' : 'flight';
 
     return {
       id: leg.id,
@@ -288,8 +302,9 @@ function mapDutyPeriodToInput(
       scheduledDepartureUtc: toUtcIso(firstDate, departureTime, timezone, depDayOffset),
       scheduledArrivalUtc: toUtcIso(firstDate, arrivalTime, timezone, arrDayOffset),
       aircraftCategory: mapAircraftCategory(leg.aircraft_type),
-      activityType: 'flight' as const,
+      activityType,
       crossesMidnight: arrDayOffset > depDayOffset,
+      countsTowardFlightHourLimit: countsAsOperationalFlightBlockHours(se),
     };
   });
 
@@ -308,8 +323,9 @@ export function buildDutyPeriodsFromSchedule(
   timezone: string,
   homeBase?: string | null,
 ): DutyPeriodInput[] {
-  return groupIntoDutyPeriods(schedule)
-    .map((duty) => mapDutyPeriodToInput(duty, timezone, homeBase));
+  return groupIntoDutyPeriods(schedule as unknown as ScheduleEntry[])
+    .map((duty) => mapDutyPeriodToInput(duty, timezone, homeBase))
+    .filter((d): d is DutyPeriodInput => d != null);
 }
 
 export function buildOperationalWindow(

@@ -9,7 +9,10 @@ import { useScheduleData } from '@/hooks/useScheduleData';
 import { Calendar, Plane, Clock, Coffee, BedDouble, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatTimeBR, parseDateBRT } from '@/lib/date-utils';
+import { compareScheduleEntries } from '@/lib/schedule-entry-sort';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { buildCrewSituationDisplayFromEntry } from '@/lib/roster/crew-tripulante-display';
+import { CrewTripulanteSummary } from '@/components/flight-board/CrewTripulanteSummary';
 
 export default function SchedulePage() {
   const { schedule, reload } = useScheduleData();
@@ -57,7 +60,7 @@ export default function SchedulePage() {
     if (!selectedDay) return [];
     return filteredSchedule
       .filter((entry) => getDay(entry.date) === selectedDay)
-      .sort((a, b) => (a.departure_time || '').localeCompare(b.departure_time || ''));
+      .sort(compareScheduleEntries);
   }, [filteredSchedule, selectedDay]);
 
   const getActivityIcon = (entry: typeof schedule[0]) => {
@@ -174,7 +177,9 @@ export default function SchedulePage() {
                 <p className="text-sm text-muted-foreground">Sem atividades neste dia</p>
               </div>
             ) : (
-              selectedEntries.map((entry, index) => (
+              selectedEntries.map((entry, index) => {
+                const tripCrew = entry.is_flight ? buildCrewSituationDisplayFromEntry(entry) : null;
+                return (
                 <motion.div
                   key={entry.id}
                   initial={{ opacity: 0, y: 8 }}
@@ -239,6 +244,11 @@ export default function SchedulePage() {
                               </span>
                             )}
                           </div>
+                          {tripCrew && (
+                            <div className="mt-3 pt-3 border-t border-border">
+                              <CrewTripulanteSummary crew={tripCrew} />
+                            </div>
+                          )}
                         </>
                       )}
 
@@ -253,7 +263,8 @@ export default function SchedulePage() {
                     </div>
                   </div>
                 </motion.div>
-              ))
+              );
+              })
             )}
           </div>
         </SheetContent>

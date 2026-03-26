@@ -41,7 +41,7 @@ export function parseDateBRT(dateStr: string): TZDate {
   if (dateStr.includes('-') && dateStr.indexOf('-') === 4) {
     [year, month, day] = dateStr.split('-').map(Number);
   } else {
-    const parts = dateStr.split(/[\/\-]/);
+    const parts = dateStr.split(/[-/]/);
     day = parseInt(parts[0]);
     month = parseInt(parts[1]);
     year = parseInt(parts[2]);

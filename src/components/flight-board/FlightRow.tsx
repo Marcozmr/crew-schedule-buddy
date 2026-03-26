@@ -5,6 +5,7 @@ import { FlightCountdown } from "./FlightCountdown";
 import type { FlightNormalized } from "@/services/flightBoard/types";
 import { cn } from "@/lib/utils";
 import { OperationalCodeBadges } from "./OperationalCodeBadges";
+import { CrewTripulanteSummary } from "./CrewTripulanteSummary";
 
 interface FlightRowProps {
   flight: FlightNormalized;
@@ -68,8 +69,13 @@ export function FlightRow({
         <p className="truncate font-mono text-base font-semibold text-foreground">
           {flight.origin} → {flight.destination}
         </p>
-        {flight.operationalCodes && flight.operationalCodes.length > 0 && (
-          <OperationalCodeBadges codes={flight.operationalCodes} className="sm:justify-end" />
+        {flight.crewSituation ? (
+          <CrewTripulanteSummary crew={flight.crewSituation} className="sm:justify-end" />
+        ) : (
+          Array.isArray(flight.operationalCodes) &&
+          flight.operationalCodes.length > 0 && (
+            <OperationalCodeBadges codes={flight.operationalCodes} className="sm:justify-end" />
+          )
         )}
       </div>
 

@@ -11,8 +11,15 @@ import { toast } from 'sonner';
 import { ArrowLeftRight, Plus, Eye, MessageCircle, Send, Store, TrendingUp, MapPin, Lightbulb, Inbox } from 'lucide-react';
 import { formatDateBR } from '@/lib/date-utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import type { Database } from '@/integrations/supabase/types';
+import type { LucideIcon } from 'lucide-react';
 
 type Tab = 'available' | 'my-base' | 'trending' | 'my-offers' | 'my-proposals' | 'received';
+
+type OfferRow = Database['public']['Tables']['flight_swap_offers']['Row'];
+type ProposalRow = Database['public']['Tables']['flight_swap_proposals']['Row'];
+/** UI extensions for sheets / list enrichment */
+type OfferWithUi = OfferRow & { _ownerBase?: string; _viewProposals?: boolean };
 
 const OFFER_STATUS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   open: { label: 'Aberta', variant: 'outline' },
@@ -31,7 +38,15 @@ const PROPOSAL_STATUS: Record<string, { label: string; variant: 'default' | 'sec
 };
 
 // ── Offer Card ──
-function OfferCard({ o, onInterest, showBase }: { o: any; onInterest?: (o: any) => void; showBase?: boolean }) {
+function OfferCard({
+  o,
+  onInterest,
+  showBase,
+}: {
+  o: OfferRow & { _ownerBase?: string };
+  onInterest?: (o: OfferRow & { _ownerBase?: string }) => void;
+  showBase?: boolean;
+}) {
   const s = OFFER_STATUS[o.status] || OFFER_STATUS.open;
   return (
     <div className="bg-card rounded-xl p-4 shadow-card border border-border">
@@ -63,15 +78,15 @@ function OfferCard({ o, onInterest, showBase }: { o: any; onInterest?: (o: any) 
 export default function FlightSwapPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('available');
-  const [allOffers, setAllOffers] = useState<any[]>([]);
-  const [myProposals, setMyProposals] = useState<any[]>([]);
-  const [receivedProposals, setReceivedProposals] = useState<any[]>([]);
+  const [allOffers, setAllOffers] = useState<OfferRow[]>([]);
+  const [myProposals, setMyProposals] = useState<ProposalRow[]>([]);
+  const [receivedProposals, setReceivedProposals] = useState<ProposalRow[]>([]);
   const [form, setForm] = useState({ flight_number: '', flight_date: '', departure_airport: '', arrival_airport: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedOffer, setSelectedOffer] = useState<any>(null);
+  const [selectedOffer, setSelectedOffer] = useState<OfferWithUi | null>(null);
   const [proposalMsg, setProposalMsg] = useState('');
-  const [proposals, setProposals] = useState<any[]>([]);
+  const [proposals, setProposals] = useState<ProposalRow[]>([]);
   const [userBase, setUserBase] = useState<string | null>(null);
 
   // ── Detect user base from active roster → profile → settings ──
@@ -79,7 +94,7 @@ export default function FlightSwapPage() {
     if (!user) return;
     (async () => {
       // 1) active roster
-      const { data: activeRosters } = await (supabase as any)
+      const { data: activeRosters } = await supabase
         .from('imported_rosters')
         .select('base_airport, created_at')
         .eq('user_id', user.id)
@@ -103,18 +118,16 @@ export default function FlightSwapPage() {
   // ── Load all data ──
   const loadAll = async () => {
     if (!user) { setAllOffers([]); setMyProposals([]); setReceivedProposals([]); return; }
-    const sb = supabase as any;
-
-    const { data: offers } = await sb.from('flight_swap_offers').select('*').order('created_at', { ascending: false });
+    const { data: offers } = await supabase.from('flight_swap_offers').select('*').order('created_at', { ascending: false });
     setAllOffers(offers || []);
 
-    const { data: props } = await sb.from('flight_swap_proposals').select('*').eq('proposer_user_id', user.id).order('created_at', { ascending: false });
+    const { data: props } = await supabase.from('flight_swap_proposals').select('*').eq('proposer_user_id', user.id).order('created_at', { ascending: false });
     setMyProposals(props || []);
 
     // Received proposals = proposals on MY offers
-    const myOfferIds = (offers || []).filter((o: any) => o.owner_user_id === user.id).map((o: any) => o.id);
+    const myOfferIds = (offers || []).filter((o) => o.owner_user_id === user.id).map((o) => o.id);
     if (myOfferIds.length > 0) {
-      const { data: recv } = await sb.from('flight_swap_proposals').select('*').in('offer_id', myOfferIds).order('created_at', { ascending: false });
+      const { data: recv } = await supabase.from('flight_swap_proposals').select('*').in('offer_id', myOfferIds).order('created_at', { ascending: false });
       setReceivedProposals(recv || []);
     } else {
       setReceivedProposals([]);
@@ -152,7 +165,7 @@ export default function FlightSwapPage() {
   const handleCreateOffer = async () => {
     if (!user || !form.flight_number) { toast.error('Informe o voo'); return; }
     setSaving(true);
-    await (supabase as any).from('flight_swap_offers').insert({
+    await supabase.from('flight_swap_offers').insert({
       owner_user_id: user.id,
       flight_number: form.flight_number,
       flight_date: form.flight_date || null,
@@ -170,8 +183,8 @@ export default function FlightSwapPage() {
 
   const handleSendProposal = async (offerId: string) => {
     if (!user || !proposalMsg.trim()) { toast.error('Escreva uma mensagem'); return; }
-    await (supabase as any).from('flight_swap_proposals').insert({ offer_id: offerId, proposer_user_id: user.id, message: proposalMsg, status: 'sent' });
-    await (supabase as any).from('flight_swap_offers').update({ status: 'in_negotiation', interest_count: (selectedOffer?.interest_count || 0) + 1 }).eq('id', offerId);
+    await supabase.from('flight_swap_proposals').insert({ offer_id: offerId, proposer_user_id: user.id, message: proposalMsg, status: 'sent' });
+    await supabase.from('flight_swap_offers').update({ status: 'in_negotiation', interest_count: (selectedOffer?.interest_count || 0) + 1 }).eq('id', offerId);
     toast.success('Proposta enviada!');
     setProposalMsg('');
     setSelectedOffer(null);
@@ -179,28 +192,31 @@ export default function FlightSwapPage() {
   };
 
   const handleUpdateOfferStatus = async (id: string, status: string) => {
-    await (supabase as any).from('flight_swap_offers').update({ status }).eq('id', id);
+    await supabase.from('flight_swap_offers').update({ status }).eq('id', id);
     toast.success('Status atualizado');
     loadAll();
   };
 
   const handleProposalAction = async (proposalId: string, status: string, offerId?: string) => {
-    await (supabase as any).from('flight_swap_proposals').update({ status }).eq('id', proposalId);
+    await supabase.from('flight_swap_proposals').update({ status }).eq('id', proposalId);
     if (status === 'accepted' && offerId) {
-      await (supabase as any).from('flight_swap_offers').update({ status: 'accepted' }).eq('id', offerId);
+      await supabase.from('flight_swap_offers').update({ status: 'accepted' }).eq('id', offerId);
     }
     toast.success(`Proposta ${status === 'accepted' ? 'aceita' : 'rejeitada'}`);
     loadAll();
   };
 
   const loadProposalsForOffer = async (offerId: string) => {
-    const { data } = await (supabase as any).from('flight_swap_proposals').select('*').eq('offer_id', offerId).order('created_at', { ascending: false });
+    const { data } = await supabase.from('flight_swap_proposals').select('*').eq('offer_id', offerId).order('created_at', { ascending: false });
     setProposals(data || []);
   };
 
-  const openInterest = (o: any) => { setSelectedOffer(o); setProposalMsg(''); };
+  const openInterest = (o: OfferRow & { _ownerBase?: string }) => {
+    setSelectedOffer(o);
+    setProposalMsg('');
+  };
 
-  const tabs: { key: Tab; label: string; icon: any; count: number }[] = [
+  const tabs: { key: Tab; label: string; icon: LucideIcon; count: number }[] = [
     { key: 'available', label: 'Disponíveis', icon: Store, count: availableOffers.length },
     { key: 'my-base', label: 'Minha Base', icon: MapPin, count: myBaseOffers.length },
     { key: 'trending', label: 'Mais Procurados', icon: TrendingUp, count: trendingOffers.length },
@@ -313,7 +329,7 @@ export default function FlightSwapPage() {
           {myProposals.length === 0 && <EmptyState msg="Você ainda não enviou nenhuma proposta" />}
           {myProposals.map(p => {
             const s = PROPOSAL_STATUS[p.status] || PROPOSAL_STATUS.sent;
-            const offer = allOffers.find((o: any) => o.id === p.offer_id);
+            const offer = allOffers.find((o) => o.id === p.offer_id);
             return (
               <div key={p.id} className="bg-card rounded-xl p-4 shadow-card border border-border">
                 <div className="flex items-center justify-between mb-2">
@@ -337,7 +353,7 @@ export default function FlightSwapPage() {
           {receivedProposals.length === 0 && <EmptyState msg="Nenhuma proposta recebida nas suas ofertas" />}
           {receivedProposals.map(p => {
             const s = PROPOSAL_STATUS[p.status] || PROPOSAL_STATUS.sent;
-            const offer = allOffers.find((o: any) => o.id === p.offer_id);
+            const offer = allOffers.find((o) => o.id === p.offer_id);
             return (
               <div key={p.id} className="bg-card rounded-xl p-4 shadow-card border border-border">
                 <div className="flex items-center justify-between mb-2">

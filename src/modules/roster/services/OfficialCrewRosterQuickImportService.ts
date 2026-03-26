@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { importPdfArrayBuffer, type PdfImportResult } from '@/lib/pdf-import';
+import { EMPTY_PARSE_STATS, importPdfArrayBuffer, type PdfImportResult } from '@/lib/pdf-import';
 import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
 
 const BUCKET = 'crew-rosters';
@@ -66,14 +66,7 @@ export async function importFromStoredOfficialRow(userId: string, rosterId: stri
         totalRowsOldRosters: 0,
       },
       textByDay: {},
-      parseStats: {
-        totalRawAnchors: 0,
-        totalFlights: 0,
-        totalDO: 0,
-        totalStandby: 0,
-        totalAPR: 0,
-        totalAfterDedup: 0,
-      },
+      parseStats: EMPTY_PARSE_STATS,
       error: 'Registro não encontrado.',
     };
   }
@@ -104,14 +97,7 @@ export async function importFromStoredOfficialRow(userId: string, rosterId: stri
         totalRowsOldRosters: 0,
       },
       textByDay: {},
-      parseStats: {
-        totalRawAnchors: 0,
-        totalFlights: 0,
-        totalDO: 0,
-        totalStandby: 0,
-        totalAPR: 0,
-        totalAfterDedup: 0,
-      },
+      parseStats: EMPTY_PARSE_STATS,
       error: 'Apenas PDFs CrewRosterReport são aceitos neste fluxo.',
     };
   }
@@ -137,14 +123,7 @@ export async function importFromStoredOfficialRow(userId: string, rosterId: stri
         totalRowsOldRosters: 0,
       },
       textByDay: {},
-      parseStats: {
-        totalRawAnchors: 0,
-        totalFlights: 0,
-        totalDO: 0,
-        totalStandby: 0,
-        totalAPR: 0,
-        totalAfterDedup: 0,
-      },
+      parseStats: EMPTY_PARSE_STATS,
       error: 'PDF não está no armazenamento.',
     };
   }
@@ -170,14 +149,7 @@ export async function importFromStoredOfficialRow(userId: string, rosterId: stri
         totalRowsOldRosters: 0,
       },
       textByDay: {},
-      parseStats: {
-        totalRawAnchors: 0,
-        totalFlights: 0,
-        totalDO: 0,
-        totalStandby: 0,
-        totalAPR: 0,
-        totalAfterDedup: 0,
-      },
+      parseStats: EMPTY_PARSE_STATS,
       error: 'Não foi possível baixar o PDF do armazenamento.',
     };
   }
@@ -209,14 +181,7 @@ export async function importLatestOfficialCrewRosterFromStorage(userId: string):
         totalRowsOldRosters: 0,
       },
       textByDay: {},
-      parseStats: {
-        totalRawAnchors: 0,
-        totalFlights: 0,
-        totalDO: 0,
-        totalStandby: 0,
-        totalAPR: 0,
-        totalAfterDedup: 0,
-      },
+      parseStats: EMPTY_PARSE_STATS,
       error: 'Nenhum CrewRosterReport anterior encontrado. Importe um PDF oficial primeiro.',
     };
   }

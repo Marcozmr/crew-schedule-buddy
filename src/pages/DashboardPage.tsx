@@ -52,6 +52,7 @@ import { useOperationalPreferences } from "../hooks/useOperationalPreferences";
 import { useOperationalClock } from "../hooks/useOperationalClock";
 import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
 import { CorporateRosterFlowBanner } from "@/components/roster/CorporateRosterFlowBanner";
+import { logScheduleMetricsDev } from "@/lib/schedule-metrics-dev";
 
 const statusCardMeta = {
   regular: {
@@ -92,7 +93,7 @@ const buildResultKey = (localReportTime: string) =>
 
 export default function DashboardPage() {
   const { profile, user } = useAuth();
-  const { schedule, loading, reload } = useScheduleData();
+  const { schedule, loading, reload, dashboardRosterSource } = useScheduleData();
   const { shouldShow: showOnboarding, dismiss: dismissOnboarding } =
     useOnboardingModal();
   const { homeBase, timezone } = useOperationalPreferences();
@@ -109,6 +110,12 @@ export default function DashboardPage() {
       });
     }
   }, [safeTz, todayStr, timezone]);
+
+  useEffect(() => {
+    if (!loading && schedule.length > 0) {
+      logScheduleMetricsDev(schedule, "dashboard");
+    }
+  }, [loading, schedule]);
 
   const hasSchedule = !loading && schedule.length > 0;
   const allDutyPeriods = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
@@ -270,6 +277,7 @@ export default function DashboardPage() {
               scheduleLoading={loading}
               operationalTodayIso={todayStr}
               operationalTimezone={safeTz}
+              scheduleSourceLabel={dashboardRosterSource?.sourceLabel}
             />
           </RouteErrorBoundary>
         </motion.div>

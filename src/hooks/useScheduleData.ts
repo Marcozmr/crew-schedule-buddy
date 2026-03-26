@@ -2,10 +2,21 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { emitRosterUpdated, subscribeRosterUpdated } from '@/lib/events/roster-events';
+import type { DashboardScheduleSourceKind } from '@/lib/roster/dashboard-schedule-consolidation';
 import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
+import { applyHomeBaseFromRoster } from '@/lib/services/apply-home-base-from-roster';
+
+export interface DashboardRosterSourceState {
+  rosterId: string | null;
+  sourceKind: DashboardScheduleSourceKind;
+  sourceLabel: string;
+}
 
 export interface ScheduleEntry {
   id: string;
+  /** Presente no SELECT * — usado em diagnósticos de dedupe */
+  roster_id?: string;
+  user_id?: string;
   date: string;
   flight_number: string;
   departure: string;
@@ -33,44 +44,104 @@ export interface ScheduleEntry {
   assignment: string | null;
   comments: string | null;
   sort_datetime: string | null;
+  entry_type: string | null;
+  crew_status_code: string | null;
+  crew_status_label: string | null;
+  activity_label: string | null;
 }
+
+/** Proteção: nenhuma query de escala deve manter o dashboard em skeleton indefinidamente. */
+const SCHEDULE_LOAD_TIMEOUT_MS = 25_000;
 
 export function useScheduleData() {
   const { user } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [dashboardRosterSource, setDashboardRosterSource] = useState<DashboardRosterSourceState | null>(null);
   const [loading, setLoading] = useState(true);
   const prevUserIdRef = useRef<string | null>(null);
   const autoLoadedEmittedRef = useRef(false);
 
   const loadSchedule = useCallback(async () => {
-    if (!user) { setSchedule([]); setLoading(false); return; }
-    setLoading(true);
-
-    const activeRosterId = await UserRosterConnectionService.resolveActiveRosterId(user.id);
-
-    if (!activeRosterId) {
+    if (!user) {
       setSchedule([]);
+      setDashboardRosterSource(null);
       setLoading(false);
       return;
     }
+    setLoading(true);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase.from('schedule_entries') as any)
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('roster_id', activeRosterId)
-      .order('sort_datetime', { ascending: true, nullsFirst: false });
+    const forceDoneTimer = window.setTimeout(() => {
+      setLoading(false);
+      if (import.meta.env.DEV) {
+        console.warn(
+          '[useScheduleData] timeout',
+          SCHEDULE_LOAD_TIMEOUT_MS,
+          'ms — interrompendo loading (verifique imported_rosters / user_roster_connection / schedule_entries)',
+        );
+      }
+    }, SCHEDULE_LOAD_TIMEOUT_MS);
 
-    if (data) setSchedule(data as unknown as ScheduleEntry[]);
-    setLoading(false);
-
-    if (data && (data as ScheduleEntry[]).length > 0 && !autoLoadedEmittedRef.current) {
-      autoLoadedEmittedRef.current = true;
-      emitRosterUpdated({
-        userId: user.id,
-        reason: 'roster_auto_loaded',
-        at: new Date().toISOString(),
+    try {
+      const rosterCtx = await UserRosterConnectionService.resolveDashboardRosterContext(user.id);
+      setDashboardRosterSource({
+        rosterId: rosterCtx.rosterId,
+        sourceKind: rosterCtx.sourceKind,
+        sourceLabel: rosterCtx.sourceLabel,
       });
+
+      if (!rosterCtx.rosterId) {
+        setSchedule([]);
+        if (import.meta.env.DEV) {
+          console.info('[useScheduleData] sem roster para o dashboard após consolidação de fontes');
+        }
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('schedule_entries') as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('roster_id', rosterCtx.rosterId)
+        .order('sort_datetime', { ascending: true, nullsFirst: false });
+
+      if (error && import.meta.env.DEV) {
+        console.error('[useScheduleData] schedule_entries SELECT falhou:', error.code, error.message, error.details);
+      }
+      if (data) setSchedule(data as unknown as ScheduleEntry[]);
+
+      const list = data as ScheduleEntry[] | undefined;
+      if (list && list.length > 0 && rosterCtx.rosterId) {
+        let rosterExplicitBase: string | null = null;
+        const { data: rb } = await supabase
+          .from('imported_rosters')
+          .select('base_airport')
+          .eq('id', rosterCtx.rosterId)
+          .maybeSingle();
+        rosterExplicitBase = (rb as { base_airport?: string | null } | null)?.base_airport ?? null;
+
+        void applyHomeBaseFromRoster({
+          userId: user.id,
+          entries: list,
+          rosterExplicitBase,
+          dashboardSourceKind: rosterCtx.sourceKind,
+        });
+      }
+
+      if (data && (data as ScheduleEntry[]).length > 0 && !autoLoadedEmittedRef.current) {
+        autoLoadedEmittedRef.current = true;
+        emitRosterUpdated({
+          userId: user.id,
+          reason: 'roster_auto_loaded',
+          at: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.error('[useScheduleData] loadSchedule erro não tratado (dashboard pode ficar em loading):', e);
+      }
+    } finally {
+      window.clearTimeout(forceDoneTimer);
+      setLoading(false);
     }
   }, [user]);
 
@@ -80,6 +151,7 @@ export function useScheduleData() {
     if (prevUserIdRef.current !== currentUserId) {
       // User changed — clear stale data immediately
       setSchedule([]);
+      setDashboardRosterSource(null);
       setLoading(true);
       prevUserIdRef.current = currentUserId;
       autoLoadedEmittedRef.current = false;
@@ -139,5 +211,5 @@ export function useScheduleData() {
     };
   }, [loadSchedule, user]);
 
-  return { schedule, loading, reload: loadSchedule };
+  return { schedule, loading, reload: loadSchedule, dashboardRosterSource };
 }

@@ -55,7 +55,7 @@ export function parseMockSchedule(text: string): ScheduleEntry[] {
   const airline = detectAirline(text);
 
   for (const line of lines) {
-    const dateMatch = line.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+    const dateMatch = line.match(/(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/);
     const flightMatch = line.match(/([A-Z]{2}\s?\d{3,4})/i);
     const airportMatch = line.match(/([A-Z]{3})\s*[-–>]\s*([A-Z]{3})/);
     const timeMatch = line.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);

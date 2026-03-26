@@ -54,6 +54,11 @@ export function FeedbackFAB() {
       toast.error('Escreva uma mensagem.');
       return;
     }
+    const emailTrim = (email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      toast.error('Informe um e-mail válido no campo de e-mail.');
+      return;
+    }
     if (!user) {
       toast.error('Faça login para enviar sua mensagem.');
       return;
@@ -80,9 +85,18 @@ export function FeedbackFAB() {
         return;
       }
 
-      if (result.outcome === 'saved_email_failed' || result.outcome === 'saved_smtp_not_configured') {
+      if (
+        result.outcome === 'saved_email_failed' ||
+        result.outcome === 'config_error' ||
+        result.outcome === 'validation_error'
+      ) {
         toast(result.userMessage, { duration: 9000 });
         close();
+        return;
+      }
+
+      if (result.outcome === 'register_failed' || result.outcome === 'unauthorized') {
+        toast.error(result.userMessage);
         return;
       }
 

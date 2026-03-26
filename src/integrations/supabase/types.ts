@@ -281,6 +281,7 @@ export type Database = {
           inserted_count: number | null
           is_active: boolean
           is_official_crew_roster_pdf?: boolean | null
+          last_sync_at: string | null
           superseded_by_roster_id?: string | null
           name: string | null
           parsed_count: number | null
@@ -288,12 +289,15 @@ export type Database = {
           portal_connection_id: string | null
           raw_text_excerpt: string | null
           roster_end_date: string | null
+          roster_provider: string | null
           roster_source?: string | null
           roster_start_date: string | null
           roster_status?: string | null
           source_message_id: string
+          source_type: string | null
           storage_path: string
           superseded_by?: string | null
+          sync_status: string | null
           synced_at: string | null
           updated_at: string
           user_id: string
@@ -318,19 +322,23 @@ export type Database = {
           inserted_count?: number | null
           is_active?: boolean
           is_official_crew_roster_pdf?: boolean | null
+          last_sync_at?: string | null
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
           portal_connection_id?: string | null
           raw_text_excerpt?: string | null
           roster_end_date?: string | null
+          roster_provider?: string | null
           roster_source?: string
           roster_start_date?: string | null
           roster_status?: string
           source_message_id: string
+          source_type?: string | null
           storage_path: string
           superseded_by?: string | null
           superseded_by_roster_id?: string | null
+          sync_status?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id: string
@@ -355,19 +363,23 @@ export type Database = {
           inserted_count?: number | null
           is_active?: boolean
           is_official_crew_roster_pdf?: boolean | null
+          last_sync_at?: string | null
           name?: string | null
           parsed_count?: number | null
           parser_version?: string | null
           portal_connection_id?: string | null
           raw_text_excerpt?: string | null
           roster_end_date?: string | null
+          roster_provider?: string | null
           roster_source?: string
           roster_start_date?: string | null
           roster_status?: string
           source_message_id?: string
+          source_type?: string | null
           storage_path?: string
           superseded_by?: string | null
           superseded_by_roster_id?: string | null
+          sync_status?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id?: string
@@ -769,6 +781,7 @@ export type Database = {
       }
       schedule_entries: {
         Row: {
+          activity_label: string | null
           activity_type: string
           aircraft_prefix: string | null
           aircraft_type: string | null
@@ -780,6 +793,8 @@ export type Database = {
           comments: string | null
           created_at: string
           crew_role: string | null
+          crew_status_code: string | null
+          crew_status_label: string | null
           crosses_midnight: boolean | null
           date: string
           debrief_time: string | null
@@ -787,6 +802,7 @@ export type Database = {
           departure_airport: string | null
           departure_time: string
           duty_hours: number | null
+          entry_type: string | null
           flight_hours: number | null
           flight_number: string
           hotel_name: string | null
@@ -805,6 +821,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          activity_label?: string | null
           activity_type?: string
           aircraft_prefix?: string | null
           aircraft_type?: string | null
@@ -816,6 +833,8 @@ export type Database = {
           comments?: string | null
           created_at?: string
           crew_role?: string | null
+          crew_status_code?: string | null
+          crew_status_label?: string | null
           crosses_midnight?: boolean | null
           date: string
           debrief_time?: string | null
@@ -823,6 +842,7 @@ export type Database = {
           departure_airport?: string | null
           departure_time?: string
           duty_hours?: number | null
+          entry_type?: string | null
           flight_hours?: number | null
           flight_number: string
           hotel_name?: string | null
@@ -841,6 +861,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          activity_label?: string | null
           activity_type?: string
           aircraft_prefix?: string | null
           aircraft_type?: string | null
@@ -852,6 +873,8 @@ export type Database = {
           comments?: string | null
           created_at?: string
           crew_role?: string | null
+          crew_status_code?: string | null
+          crew_status_label?: string | null
           crosses_midnight?: boolean | null
           date?: string
           debrief_time?: string | null
@@ -859,6 +882,7 @@ export type Database = {
           departure_airport?: string | null
           departure_time?: string
           duty_hours?: number | null
+          entry_type?: string | null
           flight_hours?: number | null
           flight_number?: string
           hotel_name?: string | null
@@ -948,6 +972,9 @@ export type Database = {
           company_name: string | null
           created_at: string
           crew_role: string | null
+          detected_base_airport: string | null
+          home_base_source: string | null
+          home_base_user_locked: boolean
           id: string
           notifications_enabled: boolean | null
           theme: string | null
@@ -960,6 +987,9 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           crew_role?: string | null
+          detected_base_airport?: string | null
+          home_base_source?: string | null
+          home_base_user_locked?: boolean
           id?: string
           notifications_enabled?: boolean | null
           theme?: string | null
@@ -972,6 +1002,9 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           crew_role?: string | null
+          detected_base_airport?: string | null
+          home_base_source?: string | null
+          home_base_user_locked?: boolean
           id?: string
           notifications_enabled?: boolean | null
           theme?: string | null

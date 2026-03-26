@@ -7,6 +7,9 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+/** Safari iOS (modo PWA / “Add to Home Screen”) */
+type NavigatorWithStandalone = Navigator & { standalone?: boolean };
+
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
@@ -15,8 +18,9 @@ export function PWAInstallPrompt() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    const standalone = window.matchMedia('(display-mode: standalone)').matches
-      || (navigator as any).standalone === true;
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches
+      || (navigator as NavigatorWithStandalone).standalone === true;
     setIsStandalone(standalone);
     if (standalone) return;
 

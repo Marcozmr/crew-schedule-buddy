@@ -3,6 +3,8 @@
 // Flights AND standbys grouped into duty periods before rest calculation
 
 import { TZDate } from '@date-fns/tz';
+import { countsAsOperationalFlightBlockHours } from '@/lib/operational-flight-hours';
+import type { ScheduleEntry as AppScheduleEntry } from '@/hooks/useScheduleData';
 
 const BRAZIL_TZ = 'America/Sao_Paulo';
 const DUTY_GAP_THRESHOLD_MS = 10 * 3600000; // 10h in ms
@@ -66,6 +68,9 @@ interface ScheduleEntry {
   activity_type: string;
   is_flight: boolean;
   crosses_midnight: boolean;
+  entry_type?: string | null;
+  crew_status_code?: string | null;
+  crew_status_label?: string | null;
 }
 
 const DUTY_TABLE: Record<string, Record<string, [number, number]>> = {
@@ -96,7 +101,7 @@ function parseDateBRT(dateStr: string): TZDate {
   if (dateStr.includes('-') && dateStr.indexOf('-') === 4) {
     [year, month, day] = dateStr.split('-').map(Number);
   } else {
-    const parts = dateStr.split(/[\/\-]/);
+    const parts = dateStr.split(/[-/]/);
     day = parseInt(parts[0]); month = parseInt(parts[1]); year = parseInt(parts[2]);
   }
   return new TZDate(year, month - 1, day, 0, 0, 0, BRAZIL_TZ);
@@ -142,7 +147,7 @@ function isNightOp(entry: ScheduleEntry): boolean {
   return depH < 6 || arrH < 6 || (entry.crosses_midnight && arrH < 6);
 }
 
-/** Entry is a real flight (not standby, day off, ground) */
+/** Voo operacional real (RBAC FH): não folga/reserva; exige regra OP/tripulando (ver operational-flight-hours). */
 function isActualFlight(entry: ScheduleEntry): boolean {
   if (!entry.is_flight) return false;
   const code = (entry.activity_type || '').toUpperCase().trim();
@@ -150,7 +155,7 @@ function isActualFlight(entry: ScheduleEntry): boolean {
   if (DAY_OFF_CODES.has(code) || DAY_OFF_CODES.has(fn)) return false;
   if (STANDBY_CODES.has(code) || STANDBY_CODES.has(fn)) return false;
   if (GROUND_DUTY_CODES.has(code) || GROUND_DUTY_CODES.has(fn)) return false;
-  return true;
+  return countsAsOperationalFlightBlockHours(entry as AppScheduleEntry);
 }
 
 /** Entry is a duty (flight, standby, or ground) but NOT a day off */

@@ -66,6 +66,11 @@ export interface FlightLeg {
   aircraftCategory: AircraftCategory;
   activityType: ActivityType;
   crossesMidnight?: boolean;
+  /**
+   * Se false, o trecho não entra na soma de horas de voo (ex.: PS / extra remunerado).
+   * Omitido = compatível com dados antigos (conta como voo).
+   */
+  countsTowardFlightHourLimit?: boolean;
 }
 
 export interface DutyPeriodInput {

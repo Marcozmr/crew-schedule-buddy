@@ -89,6 +89,7 @@ export function normalizeFlightData(
     estimatedTimestamp,
     presentationTime,
     operationalCodes: raw.operationalCodes,
+    crewSituation: raw.crewSituation,
   };
 }
 

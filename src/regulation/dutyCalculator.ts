@@ -33,31 +33,42 @@ export function calculateDuty(
 ): DutyCalculation {
   const reportMs = new Date(input.reportTimeUtc).getTime();
 
-  // Sort legs by departure time
+  // Trechos de bloco (voo + reposicionamento) para fim de jornada e conexões; horas de voo só em subset.
   const sortedLegs = [...input.legs]
     .filter(l => l.activityType === 'flight' || l.activityType === 'positioning')
     .sort((a, b) => getBlockOff(a) - getBlockOff(b));
 
-  // Flight time per leg
-  const flightSegments = sortedLegs.map(leg => ({
+  const flightHourLegs = sortedLegs.filter(
+    l =>
+      l.activityType === 'flight' &&
+      (l.countsTowardFlightHourLimit === undefined || l.countsTowardFlightHourLimit !== false),
+  );
+
+  // Tempo de voo: apenas trechos operacionais (OP / tripulando), não PS nem duty não voo.
+  const flightSegments = flightHourLegs.map(leg => ({
     blockOff: getBlockOff(leg),
     blockOn: getBlockOn(leg),
     flightMs: getBlockOn(leg) - getBlockOff(leg),
   }));
 
   const totalFlightMs = flightSegments.reduce((sum, s) => sum + s.flightMs, 0);
-  const sectorCount = sortedLegs.filter(l => l.activityType === 'flight').length;
+  const sectorCount = flightHourLegs.length;
 
-  // Ground times between consecutive legs
+  // Conexões no solo: usar todos os trechos de bloco (incl. PS) para gaps coerentes com a jornada.
+  const blockSegmentsForDuty = sortedLegs.map(leg => ({
+    blockOff: getBlockOff(leg),
+    blockOn: getBlockOn(leg),
+  }));
+
   const groundTimesBetweenLegs: number[] = [];
   const gapStartUtcs: string[] = [];
   const gapEndUtcs: string[] = [];
 
-  for (let i = 1; i < flightSegments.length; i++) {
-    const gapMs = Math.max(0, flightSegments[i].blockOff - flightSegments[i - 1].blockOn);
+  for (let i = 1; i < blockSegmentsForDuty.length; i++) {
+    const gapMs = Math.max(0, blockSegmentsForDuty[i].blockOff - blockSegmentsForDuty[i - 1].blockOn);
     groundTimesBetweenLegs.push(gapMs);
-    gapStartUtcs.push(new Date(flightSegments[i - 1].blockOn).toISOString());
-    gapEndUtcs.push(new Date(flightSegments[i].blockOff).toISOString());
+    gapStartUtcs.push(new Date(blockSegmentsForDuty[i - 1].blockOn).toISOString());
+    gapEndUtcs.push(new Date(blockSegmentsForDuty[i].blockOff).toISOString());
   }
 
   const totalGroundTimeMs = groundTimesBetweenLegs.reduce((s, g) => s + g, 0);
@@ -65,9 +76,9 @@ export function calculateDuty(
   // Classify each ground gap as day/night
   const groundGapDetails: GroundGapDetail[] = classifyGroundTimes(gapStartUtcs, gapEndUtcs, timezone);
 
-  // End of duty: last block-on + pós-voo configurável
-  const lastBlockOn = flightSegments.length > 0
-    ? Math.max(...flightSegments.map(s => s.blockOn))
+  // Fim de jornada: último block-on de qualquer trecho (incl. PS); horas de voo só em flightHourLegs.
+  const lastBlockOn = blockSegmentsForDuty.length > 0
+    ? Math.max(...blockSegmentsForDuty.map(s => s.blockOn))
     : reportMs + 3600000; // fallback: 1h duty for non-flight duties
 
   const postFlightMinutes = input.postFlightMinutes ?? DEFAULT_POST_FLIGHT_MINUTES;

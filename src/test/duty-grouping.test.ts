@@ -32,6 +32,10 @@ function makeFlight(overrides: Partial<ScheduleEntry>): ScheduleEntry {
     assignment: overrides.assignment ?? null,
     comments: overrides.comments ?? null,
     sort_datetime: overrides.sort_datetime ?? null,
+    entry_type: overrides.entry_type ?? null,
+    crew_status_code: overrides.crew_status_code ?? null,
+    crew_status_label: overrides.crew_status_label ?? null,
+    activity_label: overrides.activity_label ?? null,
   };
 }
 
@@ -71,6 +75,42 @@ describe('duty grouping', () => {
     expect(duties[0].routeSummary).toBe('BSB → JPA → GRU');
     expect(duties[0].legs[0].departure).toBe('BSB');
     expect(duties[0].legs[1].departure).toBe('JPA');
+  });
+
+  it('coloca Apresentação (APR) antes do voo na mesma jornada quando o horário for anterior', () => {
+    const apr = makeFlight({
+      id: 'apr-1',
+      date: '2026-03-20',
+      flight_number: 'APR',
+      departure: 'CGH',
+      arrival: 'CGH',
+      departure_time: '22:43',
+      arrival_time: '23:30',
+      is_flight: false,
+      activity_type: 'APR',
+      entry_type: 'duty_start',
+      crew_status_code: 'APR',
+      report_time: '22:43',
+      sort_datetime: '2026-03-20T22:43:00',
+      flight_hours: null,
+      duty_hours: null,
+    });
+    const voo = makeFlight({
+      id: 'voo-1',
+      date: '2026-03-20',
+      flight_number: 'LA3590',
+      departure: 'CGH',
+      arrival: 'BSB',
+      departure_time: '23:30',
+      arrival_time: '01:05',
+      report_time: '22:50',
+      crosses_midnight: true,
+      sort_datetime: '2026-03-20T23:30:00',
+    });
+    const duties = groupIntoDutyPeriods([voo, apr]);
+    expect(duties).toHaveLength(1);
+    expect(duties[0].legs[0].flight_number).toBe('APR');
+    expect(duties[0].legs[1].flight_number).toBe('LA3590');
   });
 
   it('prioriza no topo a jornada que inicia na home base', () => {

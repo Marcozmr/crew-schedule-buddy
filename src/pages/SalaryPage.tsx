@@ -10,6 +10,9 @@ import { NumericInput, safeParseNumber } from '@/components/ui/numeric-input';
 import { toast } from 'sonner';
 import { DollarSign, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
+import type { Database } from '@/integrations/supabase/types';
+
+type SalaryHistoryRow = Database['public']['Tables']['salary_entries']['Row'];
 
 const now = new Date();
 const defaultMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -40,7 +43,7 @@ export default function SalaryPage() {
   const [form, setForm] = useState<SalaryForm>({ ...emptyForm });
   const [entryId, setEntryId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<SalaryHistoryRow[]>([]);
 
   const v = (key: keyof SalaryForm): number => safeParseNumber(form[key] as number | null);
   const gross = v('base_salary') + v('per_diem_total') + v('overnight_total') + v('night_additional') + v('productivity_bonus') + v('other_additions');

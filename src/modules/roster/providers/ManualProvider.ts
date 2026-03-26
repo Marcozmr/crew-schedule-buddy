@@ -8,6 +8,7 @@ import { parseMockSchedule, detectAirline } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
+import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
 import type { ConnectionResult, ProviderStatus, RosterSourceInfo, RosterSyncResult } from '../types';
 
 export interface ManualImportInput {
@@ -67,7 +68,8 @@ export class ManualProvider extends RosterProvider {
 
     const deactivatedIds = ((prevActive as { id: string }[] | null) ?? []).map((r) => r.id);
 
-    const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any)
+    const { data: rosterRow, error: rosterError } = await supabase
+      .from('imported_rosters')
       .insert({
         user_id: userId,
         file_name: sourceFilename,
@@ -114,12 +116,20 @@ export class ManualProvider extends RosterProvider {
         duty_hours: entry.dutyHours || null,
         flight_hours: entry.dutyHours || null,
         is_flight: true,
+        entry_type: 'flight',
+        crew_status_code: 'OP',
+        crew_status_label: 'Tripulando',
         activity_type: 'flight',
         sort_datetime: `${isoDate}T${entry.departureTime || '00:00'}:00`,
       };
     });
 
-    const { error } = await (supabase.from('schedule_entries') as any).insert(rows);
+    const { rows: insertRows, removed: dedupeRemoved } = dedupeScheduleEntryRows(rows);
+    if (import.meta.env.DEV && dedupeRemoved > 0) {
+      console.warn(`[ManualProvider] dedupe: ${dedupeRemoved} linha(s) repetida(s) removida(s) antes do insert`);
+    }
+
+    const { error } = await supabase.from('schedule_entries').insert(insertRows);
     if (error) {
       await supabase
         .from('imported_rosters')
@@ -139,7 +149,7 @@ export class ManualProvider extends RosterProvider {
       .from('imported_rosters')
       .update({
         import_status: 'success',
-        inserted_count: rows.length,
+        inserted_count: insertRows.length,
         import_error: null,
         synced_at: nowIso,
         last_sync_at: nowIso,
@@ -148,7 +158,8 @@ export class ManualProvider extends RosterProvider {
       .eq('id', rosterRow.id);
 
     if (deactivatedIds.length > 0) {
-      await (supabase.from('imported_rosters') as any)
+        await supabase
+        .from('imported_rosters')
         .update({ superseded_by_roster_id: rosterRow.id })
         .in('id', deactivatedIds);
     }
@@ -173,7 +184,7 @@ export class ManualProvider extends RosterProvider {
       success: true,
       rosterId: rosterRow.id,
       parsedCount: entries.length,
-      insertedCount: rows.length,
+      insertedCount: insertRows.length,
       error: null,
     };
   }

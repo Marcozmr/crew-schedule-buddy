@@ -82,13 +82,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [providerToken, setProviderToken] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
+    const { data: row, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
 
-    setProfile((data as Profile | null) ?? null);
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[auth] profiles SELECT:', error.code, error.message);
+      }
+      setProfile(null);
+      return;
+    }
+
+    if (row) {
+      setProfile(row as Profile);
+      return;
+    }
+
+    /** Sem linha: criar via RLS (INSERT permitido para auth.uid() = user_id). Cobre usuários antigos / trigger ausente. */
+    const { data: authData } = await supabase.auth.getUser();
+    const u = authData.user;
+    if (!u || u.id !== userId) {
+      setProfile(null);
+      return;
+    }
+
+    const meta = (u.user_metadata || {}) as Record<string, unknown>;
+    const nameFromMeta = String(meta.full_name || meta.name || '').trim();
+    const email = u.email ?? '';
+    const displayName = nameFromMeta || email.split('@')[0] || 'Usuário';
+
+    const { data: upserted, error: upsertErr } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          user_id: userId,
+          email,
+          name: displayName,
+        },
+        { onConflict: 'user_id' },
+      )
+      .select('*')
+      .single();
+
+    if (upsertErr) {
+      if (import.meta.env.DEV) {
+        console.warn('[auth] profiles upsert (ensure) falhou:', upsertErr.message);
+      }
+      setProfile(null);
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      console.info('[auth] perfil criado/atualizado automaticamente para user_id', userId);
+    }
+    setProfile(upserted as Profile);
   };
 
   useEffect(() => {

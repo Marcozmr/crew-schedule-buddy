@@ -22,6 +22,12 @@ export default function SupportPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
+    if (!emailOk) {
+      setStatus('error');
+      setFeedbackMsg('Informe um e-mail válido para que possamos responder.');
+      return;
+    }
 
     setSending(true);
     setStatus('idle');
@@ -45,8 +51,18 @@ export default function SupportPage() {
       return;
     }
 
-    if (result.outcome === 'saved_email_failed' || result.outcome === 'saved_smtp_not_configured') {
+    if (
+      result.outcome === 'saved_email_failed' ||
+      result.outcome === 'config_error' ||
+      result.outcome === 'validation_error'
+    ) {
       setStatus('warning');
+      setFeedbackMsg(result.userMessage);
+      return;
+    }
+
+    if (result.outcome === 'register_failed') {
+      setStatus('error');
       setFeedbackMsg(result.userMessage);
       return;
     }

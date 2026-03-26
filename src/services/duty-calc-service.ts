@@ -151,7 +151,7 @@ export function calculateDuty(input: DutyCalcInput): DutyCalcResult {
   if (landingMin <= takeoff.totalMin) landingMin += 1440;
 
   // If report is after takeoff (e.g. report 22:45, takeoff 23:30 next concept), handle
-  let reportMin = report.totalMin;
+  const reportMin = report.totalMin;
   let takeoffMin = takeoff.totalMin;
   if (takeoffMin < reportMin) takeoffMin += 1440;
   if (landingMin < takeoffMin) landingMin = takeoffMin + (landing.totalMin + 1440 - takeoff.totalMin) % 1440;

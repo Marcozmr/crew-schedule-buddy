@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
+import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -92,16 +93,22 @@ export default function UploadPage() {
         status: entry.status,
         airline: entry.airline,
         report_time: entry.reportTime || null,
-        duty_hours: entry.dutyHours || null,
-        flight_hours: entry.dutyHours || null,
+        duty_hours: null,
+        /** `calculateDutyHours` no parser manual é tempo de bloco (partida→chegada), não jornada completa */
+        flight_hours: entry.dutyHours ?? null,
         is_flight: true,
         activity_type: 'flight',
         sort_datetime: `${isoDate}T${entry.departureTime || '00:00'}:00`,
       };
     });
 
+    const { rows: insertRows, removed: dedupeRemoved } = dedupeScheduleEntryRows(rows);
+    if (import.meta.env.DEV && dedupeRemoved > 0) {
+      console.warn(`[UploadPage] dedupe: ${dedupeRemoved} linha(s) repetida(s) removida(s) antes do insert`);
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase.from('schedule_entries') as any).insert(rows);
+    const { error } = await (supabase.from('schedule_entries') as any).insert(insertRows);
     if (error) {
       await supabase
         .from('imported_rosters')
@@ -114,7 +121,7 @@ export default function UploadPage() {
 
     await supabase
       .from('imported_rosters')
-      .update({ import_status: 'success', inserted_count: rows.length, import_error: null })
+      .update({ import_status: 'success', inserted_count: insertRows.length, import_error: null })
       .eq('id', rosterRow.id);
 
     emitRosterUpdated({
@@ -128,9 +135,9 @@ export default function UploadPage() {
       await refreshProfile();
     }
 
-    setResult({ count: entries.length, airline });
+    setResult({ count: insertRows.length, airline });
     setTextInput('');
-    toast.success(`✅ ${entries.length} voos importados! Redirecionando...`);
+    toast.success(`✅ ${insertRows.length} voos importados! Redirecionando...`);
     setProcessing(false);
 
     setTimeout(() => navigate('/download-roster'), 1500);

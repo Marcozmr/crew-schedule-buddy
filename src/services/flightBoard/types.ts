@@ -6,6 +6,14 @@
 import type { FlightOperationalStatus } from "./operationalStatus";
 import type { OperationalCodeId } from "@/lib/roster/flight-role-labels";
 
+/** Situação + função em linguagem simples (escala importada). */
+export interface CrewSituationDisplay {
+  tripStatusLabel: string;
+  tripStatusVariant: "tripulando" | "extra_remunerado";
+  roleLabel: string;
+  minimizeRole: boolean;
+}
+
 export type EnrichmentFallbackReason =
   | "NO_LIVE_DATA"
   | "NO_MATCH"
@@ -91,8 +99,10 @@ export interface FlightRaw {
   recordSource?: FlightRecordSource;
   /** Hora de apresentação ISO (report_time) — usada no card mobile */
   presentationTimeISO?: string | null;
-  /** Siglas operacionais extraídas da escala (CC, CCM, PS, OP, …) */
+  /** Siglas operacionais (fontes que não preenchem crewSituation) */
   operationalCodes?: OperationalCodeId[];
+  /** Exibição amigável — prioridade sobre operationalCodes na UI */
+  crewSituation?: CrewSituationDisplay;
 }
 
 export interface FlightDataSourceFlags {
@@ -136,8 +146,9 @@ export interface FlightNormalized {
   enrichmentFallback?: EnrichmentFallbackReason;
   /** Label legível do fallback (PT) */
   enrichmentFallbackLabel?: string;
-  /** Siglas operacionais deste trecho (escala importada) */
+  /** Siglas operacionais (fallback) */
   operationalCodes?: OperationalCodeId[];
+  crewSituation?: CrewSituationDisplay;
 }
 
 export type FlightBoardData = {
@@ -160,6 +171,7 @@ export type FlightBoardData = {
 };
 
 export interface FlightFilters {
+  /** IATA 3 letras ou `FLIGHT_BOARD_ALL_AIRPORTS` (todas as bases). */
   airportCode: string;
   airlineCode: string;
   flightNumber: string;

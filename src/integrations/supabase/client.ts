@@ -2,12 +2,55 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+/** Base do projeto; Edge Functions usam a mesma URL: `${SUPABASE_URL}/functions/v1/<nome>`. */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 /** Anon/public key — aceita nome usado no Dashboard (anon) ou publishable do .env.example */
 const SUPABASE_ANON_OR_PUBLISHABLE =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ||
   (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
   '';
+
+const ESCALAX_EXPECTED_PROJECT_REF = 'fbryqzwykdhnmskfectg';
+
+function deriveProjectRefFromUrl(url: string | undefined): string | null {
+  if (!url?.trim()) return null;
+  try {
+    const m = new URL(url.trim()).hostname.toLowerCase().match(/^([a-z0-9]+)\.supabase\.co$/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+if (import.meta.env.DEV) {
+  const ref = deriveProjectRefFromUrl(SUPABASE_URL);
+  const hasAnon = !!(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+  const hasPublishable = !!(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim();
+  const hasAnyKey = !!(SUPABASE_ANON_OR_PUBLISHABLE && String(SUPABASE_ANON_OR_PUBLISHABLE).trim());
+
+  console.info('[EscalaX Supabase] URL in use:', SUPABASE_URL ?? '(ausente)');
+  console.info('[EscalaX Supabase] derived project ref:', ref ?? '(inválido ou ausente)');
+  if (!SUPABASE_URL?.trim()) {
+    console.warn('[EscalaX Supabase] VITE_SUPABASE_URL ausente — defina em .env.local');
+  }
+  if (!hasAnon && !hasPublishable) {
+    console.warn(
+      '[EscalaX Supabase] VITE_SUPABASE_ANON_KEY e VITE_SUPABASE_PUBLISHABLE_KEY ausentes — preencha no .env.local (Dashboard → API).',
+    );
+  }
+  if (ref && ref !== ESCALAX_EXPECTED_PROJECT_REF) {
+    console.warn(
+      '[EscalaX Supabase] URL aponta para outro project ref que o esperado para EscalaX. Esperado:',
+      ESCALAX_EXPECTED_PROJECT_REF,
+      '— obtido:',
+      ref,
+      '— suporte/Edge Functions usarão o projeto da URL acima.',
+    );
+  }
+  if (SUPABASE_URL?.trim() && hasAnyKey) {
+    console.info('[EscalaX Supabase] chave pública configurada (comprimento:', String(SUPABASE_ANON_OR_PUBLISHABLE).length, 'chars)');
+  }
+}
 
 if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_OR_PUBLISHABLE)) {
   console.warn(

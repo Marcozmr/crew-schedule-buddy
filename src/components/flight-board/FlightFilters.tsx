@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DEFAULT_AIRPORTS } from "@/services/flightBoard/constants";
+import { DEFAULT_AIRPORTS, FLIGHT_BOARD_ALL_AIRPORTS } from "@/services/flightBoard/constants";
 import type { FlightFilters as FlightFiltersType } from "@/services/flightBoard/types";
 import { cn } from "@/lib/utils";
 
@@ -35,17 +35,20 @@ export function FlightFilters({
   operationalTimezone,
   className,
 }: FlightFiltersProps) {
-  const airportOptions = homeBase
-    ? [
-        { code: homeBase, name: `Base (${homeBase})` },
-        ...DEFAULT_AIRPORTS.filter((a) => a.code !== homeBase),
-      ]
-    : DEFAULT_AIRPORTS;
+  const airportOptions = [
+    { code: FLIGHT_BOARD_ALL_AIRPORTS, name: "Todas as bases" },
+    ...(homeBase
+      ? [
+          { code: homeBase, name: `Base (${homeBase})` },
+          ...DEFAULT_AIRPORTS.filter((a) => a.code !== homeBase),
+        ]
+      : DEFAULT_AIRPORTS),
+  ];
 
   return (
     <div className={cn("w-full min-w-0 max-w-full space-y-3 overflow-hidden", className)}>
       {/* Mobile: coluna única | Desktop: linha com tabs + modo + refresh */}
-      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <Tabs
           value={filters.mode}
           onValueChange={(v) => onChange({ mode: v as "departures" | "arrivals" })}
@@ -108,7 +111,7 @@ export function FlightFilters({
             value={filters.airportCode}
             onValueChange={(v) => onChange({ airportCode: v })}
           >
-            <SelectTrigger className="h-9 w-full min-w-0">
+            <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0 touch-manipulation sm:h-9 sm:min-h-0">
               <MapPin className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <SelectValue placeholder="Aeroporto" />
             </SelectTrigger>

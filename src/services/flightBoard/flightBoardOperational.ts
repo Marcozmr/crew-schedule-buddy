@@ -9,7 +9,8 @@
  */
 
 import type { ScheduleEntry } from "@/hooks/useScheduleData";
-import { extractOperationalCodesFromScheduleEntry } from "@/lib/roster/flight-role-labels";
+import { buildCrewSituationDisplayFromEntry } from "@/lib/roster/crew-tripulante-display";
+import { FLIGHT_BOARD_ALL_AIRPORTS } from "./constants";
 import type { FlightRaw, FlightNormalized } from "./types";
 import { normalizeFlightData } from "./flightService";
 
@@ -161,7 +162,7 @@ export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
   const arrIso = `${date}T${arrTime.padStart(5, "0")}:00.000Z`;
   const carrier = inferCarrierCode(entry.flight_number, entry.airline);
   const presentationTimeISO = entry.report_time ? toIso(date, entry.report_time) : null;
-  const operationalCodes = extractOperationalCodesFromScheduleEntry(entry);
+  const crewSituation = buildCrewSituationDisplayFromEntry(entry) ?? undefined;
 
   return {
     id: entry.id,
@@ -189,7 +190,8 @@ export function scheduleEntryToFlightRaw(entry: ScheduleEntry): FlightRaw {
     status: "SCHEDULED",
     airportInfo: buildAirportContext(origin, destination),
     presentationTimeISO: presentationTimeISO ?? undefined,
-    operationalCodes: operationalCodes.length ? operationalCodes : undefined,
+    crewSituation,
+    operationalCodes: undefined,
   };
 }
 
@@ -215,6 +217,7 @@ export function extractPlannedFlightsFromSchedule(
   airportCode: string,
   dateIso: string
 ): { departures: FlightNormalized[]; arrivals: FlightNormalized[] } {
+  const allBases = airportCode === FLIGHT_BOARD_ALL_AIRPORTS;
   const upper = airportCode.toUpperCase();
   const flightEntries = entries.filter((e) => e.is_flight);
   const departures: FlightNormalized[] = [];
@@ -222,14 +225,20 @@ export function extractPlannedFlightsFromSchedule(
 
   for (const entry of flightEntries) {
     const raw = scheduleEntryToFlightRaw(entry);
-    const relaxed = validateFlightDataRelaxed(raw, upper);
-    if (!relaxed.valid) continue;
+    if (!allBases) {
+      const relaxed = validateFlightDataRelaxed(raw, upper);
+      if (!relaxed.valid) continue;
+    } else {
+      const o = normalizeIataCode(entry.departure_airport || entry.departure);
+      const d = normalizeIataCode(entry.arrival_airport || entry.arrival);
+      if (o === "UNK" || d === "UNK") continue;
+    }
 
     const origin = raw.origin.toUpperCase();
     const dest = raw.destination.toUpperCase();
 
-    if (origin === upper) {
-      const n = normalizeFlightData(raw, dateIso, "departure", upper);
+    if (allBases || origin === upper) {
+      const n = normalizeFlightData(raw, dateIso, "departure", allBases ? origin : upper);
       if (n) {
         departures.push({
           ...n,
@@ -239,8 +248,8 @@ export function extractPlannedFlightsFromSchedule(
         });
       }
     }
-    if (dest === upper) {
-      const n = normalizeFlightData(raw, dateIso, "arrival", upper);
+    if (allBases || dest === upper) {
+      const n = normalizeFlightData(raw, dateIso, "arrival", allBases ? dest : upper);
       if (n) {
         arrivals.push({
           ...n,
@@ -334,14 +343,18 @@ export function resolveFlightBoardState(args: {
   );
 
   if (departures.length === 0 && arrivals.length === 0) {
+    const allBases = airportCode === FLIGHT_BOARD_ALL_AIRPORTS;
     return {
       uiKind: "no_flights_at_airport",
       departures: [],
       arrivals: [],
       classification,
-      neutralMessage: "Nenhuma operação neste aeroporto nesta data",
-      neutralDetail:
-        "Sua escala tem voos em outras bases nesta data, ou apenas atividades sem trecho neste aeroporto.",
+      neutralMessage: allBases
+        ? "Nenhum trecho de voo nesta data"
+        : "Nenhuma operação neste aeroporto nesta data",
+      neutralDetail: allBases
+        ? "A escala do dia não tem trechos com aeroportos reconhecidos, ou só há atividades sem voo (folga, reserva etc.)."
+        : "Sua escala tem voos em outras bases nesta data, ou apenas atividades sem trecho neste aeroporto.",
     };
   }
 
@@ -404,6 +417,7 @@ export function mergeEnrichmentIntoNormalized(
       ...n,
       operationalCodes:
         f.operationalCodes && f.operationalCodes.length > 0 ? f.operationalCodes : n.operationalCodes,
+      crewSituation: f.crewSituation ?? n.crewSituation,
       presentationTime: (n as { presentationTime?: string | null }).presentationTime ?? f.presentationTime,
       tracking: ex.tracking ?? n.tracking,
       airportInfo: ex.airportInfo ?? n.airportInfo,

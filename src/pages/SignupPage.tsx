@@ -38,8 +38,8 @@ export default function SignupPage() {
       await signUp(email, password, name);
       setSuccess(true);
       toast.success('Conta criada! Verifique seu email para confirmar.');
-    } catch (err: any) {
-      toast.error(err?.message || 'Erro ao criar conta');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao criar conta');
     } finally {
       setLoading(false);
     }

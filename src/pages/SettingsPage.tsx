@@ -14,6 +14,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { APP_VERSION } from '@/components/legal/LegalDocument';
 import { motion } from 'framer-motion';
 import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
+import { dispatchOperationalPreferencesChanged } from '@/lib/events/operational-preferences-events';
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
@@ -49,9 +50,12 @@ export default function SettingsPage() {
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
+    const baseTrim = form.base_airport.trim();
     const { error } = await supabase.from('user_settings').upsert({
       user_id: user.id,
-      base_airport: form.base_airport,
+      base_airport: baseTrim || null,
+      home_base_user_locked: baseTrim.length > 0,
+      home_base_source: baseTrim.length > 0 ? 'manual' : null,
       crew_role: form.crew_role,
       company_name: form.company_name,
       timezone: form.timezone,
@@ -63,7 +67,10 @@ export default function SettingsPage() {
       await supabase.from('profiles').update({ name: form.name, airline: form.company_name }).eq('user_id', user.id);
     }
     if (error) toast.error(error.message);
-    else toast.success('Ajustes salvos!');
+    else {
+      toast.success('Ajustes salvos!');
+      dispatchOperationalPreferencesChanged();
+    }
     setSaving(false);
   };
 

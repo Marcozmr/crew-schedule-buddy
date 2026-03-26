@@ -69,8 +69,8 @@ export default function DocumentsPage() {
       toast.success('Documento enviado!');
       setNotes('');
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Erro ao enviar');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar');
     } finally {
       setUploading(false);
       // Reset the file input

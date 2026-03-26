@@ -11,10 +11,13 @@ import { toast } from 'sonner';
 import { UtensilsCrossed, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatDateBR } from '@/lib/date-utils';
+import type { Database } from '@/integrations/supabase/types';
+
+type PerDiemRow = Database['public']['Tables']['perdiem_entries']['Row'];
 
 export default function PerDiemPage() {
   const { user } = useAuth();
-  const [entries, setEntries] = useState<any[]>([]);
+  const [entries, setEntries] = useState<PerDiemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ date: string; location: string; quantity: number | null; unit_value: number | null; notes: string }>({
     date: '', location: '', quantity: 1, unit_value: null, notes: ''
