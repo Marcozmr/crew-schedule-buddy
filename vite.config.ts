@@ -1,10 +1,38 @@
-import { defineConfig } from "vite";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8")) as { version: string };
+
+/** Muda a cada build (CI) ou inclui versão + sufixo local — força nomes de ficheiro e meta distintos. */
+const escalaxBuildId =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ||
+  process.env.VERCEL_DEPLOYMENT_ID ||
+  process.env.CI_COMMIT_SHA?.slice(0, 12) ||
+  `${pkg.version}-${Date.now().toString(36)}`;
+
+function escalaxHtmlBuildMeta(): Plugin {
+  const safe = String(escalaxBuildId).replace(/"/g, "'");
+  return {
+    name: "escalax-html-build-meta",
+    transformIndexHtml(html) {
+      return html.replace(
+        "</head>",
+        `  <meta name="escalax-build-id" content="${safe}" />\n  <meta http-equiv="Cache-Control" content="no-cache" />\n</head>`,
+      );
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
+  define: {
+    __ESCALAX_BUILD_ID__: JSON.stringify(escalaxBuildId),
+  },
   server: {
     host: "::",
     port: 8080,
@@ -12,11 +40,21 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name].[hash].js",
+        chunkFileNames: "assets/[name].[hash].js",
+        assetFileNames: "assets/[name].[hash][extname]",
+      },
+    },
+  },
   plugins: [
     react(),
+    escalaxHtmlBuildMeta(),
     mode === "development" && componentTagger(),
     VitePWA({
-      /** Desativado temporariamente para diagnosticar SW/cache em produção; reativar após estabilizar. */
+      /** Mantido desativado: evita SW a servir shell antiga em domínio customizado/CDN. */
       disable: true,
       registerType: "autoUpdate",
       includeAssets: ["escalax-icon.png", "favicon.ico"],
@@ -26,7 +64,6 @@ export default defineConfig(({ mode }) => ({
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
-        /** Novo nome de cache após deploy — invalida dados REST antigos no SW anterior. */
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -60,7 +97,6 @@ export default defineConfig(({ mode }) => ({
         icons: [
           { src: "/escalax-icon.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
         ],
-        /** PWA instalado (Chrome/Edge): “Abrir com” → launchQueue no cliente (LaunchQueueHandler). */
         file_handlers: [
           {
             action: "/",
@@ -69,10 +105,6 @@ export default defineConfig(({ mode }) => ({
             },
           },
         ],
-        /**
-         * Compartilhar → POST para /share-import. Muitos hosts estáticos não repassam POST à SPA;
-         * use rota placeholder + fluxo manual até SW dedicado.
-         */
         share_target: {
           action: "/share-import",
           method: "POST",
