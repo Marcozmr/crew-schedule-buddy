@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/auth-context';
 import { motion } from 'framer-motion';
 
 export default function SupportPage() {
-  const { profile } = useAuth();
+  const { profile, user, loading } = useAuth();
   const [name, setName] = useState(profile?.name || '');
   const [email, setEmail] = useState(profile?.email || '');
   const [message, setMessage] = useState('');
@@ -20,7 +20,11 @@ export default function SupportPage() {
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('[SupportPage] click enviar');
     e.preventDefault();
+    e.stopPropagation();
+    console.log('[SupportPage] preventDefault called');
+    console.log('[SupportPage] stopPropagation called');
     if (!message.trim()) return;
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
     if (!emailOk) {
@@ -28,7 +32,15 @@ export default function SupportPage() {
       setFeedbackMsg('Informe um e-mail válido para que possamos responder.');
       return;
     }
+    if (!user || loading) {
+      setStatus('error');
+      setFeedbackMsg(
+        loading ? 'Aguarde carregar a sessão…' : 'Faça login para enviar a mensagem.',
+      );
+      return;
+    }
 
+    console.log('[SupportPage] enviar: início — a seguir submitSupport() → fetch POST');
     setSending(true);
     setStatus('idle');
     setFeedbackMsg('');
@@ -88,6 +100,15 @@ export default function SupportPage() {
             <Mail className="w-4 h-4 text-primary" /> Enviar mensagem
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {!user && (
+              <p className="text-sm text-amber-800 dark:text-amber-100 bg-amber-500/15 border border-amber-500/25 rounded-xl px-3 py-2">
+                Faça{' '}
+                <Link to="/login" className="font-medium text-primary underline">
+                  login
+                </Link>{' '}
+                para enviar mensagem ao suporte (sessão obrigatória no servidor).
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[11px] text-muted-foreground">Nome</Label>
@@ -132,7 +153,11 @@ export default function SupportPage() {
               </motion.div>
             )}
 
-            <Button type="submit" disabled={sending || !message.trim()} className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl">
+            <Button
+              type="submit"
+              disabled={sending || !message.trim() || !user || loading}
+              className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+            >
               {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
               {sending ? 'Enviando...' : 'Enviar mensagem'}
             </Button>

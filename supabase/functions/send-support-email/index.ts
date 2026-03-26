@@ -17,8 +17,12 @@ import { Resend } from "npm:resend";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  /** Obrigatório para o browser enviar POST JSON após o preflight OPTIONS. */
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+  "Access-Control-Max-Age": "86400",
+  /** Deve cobrir o pedido em Access-Control-Request-Headers do browser. */
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, apikey, content-type, x-client-info, accept, accept-language, origin, referer, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Expose-Headers": "X-EscalaX-Support-Transport",
   "X-EscalaX-Support-Transport": "resend",
 };
@@ -128,6 +132,11 @@ serve(async (req) => {
 
   if (req.method === "OPTIONS") {
     logStructured({ step: "request.received", method: "OPTIONS", note: "cors_preflight_only" });
+    logStructured({
+      step: "cors.preflight",
+      allowMethods: "POST, OPTIONS, GET",
+      hint: "O POST seguinte deve aparecer como método POST nos logs (se não aparecer, CORS ou rede no browser).",
+    });
     logStructured({ step: "transport.selected", transport: "resend" });
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
@@ -154,6 +163,12 @@ serve(async (req) => {
 
   console.log("[send-support-email] POST real do formulário — iniciando auth + payload (não é OPTIONS)");
   logStructured({
+    step: "support_form_submit",
+    method: "POST",
+    phase: "post_received",
+    note: "handler_entered_after_cors",
+  });
+  logStructured({
     step: "request.received",
     method: "POST",
     phase: "support_form_submit",
@@ -163,30 +178,27 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      logStructured({ step: "request.unauthorized", reason: "no_header" });
+    const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+
+    if (!authHeader?.trim()) {
+      logStructured({ step: "request.unauthorized", reason: "no_authorization_header" });
       logStructured({ step: "final.outcome", outcome: "unauthorized" });
+      /** HTTP 200 + JSON: o cliente `functions.invoke` não trata como exceção; evita 401 opaco do gateway. */
       return json(
         {
           outcome: "unauthorized",
           sent: false,
           stored: false,
           transport: "resend",
-          error: "Não autorizado. Faça login novamente.",
+          error:
+            "Sessão não enviada. Faça login novamente e tente (cabeçalho Authorization ausente).",
         },
         200,
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      logStructured({ step: "request.unauthorized", reason: authError?.message || "no_user" });
+    if (!bearer) {
+      logStructured({ step: "request.unauthorized", reason: "authorization_not_bearer_or_empty_token" });
       logStructured({ step: "final.outcome", outcome: "unauthorized" });
       return json(
         {
@@ -194,7 +206,42 @@ serve(async (req) => {
           sent: false,
           stored: false,
           transport: "resend",
-          error: authError?.message || "Sessão inválida.",
+          error: "Formato de autorização inválido. Faça login novamente e tente.",
+        },
+        200,
+      );
+    }
+
+    logStructured({
+      step: "support_form_submit",
+      phase: "auth_header_ok",
+      method: "POST",
+      bearerLen: bearer.length,
+      note: "validating_jwt_with_getUser",
+    });
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(bearer);
+    if (authError || !user) {
+      logStructured({
+        step: "request.unauthorized",
+        reason: "jwt_invalid_or_expired",
+        message: authError?.message?.slice(0, 200) ?? "no_user",
+      });
+      logStructured({ step: "final.outcome", outcome: "unauthorized" });
+      /** Mensagem estável para o utilizador — detalhe técnico só nos logs JSON. */
+      return json(
+        {
+          outcome: "unauthorized",
+          sent: false,
+          stored: false,
+          transport: "resend",
+          error:
+            "Sessão inválida ou expirada. Saia da conta, entre de novo e tente enviar outra vez.",
         },
         200,
       );

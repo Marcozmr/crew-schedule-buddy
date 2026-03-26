@@ -135,10 +135,12 @@ export default function DashboardPage() {
     [schedule, safeTz, homeBase]
   );
 
-  const monthDutyHours =
-    analysis?.results
+  const monthDutyHours = useMemo(() => {
+    if (!analysis?.results?.length) return 0;
+    return analysis.results
       .filter((result) => result.duty.reportTimeLocal.startsWith(monthStr))
-      .reduce((sum, result) => sum + result.duty.totalDutyHours, 0) ?? 0;
+      .reduce((sum, result) => sum + result.duty.totalDutyHours, 0);
+  }, [analysis, monthStr]);
 
   useEffect(() => {
     if (!user || !analysis) return;
@@ -188,7 +190,10 @@ export default function DashboardPage() {
       }
     };
 
-    void run();
+    const t = window.setTimeout(() => {
+      void run();
+    }, 500);
+    return () => window.clearTimeout(t);
   }, [analysis, nextDuty, user]);
 
   const greeting = () => {

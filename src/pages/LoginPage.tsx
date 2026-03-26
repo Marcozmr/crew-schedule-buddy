@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { Plane, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -10,17 +10,18 @@ import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 
+const AuthLoading = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-8 h-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
+
 export default function LoginPage() {
-  const navigate = useNavigate();
-  const { session, signIn } = useAuth();
+  const { session, signIn, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (session) navigate('/home', { replace: true });
-  }, [session, navigate]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +44,8 @@ export default function LoginPage() {
     }
   }, [email, password, signIn]);
 
-  if (session) return null;
+  if (authLoading) return <AuthLoading />;
+  if (session) return <Navigate to="/home" replace />;
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden">

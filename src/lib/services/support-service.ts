@@ -1,12 +1,19 @@
 /**
- * Support Service — único caminho: Edge Function `send-support-email` (Resend no backend).
- * Não há SMTP, nodemailer nem fetch alternativo no frontend.
+ * Support — Edge Function `send-support-email` (Resend).
+ * Usa `supabase.functions.invoke` para que o pedido passe pelo `fetch` autenticado
+ * do cliente (`_getAccessToken()`), alinhado com o gateway — evita JWT manual dessincronizado.
  */
 
+import type { Session, User } from '@supabase/supabase-js';
+import { FunctionsHttpError } from '@supabase/functions-js';
 import { supabase } from '@/integrations/supabase/client';
 
-/** Project ref do Supabase EscalaX — deve ser o subdomínio de VITE_SUPABASE_URL (*.supabase.co). */
+const isDev = import.meta.env.DEV;
+
 export const ESCALAX_SUPABASE_PROJECT_REF = 'fbryqzwykdhnmskfectg';
+
+/** URL exata do POST (produção EscalaX). */
+export const ESCALAX_SEND_SUPPORT_EMAIL_URL = `https://${ESCALAX_SUPABASE_PROJECT_REF}.supabase.co/functions/v1/send-support-email`;
 
 export interface SupportPayload {
   name: string;
@@ -54,10 +61,23 @@ function extractProjectRefFromSupabaseUrl(url: string): string | null {
   }
 }
 
-/** URL real do POST (mesma base que o cliente Supabase usa para functions.invoke). */
+/**
+ * URL do POST: **mesmo origin** que `VITE_SUPABASE_URL` (JWT e `apikey` devem ser do mesmo projeto
+ * que a Edge Function; caso contrário o gateway devolve 401 Invalid JWT).
+ */
+export function resolveSupportFunctionPostUrl(baseUrl: string | undefined): string {
+  const b = baseUrl?.trim();
+  if (!b) return ESCALAX_SEND_SUPPORT_EMAIL_URL;
+  try {
+    return `${new URL(b).origin}/functions/v1/send-support-email`;
+  } catch {
+    return ESCALAX_SEND_SUPPORT_EMAIL_URL;
+  }
+}
+
+/** @deprecated */
 export function getSendSupportEmailEndpointUrl(baseUrl: string): string {
-  const b = baseUrl.replace(/\/$/, '');
-  return `${b}/functions/v1/send-support-email`;
+  return resolveSupportFunctionPostUrl(baseUrl);
 }
 
 function getAnonKey(): string {
@@ -70,73 +90,8 @@ function hasAnonKey(): boolean {
   return !!getAnonKey();
 }
 
-/**
- * Fallback quando `functions.invoke` retorna erro HTTP mas o corpo é JSON útil,
- * ou quando há falha de rede no cliente Supabase.
- */
-async function fetchSupportFunctionDirect(
-  endpointUrl: string,
-  body: Record<string, unknown>,
-  accessToken: string | undefined,
-): Promise<{ status: number; text: string; json: Record<string, unknown> | null }> {
-  const anon = getAnonKey();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    apikey: anon,
-  };
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  else if (anon) headers.Authorization = `Bearer ${anon}`;
-
-  const res = await fetch(endpointUrl, { method: 'POST', headers, body: JSON.stringify(body) });
-  const text = await res.text();
-  let json: Record<string, unknown> | null = null;
-  try {
-    if (text.trim().startsWith('{')) json = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    /* ignore */
-  }
-  return { status: res.status, text, json };
-}
-
-/** Texto de erro antigo (deploy SMTP / outro backend) — só afeta a mensagem se o JSON não trouxer `transport: resend`. */
 function looksLikeLegacySmtpPayload(text: string): boolean {
   return /AUTH\s+LOGIN|535\s*5\.7\.8|STARTTLS|Deno\.connect|smtp\.|titan|hostgator/i.test(text);
-}
-
-/** Em DEV: status HTTP + trecho do corpo quando invoke retorna erro (non-2xx). */
-async function logEdgeFunctionHttpDetails(error: unknown): Promise<void> {
-  if (!import.meta.env.DEV || !error || typeof error !== 'object') return;
-  const ctx = (error as { context?: Response }).context;
-  if (!ctx || typeof ctx.status !== 'number') return;
-  let bodyPreview = '';
-  try {
-    bodyPreview = (await ctx.clone().text()).slice(0, 500);
-  } catch {
-    /* ignore */
-  }
-  console.error(
-    '[support-service] send-support-email resposta HTTP:',
-    ctx.status,
-    ctx.statusText,
-    bodyPreview ? `— corpo: ${bodyPreview}` : '',
-  );
-}
-
-/** Corpo JSON ou texto de FunctionsHttpError (resposta não-2xx) */
-async function parseErrorResponseBody(error: unknown): Promise<Record<string, unknown> | null> {
-  if (!error || typeof error !== 'object') return null;
-  const ctx = (error as { context?: unknown }).context;
-  if (!ctx || typeof ctx !== 'object') return null;
-  const res = ctx as Response;
-  try {
-    const text = await res.clone().text();
-    if (text.trim().startsWith('{')) {
-      return JSON.parse(text) as Record<string, unknown>;
-    }
-    return { rawBody: text.slice(0, 800) };
-  } catch {
-    return null;
-  }
 }
 
 function inferOutcome(d: Record<string, unknown>): SupportOutcome | undefined {
@@ -154,7 +109,6 @@ function inferOutcome(d: Record<string, unknown>): SupportOutcome | undefined {
   return undefined;
 }
 
-/** Mensagem amigável: prioriza `error` do JSON da Edge Function. */
 function pickServerUserMessage(d: Record<string, unknown>): string | null {
   const e = d.error;
   if (typeof e === 'string' && e.trim()) return e.trim();
@@ -173,6 +127,27 @@ function buildSupportResult(d: Record<string, unknown>): SupportResult {
     stored,
     emailSent,
     userMessage: resolveUserMessage(outcome, serverError, legacySmtp),
+  };
+}
+
+/** Quando o JSON não tem `outcome` reconhecido, não mostrar mensagem genérica sem contexto. */
+function buildSupportResultLoose(d: Record<string, unknown>, rawText: string): SupportResult {
+  const out = inferOutcome(d);
+  if (out) return buildSupportResult(d);
+  const msg = pickServerUserMessage(d);
+  if (msg) {
+    return {
+      outcome: 'invoke_error',
+      stored: !!d.stored,
+      emailSent: !!d.sent,
+      userMessage: msg,
+    };
+  }
+  return {
+    outcome: 'invoke_error',
+    stored: false,
+    emailSent: false,
+    userMessage: `Resposta inesperada do servidor (primeiros 400 caracteres): ${rawText.slice(0, 400)}`,
   };
 }
 
@@ -198,10 +173,15 @@ const COPY: Record<SupportOutcome, string> = {
     'Mensagem salva, mas houve falha no envio do e-mail. Nossa equipe ainda poderá analisar a solicitação.',
   register_failed: 'Não foi possível registrar sua solicitação. Tente novamente.',
   validation_error: 'Verifique os dados e tente novamente.',
-  unauthorized: 'Sessão expirada ou inválida. Faça login novamente e tente outra vez.',
-  invoke_error: 'Não foi possível enviar sua solicitação. Tente novamente.',
+  unauthorized:
+    'Sessão expirada ou inválida. Saia e entre de novo na sua conta e tente enviar outra vez.',
+  invoke_error:
+    'Não foi possível contactar o serviço de suporte. Verifique a ligação à internet e tente de novo.',
   internal_error: 'Não foi possível processar sua solicitação. Tente novamente.',
 };
+
+const USER_NETWORK_HINT =
+  'Não foi possível contactar o servidor. Verifique a ligação à internet, desative VPN ou bloqueadores agressivos e tente de novo.';
 
 const LEGACY_SMTP_USER_HINT =
   'O servidor respondeu com erro de e-mail antigo (SMTP). Faça deploy da Edge Function send-support-email (Resend) no projeto Supabase correto e confira VITE_SUPABASE_URL no .env.local.';
@@ -219,20 +199,218 @@ function resolveUserMessage(
   return COPY[outcome] ?? COPY.internal_error;
 }
 
-function httpStatusHint(error: unknown): string {
-  const ctx = (error as { context?: Response })?.context;
-  const st = ctx?.status;
-  return typeof st === 'number' ? ` (HTTP ${st})` : '';
-}
-
 function warnIfNotResendTransport(d: Record<string, unknown> | null, label: string) {
   if (!d) return;
   if (d.transport !== 'resend') {
     console.warn(
-      `[support-service] ${label}: resposta sem transport:resend — possível Edge Function antiga (SMTP) ou outro projeto. Corpo:`,
+      `[support-service] ${label}: resposta sem transport:resend — possível outro backend. Corpo:`,
       d,
     );
   }
+}
+
+/** Decodifica payload JWT (sem verificar assinatura) — só para diagnóstico em DEV. */
+function decodeJwtPayloadUnsafe(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(b64);
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function projectRefFromJwtPayload(p: Record<string, unknown>): string | null {
+  const ref = p.ref;
+  if (typeof ref === 'string' && ref.trim()) return ref.trim();
+  const iss = p.iss;
+  if (typeof iss === 'string') {
+    const m = iss.match(/https?:\/\/([a-z0-9]+)\.supabase\.co/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/**
+ * Invoca a Edge Function com o mesmo transporte que o resto do SDK: `customFetch` do cliente
+ * injeta `Authorization` a partir de `_getAccessToken()` no momento do pedido.
+ */
+async function invokeSendSupportEmail(body: Record<string, unknown>): Promise<{
+  status: number;
+  text: string;
+  json: Record<string, unknown> | null;
+}> {
+  const expectedUrl = resolveSupportFunctionPostUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
+  console.log('[support-service] expected function URL:', expectedUrl);
+  console.log('[support-service] payload:', {
+    ...body,
+    message: typeof body.message === 'string' ? `${body.message.slice(0, 160)}…` : body.message,
+  });
+  console.log('[support-service] fetch start');
+
+  const { data, error } = await supabase.functions.invoke('send-support-email', { body });
+
+  if (error) {
+    const isHttp =
+      error instanceof FunctionsHttpError || (error as Error)?.name === 'FunctionsHttpError';
+    if (isHttp && (error as FunctionsHttpError).context instanceof Response) {
+      const res = (error as FunctionsHttpError).context as Response;
+      const status = res.status;
+      const text = await res.text();
+      let json: Record<string, unknown> | null = null;
+      try {
+        if (text.trim().startsWith('{')) json = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        /* ignore */
+      }
+      console.log('[support-service] fetch resolved');
+      console.log('[support-service] HTTP status:', status);
+      console.log('[support-service] response body:', json ?? (text.length > 4000 ? `${text.slice(0, 4000)}…` : text));
+      return { status, text, json };
+    }
+    console.error('[support-service] caught error:', error);
+    throw error;
+  }
+
+  const json =
+    data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
+  const text = json ? JSON.stringify(data) : String(data ?? '');
+  console.log('[support-service] fetch resolved');
+  console.log('[support-service] HTTP status:', 200);
+  console.log('[support-service] response body:', json ?? text);
+  return { status: 200, text, json };
+}
+
+function logSupportSessionDev(
+  phase: string,
+  session: Session | null,
+  user: User | null,
+  extra: { refreshAttempted: boolean; refreshResult: string },
+) {
+  if (!isDev) return;
+  const exp = session?.expires_at;
+  const expMs = exp != null ? exp * 1000 : null;
+  console.log(`[support-service] [dev] ${phase}`, {
+    hasSession: !!session,
+    hasUser: !!user,
+    accessTokenExists: !!session?.access_token,
+    tokenLength: session?.access_token?.length ?? 0,
+    expires_at: exp ?? null,
+    expires_in_ms_from_now: expMs != null ? Math.round(expMs - Date.now()) : null,
+    refreshAttempted: extra.refreshAttempted,
+    refreshResult: extra.refreshResult,
+  });
+}
+
+/**
+ * Garante access_token alinhado com o servidor: `getSession()` sozinho pode devolver JWT expirado em cache.
+ * Fluxo: getUser() → (se falhar) refreshSession → getUser() → getSession().
+ */
+async function resolveAccessTokenForSupport(): Promise<
+  | { ok: true; accessToken: string; tokenSource: string }
+  | { ok: false; result: SupportResult }
+> {
+  let refreshAttempted = false;
+  let refreshResult = 'not_attempted';
+
+  const { data: u1, error: err1 } = await supabase.auth.getUser();
+  const { data: snapAfterUser } = await supabase.auth.getSession();
+  logSupportSessionDev('after getUser()', snapAfterUser.session ?? null, u1.user ?? snapAfterUser.session?.user ?? null, {
+    refreshAttempted,
+    refreshResult,
+  });
+
+  if (err1 || !u1.user) {
+    refreshAttempted = true;
+    const { data: ref, error: refErr } = await supabase.auth.refreshSession();
+    refreshResult = refErr?.message ?? (ref.session ? 'ok_session' : 'no_session');
+    logSupportSessionDev('after refreshSession (getUser falhou)', ref.session ?? null, ref.session?.user ?? null, {
+      refreshAttempted,
+      refreshResult,
+    });
+
+    const { data: u2, error: err2 } = await supabase.auth.getUser();
+    if (err2 || !u2.user) {
+      const r: SupportResult = {
+        outcome: 'unauthorized',
+        stored: false,
+        emailSent: false,
+        userMessage:
+          'Sessão não encontrada ou expirada. Faça login novamente e tente enviar.',
+      };
+      logSupportSessionDev('getUser ainda inválido após refresh', null, null, {
+        refreshAttempted,
+        refreshResult: err2?.message ?? 'no_user',
+      });
+      return { ok: false, result: r };
+    }
+  }
+
+  const { data: sData } = await supabase.auth.getSession();
+  let session = sData.session ?? null;
+  logSupportSessionDev('getSession após getUser/refresh', session, session?.user ?? null, {
+    refreshAttempted,
+    refreshResult,
+  });
+
+  const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0;
+  const expired = expiresAtMs > 0 && expiresAtMs < Date.now();
+  const expiresSoon = expiresAtMs > 0 && expiresAtMs < Date.now() + 60_000;
+  if (session?.access_token && (expired || expiresSoon)) {
+    refreshAttempted = true;
+    const { data: ref, error: refErr } = await supabase.auth.refreshSession();
+    refreshResult = refErr?.message ?? (ref.session ? 'ok_session' : 'no_session');
+    const { data: again } = await supabase.auth.getSession();
+    session = again.session ?? ref.session ?? session;
+    logSupportSessionDev('após refresh por expiração', session, session?.user ?? null, {
+      refreshAttempted,
+      refreshResult,
+    });
+  }
+
+  const token = session?.access_token?.trim() ? session.access_token : undefined;
+  console.log('[support-service] session exists:', !!session);
+  console.log('[support-service] user exists:', !!session?.user);
+  console.log('[support-service] JWT presente:', !!token);
+  console.log('[support-service] token length:', token?.length ?? 0);
+  if (session?.expires_at != null) {
+    console.log('[support-service] expires_at (unix s):', session.expires_at);
+  }
+
+  if (!token) {
+    return {
+      ok: false,
+      result: {
+        outcome: 'unauthorized',
+        stored: false,
+        emailSent: false,
+        userMessage:
+          'Sessão não encontrada ou expirada. Faça login novamente e tente enviar (o servidor exige JWT de utilizador).',
+      },
+    };
+  }
+
+  const envRef = extractProjectRefFromSupabaseUrl(
+    String(import.meta.env.VITE_SUPABASE_URL || '').trim(),
+  );
+  if (isDev) {
+    const payload = decodeJwtPayloadUnsafe(token);
+    const jwtRef = payload ? projectRefFromJwtPayload(payload) : null;
+    console.log('[support-service] [dev] JWT vs projeto .env', {
+      envProjectRef: envRef,
+      jwtProjectRef: jwtRef,
+      aligned: jwtRef != null && envRef != null && jwtRef === envRef,
+    });
+  }
+
+  const tokenSource =
+    refreshAttempted && refreshResult !== 'not_attempted'
+      ? 'session_after_getUser_and_refresh'
+      : 'session_after_getUser';
+
+  return { ok: true, accessToken: token, tokenSource };
 }
 
 export async function submitSupport(payload: SupportPayload): Promise<SupportResult> {
@@ -249,32 +427,57 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
   }
 
   const projectRef = extractProjectRefFromSupabaseUrl(baseUrl!);
-  const endpointUrl = getSendSupportEmailEndpointUrl(baseUrl!);
+  const endpointUrl = resolveSupportFunctionPostUrl(baseUrl);
 
-  console.log('Support submit start');
-  console.log('Supabase URL in use:', baseUrl);
-  console.log('Supabase project ref:', projectRef ?? '(não extraído — verifique o hostname)');
-  console.log('Endpoint (send-support-email):', endpointUrl);
-
+  console.log('[support-service] --- submitSupport ---');
+  console.log('[support-service] VITE_SUPABASE_URL ref:', projectRef ?? '(inválido)');
+  console.log('[support-service] POST URL (mesmo projeto que a sessão):', endpointUrl);
   if (projectRef && projectRef !== ESCALAX_SUPABASE_PROJECT_REF) {
     console.warn(
-      '[support-service] VITE_SUPABASE_URL aponta para outro project ref que o esperado para EscalaX. Esperado:',
-      ESCALAX_SUPABASE_PROJECT_REF,
-      'Obtido:',
-      projectRef,
+      '[support-service] Ambiente não é o projeto EscalaX esperado — ok para dev; JWT e apikey devem ser do mesmo projeto que esta URL.',
     );
   }
 
   if (!hasAnonKey()) {
-    if (import.meta.env.DEV) {
-      console.warn(
-        '[EscalaX support] VITE_SUPABASE_ANON_KEY ou VITE_SUPABASE_PUBLISHABLE_KEY ausente — o invoke pode falhar.',
-      );
-    }
+    console.warn('[support-service] VITE_SUPABASE_ANON_KEY ausente — POST falhará.');
   }
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token;
+  const anon = getAnonKey();
+  if (!anon) {
+    return {
+      outcome: 'invoke_error',
+      stored: false,
+      emailSent: false,
+      userMessage:
+        'Chave anónima do Supabase ausente (VITE_SUPABASE_ANON_KEY). Configure no build / ambiente.',
+    };
+  }
+
+  const resolved = await resolveAccessTokenForSupport();
+  if (!resolved.ok) {
+    console.log('[support-service] final interpreted outcome:', resolved.result.outcome, resolved.result.userMessage);
+    return resolved.result;
+  }
+
+  if (isDev) {
+    console.log('[support-service] [dev] resolved session for diagnostics', {
+      tokenSource: resolved.tokenSource,
+      note: 'Pedido real usa supabase.functions.invoke → fetch autenticado do cliente (getAccessToken no momento do POST).',
+    });
+  }
+
+  const envRef = extractProjectRefFromSupabaseUrl(baseUrl!);
+  const jwtPayload = decodeJwtPayloadUnsafe(resolved.accessToken);
+  const jwtRef = jwtPayload ? projectRefFromJwtPayload(jwtPayload) : null;
+  if (envRef && jwtRef && jwtRef !== envRef) {
+    return {
+      outcome: 'invoke_error',
+      stored: false,
+      emailSent: false,
+      userMessage:
+        'A sessão não corresponde ao projeto configurado nesta app (URL/chave Supabase). Ajuste VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para o mesmo projeto, reinicie o app e faça login de novo.',
+    };
+  }
 
   const body = {
     name: payload.name,
@@ -286,152 +489,75 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
     type: payload.type,
   };
 
-  const anon = getAnonKey();
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  } else if (anon) {
-    headers.Authorization = `Bearer ${anon}`;
-  }
+  try {
+    let { status, text, json } = await invokeSendSupportEmail(body);
 
-  console.log('Invoking send-support-email');
-  console.log('[support-service] HTTP method: POST');
-  console.log('[support-service] request URL:', endpointUrl);
-  console.log('[support-service] payload (message truncado):', {
-    ...body,
-    message: typeof body.message === 'string' ? `${body.message.slice(0, 120)}…` : body.message,
-  });
-
-  const { data: rawData, error } = await supabase.functions.invoke('send-support-email', {
-    body,
-    headers,
-  });
-
-  const d = normalizeInvokeData(rawData);
-
-  const ctxErr = error && typeof error === 'object' ? (error as { context?: Response }).context : undefined;
-  if (ctxErr && typeof ctxErr.status === 'number') {
-    let bodyText = '';
-    try {
-      bodyText = await ctxErr.clone().text();
-    } catch {
-      /* ignore */
-    }
-    console.log('[support-service] invoke falhou — URL:', endpointUrl);
-    console.log('[support-service] HTTP status:', ctxErr.status, ctxErr.statusText);
-    console.log('[support-service] response body (text):', bodyText.slice(0, 2000));
-    let parsedBody: Record<string, unknown> | null = null;
-    try {
-      if (bodyText.trim().startsWith('{')) parsedBody = JSON.parse(bodyText) as Record<string, unknown>;
-    } catch {
-      /* ignore */
-    }
-    if (parsedBody) {
-      console.log('[support-service] response body (JSON):', parsedBody);
-    }
-  } else if (!error) {
-    console.log('[support-service] invoke OK — URL:', endpointUrl);
-    console.log('[support-service] response body (parsed):', d ?? rawData);
-  }
-
-  const invokeErrName = error && typeof error === 'object' && 'name' in error ? String((error as Error).name) : '';
-  const invokeErrMsg = error instanceof Error ? error.message : error ? String(error) : '';
-  if (error) {
-    console.warn('[support-service] invoke error object:', error);
-    console.warn('[support-service] invoke error name/message:', invokeErrName, invokeErrMsg);
-  }
-
-  /**
-   * O cliente Supabase pode marcar `error` em HTTP não-2xx mesmo quando `data` traz JSON com outcome.
-   * Priorizar sempre o corpo JSON útil (mesma regra do fetch fallback).
-   */
-  if (d && inferOutcome(d)) {
-    if (error) {
-      console.warn(
-        '[support-service] invoke retornou erro genérico, mas o corpo JSON é válido — usando outcome do servidor:',
-        inferOutcome(d),
-        d,
-      );
-    }
-    return buildSupportResult(d);
-  }
-
-  /** Só quando invoke falhou (HTTP não-2xx / erro de rede) — evita POST duplicado em sucesso. */
-  if (error && hasAnonKey()) {
-    try {
-      const fb = await fetchSupportFunctionDirect(endpointUrl, body, token);
-      console.log('[support-service] fetch fallback status:', fb.status, 'body:', fb.text.slice(0, 800));
-      if (fb.json && inferOutcome(fb.json)) {
-        warnIfNotResendTransport(fb.json, 'fetch fallback');
-        return buildSupportResult(fb.json);
-      }
-    } catch (fbErr) {
-      console.error('[support-service] fetch fallback failed:', fbErr);
-    }
-  }
-
-  if (error) {
-    await logEdgeFunctionHttpDetails(error);
-    const msg = (error as Error)?.message ?? String(error);
-    console.error('[support-service] invoke error:', msg + httpStatusHint(error));
-
-    const errBody = (await parseErrorResponseBody(error)) ?? {};
-    warnIfNotResendTransport(errBody, 'invoke error body');
-
-    const errText = pickServerUserMessage(errBody);
-    const rawForLegacy = [errText, msg].filter(Boolean).join(' ');
-    const legacySmtp = looksLikeLegacySmtpPayload(rawForLegacy);
-    if (legacySmtp) {
-      console.error(
-        '[support-service] Texto de erro compatível com SMTP legado (não existe neste repo). Redeploy send-support-email (Resend) no projeto',
-        projectRef ?? '?',
-      );
+    if (status === 401) {
+      console.warn('[support-service] HTTP 401 — refreshSession + getSession e nova tentativa invoke');
+      const { data: ref, error: refErr } = await supabase.auth.refreshSession();
+      console.log('[support-service] retry refresh result:', refErr?.message ?? 'ok', !!ref.session);
+      await supabase.auth.getSession();
+      const second = await invokeSendSupportEmail(body);
+      status = second.status;
+      text = second.text;
+      json = second.json;
     }
 
-    const out = inferOutcome(errBody);
-
-    if (out === 'unauthorized' || errText?.includes('Não autorizado')) {
-      return {
+    if (status === 401) {
+      const d = json ?? normalizeInvokeData(text);
+      const r: SupportResult = {
         outcome: 'unauthorized',
         stored: false,
         emailSent: false,
-        userMessage: errText || COPY.unauthorized,
+        userMessage:
+          pickServerUserMessage(d ?? {}) ??
+          'Sessão não aceite pelo servidor. Saia da conta, entre de novo e tente enviar outra vez.',
       };
+      console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage);
+      return r;
     }
 
-    if (out && out in COPY) {
-      return {
-        outcome: out,
-        stored: !!errBody.stored,
-        emailSent: !!errBody.sent,
-        userMessage: resolveUserMessage(out, errText, legacySmtp),
-      };
+    const d = json ?? normalizeInvokeData(text);
+
+    if (d) {
+      warnIfNotResendTransport(d, 'POST response');
+      const r = buildSupportResultLoose(d, text);
+      console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage);
+      return r;
     }
 
-    const genericInvoke =
-      /non-2xx|edge function returned/i.test(msg) && !errText;
-    const detail =
-      errText ||
-      (genericInvoke
-        ? 'Não foi possível concluir o envio. Se o problema continuar, tente de novo ou escreva para support@escalax.app.br.'
-        : msg);
-    return {
+    const legacySmtp = looksLikeLegacySmtpPayload(text);
+    const r: SupportResult = {
       outcome: 'invoke_error',
       stored: false,
       emailSent: false,
-      userMessage: resolveUserMessage('invoke_error', detail, legacySmtp),
+      userMessage: resolveUserMessage(
+        'invoke_error',
+        text.trim() ? text.slice(0, 500) : `HTTP ${status} — resposta não JSON`,
+        legacySmtp,
+      ),
     };
-  }
-
-  if (!d) {
-    console.error('[support-service] resposta vazia ou inválida da Edge Function');
-    return {
+    console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage);
+    return r;
+  } catch (err) {
+    console.error('[support-service] caught error:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    const isNetwork =
+      /fetch|network|failed|load|CORS|cors|blocked|aborted|Failed to fetch/i.test(msg) ||
+      (typeof err === 'object' &&
+        err !== null &&
+        'name' in err &&
+        String((err as { name?: string }).name) === 'TypeError');
+    if (isDev && isNetwork) {
+      console.warn('[support-service] rede/CORS (detalhe técnico):', msg);
+    }
+    const r: SupportResult = {
       outcome: 'invoke_error',
       stored: false,
       emailSent: false,
-      userMessage: 'Resposta inválida do servidor. Tente novamente.',
+      userMessage: isNetwork ? USER_NETWORK_HINT : resolveUserMessage('invoke_error', msg, false),
     };
+    console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage);
+    return r;
   }
-
-  return buildSupportResult(d);
 }

@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
+      /** Desativado temporariamente para diagnosticar SW/cache em produção; reativar após estabilizar. */
+      disable: true,
       registerType: "autoUpdate",
       includeAssets: ["escalax-icon.png", "favicon.ico"],
       workbox: {
@@ -24,6 +26,7 @@ export default defineConfig(({ mode }) => ({
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
+        /** Novo nome de cache após deploy — invalida dados REST antigos no SW anterior. */
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -37,8 +40,8 @@ export default defineConfig(({ mode }) => ({
             urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
             handler: "NetworkFirst",
             options: {
-              cacheName: "supabase-api",
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
+              cacheName: "supabase-api-v2",
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 3 },
               networkTimeoutSeconds: 10,
             },
           },

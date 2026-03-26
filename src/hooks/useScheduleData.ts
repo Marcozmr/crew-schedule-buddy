@@ -160,11 +160,25 @@ export function useScheduleData() {
   }, [loadSchedule, user]);
 
   useEffect(() => {
-    const handleFocus = () => void loadSchedule();
-    const handleVis = () => { if (document.visibilityState === 'visible') void loadSchedule(); };
+    let debounceId: ReturnType<typeof window.setTimeout> | undefined;
+    const scheduleReload = () => {
+      if (debounceId != null) window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(() => {
+        debounceId = undefined;
+        void loadSchedule();
+      }, 400);
+    };
+    const handleFocus = () => scheduleReload();
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') scheduleReload();
+    };
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVis);
-    return () => { window.removeEventListener('focus', handleFocus); document.removeEventListener('visibilitychange', handleVis); };
+    return () => {
+      if (debounceId != null) window.clearTimeout(debounceId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
   }, [loadSchedule]);
 
   useEffect(() => {

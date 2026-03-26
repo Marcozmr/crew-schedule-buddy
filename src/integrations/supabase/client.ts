@@ -12,6 +12,15 @@ const SUPABASE_ANON_OR_PUBLISHABLE =
 
 const ESCALAX_EXPECTED_PROJECT_REF = 'fbryqzwykdhnmskfectg';
 
+/**
+ * Fallbacks só para o construtor não lançar (supabase-js exige URL https e chave não vazia).
+ * Sem variáveis corretas no deploy, a API falhará — mas a shell da app renderiza e o envCheck avisa no console.
+ */
+const FALLBACK_SUPABASE_URL = `https://${ESCALAX_EXPECTED_PROJECT_REF}.supabase.co`;
+/** JWT demo formato válido (não é segredo); substituído quando VITE_SUPABASE_ANON_KEY existe. */
+const FALLBACK_ANON_PLACEHOLDER =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+
 function deriveProjectRefFromUrl(url: string | undefined): string | null {
   if (!url?.trim()) return null;
   try {
@@ -21,6 +30,9 @@ function deriveProjectRefFromUrl(url: string | undefined): string | null {
     return null;
   }
 }
+
+const resolvedUrl = SUPABASE_URL?.trim() || FALLBACK_SUPABASE_URL;
+const resolvedKey = String(SUPABASE_ANON_OR_PUBLISHABLE).trim() || FALLBACK_ANON_PLACEHOLDER;
 
 if (import.meta.env.DEV) {
   const ref = deriveProjectRefFromUrl(SUPABASE_URL);
@@ -58,13 +70,29 @@ if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_OR_PUBLISHABLE)) {
   );
 }
 
+let supabaseInstance: ReturnType<typeof createClient<Database>>;
+try {
+  supabaseInstance = createClient<Database>(resolvedUrl, resolvedKey, {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+} catch (e) {
+  console.error('[EscalaX] createClient falhou — a usar fallbacks mínimos:', e);
+  supabaseInstance = createClient<Database>(FALLBACK_SUPABASE_URL, FALLBACK_ANON_PLACEHOLDER, {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+}
+
+export const supabase = supabaseInstance;
+
+console.log('Supabase init ok');
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(SUPABASE_URL ?? '', SUPABASE_ANON_OR_PUBLISHABLE, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});

@@ -160,9 +160,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const token = captureAndPersistProviderToken(session);
+    supabase.auth.getSession().then(async ({ data: { session: initial } }) => {
+      const token = captureAndPersistProviderToken(initial);
       setProviderToken(token);
+
+      /**
+       * `getSession()` lê o storage — o access_token pode estar expirado enquanto `user` ainda parece válido.
+       * `getUser()` valida com o Auth e atualiza a sessão (refresh automático quando aplicável).
+       * Depois reler `getSession()` para alinhar React com o cliente Supabase.
+       */
+      let session = initial;
+      if (session?.access_token) {
+        const { error: userErr } = await supabase.auth.getUser();
+        if (userErr) {
+          const { data: ref } = await supabase.auth.refreshSession();
+          session = ref.session ?? session;
+          await supabase.auth.getUser();
+          const { data: again } = await supabase.auth.getSession();
+          session = again.session ?? session;
+        } else {
+          const { data: again } = await supabase.auth.getSession();
+          session = again.session ?? session;
+        }
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);

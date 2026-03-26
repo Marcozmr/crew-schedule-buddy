@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { Plane, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -9,19 +9,20 @@ import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 
+const AuthLoading = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-8 h-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
+
 export default function SignupPage() {
-  const navigate = useNavigate();
-  const { session, signUp } = useAuth();
+  const { session, signUp, loading: authLoading } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    if (session) navigate('/home', { replace: true });
-  }, [session, navigate]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +46,8 @@ export default function SignupPage() {
     }
   }, [name, email, password, signUp]);
 
-  if (session) return null;
+  if (authLoading) return <AuthLoading />;
+  if (session) return <Navigate to="/home" replace />;
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden">
