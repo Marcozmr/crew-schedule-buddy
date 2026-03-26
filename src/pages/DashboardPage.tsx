@@ -12,12 +12,14 @@ import {
   Settings,
   Gauge,
   Radar,
+  CalendarClock,
 } from "lucide-react";
 
 import { AppLayout } from "../components/AppLayout";
 import { PdfImportDialog } from "../components/PdfImportDialog";
 import { DashboardPersonalStrip } from "../components/dashboard/DashboardPersonalStrip";
 import { DashboardNextPresentationCard } from "../components/dashboard/DashboardNextPresentationCard";
+import { DashboardRosterUpdatedHint } from "../components/dashboard/DashboardRosterUpdatedHint";
 import {
   OnboardingModal,
   useOnboardingModal,
@@ -51,8 +53,7 @@ import { NotificationService } from "../lib/services/notification-service";
 import { useScheduleData } from "../hooks/useScheduleData";
 import { useOperationalPreferences } from "../hooks/useOperationalPreferences";
 import { useOperationalClock } from "../hooks/useOperationalClock";
-import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
-import { CorporateRosterFlowBanner } from "@/components/roster/CorporateRosterFlowBanner";
+import { useUserRosterConnection } from "@/hooks/useUserRosterConnection";
 import { logScheduleMetricsDev } from "@/lib/schedule-metrics-dev";
 
 const statusCardMeta = {
@@ -94,7 +95,8 @@ const buildResultKey = (localReportTime: string) =>
 
 export default function DashboardPage() {
   const { profile, user } = useAuth();
-  const { schedule, loading, reload, dashboardRosterSource } = useScheduleData();
+  const { schedule, loading, reload } = useScheduleData();
+  const { activeRosterMeta } = useUserRosterConnection();
   const { shouldShow: showOnboarding, dismiss: dismissOnboarding } =
     useOnboardingModal();
   const { homeBase, timezone } = useOperationalPreferences();
@@ -266,9 +268,6 @@ export default function DashboardPage() {
       <div className="pb-10">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
-        <CorporateRosterFlowBanner />
-        <RosterConnectionBanner />
-
         <motion.div {...fade(0)} className="mb-6 min-w-0 space-y-4">
           <div>
             <h1 className="break-words text-xl font-semibold text-foreground lg:text-2xl">
@@ -277,23 +276,16 @@ export default function DashboardPage() {
                 {profile?.name?.split(" ")[0] || "Tripulante"}
               </span>
             </h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Seu dia operacional na escala importada
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Seu dia operacional</p>
           </div>
 
-          <DashboardPersonalStrip
-            operationalDateIso={todayStr}
-            dateLabel={operationalDateLabel}
-            homeBase={homeBase}
-            trailing={
-              dashboardRosterSource?.sourceLabel ? (
-                <p className="max-w-[220px] text-[10px] text-muted-foreground sm:max-w-xs">
-                  Escala: {dashboardRosterSource.sourceLabel}
-                </p>
-              ) : null
-            }
+          <DashboardRosterUpdatedHint
+            lastUpdatedIso={activeRosterMeta?.synced_at ?? activeRosterMeta?.updated_at}
+            operationalTodayIso={todayStr}
+            operationalTimezone={safeTz}
           />
+
+          <DashboardPersonalStrip dateLabel={operationalDateLabel} homeBase={homeBase} />
 
           {!loading && (
             <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
@@ -388,6 +380,12 @@ export default function DashboardPage() {
                     desc: "Envie seu PDF",
                     icon: Upload,
                     action: "import",
+                  },
+                  {
+                    title: "Minha escala",
+                    desc: "PDF, atualização e status",
+                    icon: CalendarClock,
+                    path: "/minha-escala",
                   },
                   {
                     title: "Pro Board",
@@ -659,6 +657,12 @@ export default function DashboardPage() {
               className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
             >
               {[
+                {
+                  label: "Minha escala",
+                  path: "/minha-escala",
+                  icon: CalendarClock,
+                  desc: "PDF, atualização e status",
+                },
                 {
                   label: "Pro Board",
                   path: "/pro-board",

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Clock, Plane, Radio } from "lucide-react";
+import { Clock, Plane, Radio, CalendarClock } from "lucide-react";
 import { motion } from "framer-motion";
 import type { DutyPeriod } from "@/lib/duty-grouping";
 import { formatDateBR } from "@/lib/date-utils";
@@ -10,7 +10,7 @@ interface DashboardNextPresentationCardProps {
 }
 
 /**
- * Destaque principal: próxima apresentação / próxima jornada na escala importada.
+ * Destaque principal: próxima apresentação / próxima jornada na escala.
  */
 export function DashboardNextPresentationCard({
   nextDuty,
@@ -27,15 +27,24 @@ export function DashboardNextPresentationCard({
         <Plane className="mx-auto mb-2 h-9 w-9 text-muted-foreground/35" />
         <p className="text-sm font-medium text-foreground">Nenhuma apresentação futura na escala</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Importe ou atualize sua escala para ver a próxima jornada aqui.
+          Inclua ou atualize dados em <span className="font-medium text-foreground">Minha escala</span> para ver a próxima jornada aqui.
         </p>
-        <Link
-          to="/pro-board"
-          className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline"
-        >
-          <Radio className="h-3.5 w-3.5" />
-          Abrir Pro Board (consulta e voos ao vivo)
-        </Link>
+        <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+          <Link
+            to="/minha-escala"
+            className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            Abrir Minha escala
+          </Link>
+          <Link
+            to="/pro-board"
+            className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            <Radio className="h-3.5 w-3.5" />
+            Pro Board
+          </Link>
+        </div>
       </motion.div>
     );
   }
