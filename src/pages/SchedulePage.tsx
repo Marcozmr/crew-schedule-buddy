@@ -7,13 +7,19 @@ import { AppLayout } from '@/components/AppLayout';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { Link } from 'react-router-dom';
-import { Calendar, Plane, Clock, Coffee, BedDouble, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react';
+import { Calendar, Plane, ChevronLeft, ChevronRight, CalendarClock, Building2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatTimeBR, parseDateBRT } from '@/lib/date-utils';
 import { compareScheduleEntries } from '@/lib/schedule-entry-sort';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { buildCrewSituationDisplayFromEntry } from '@/lib/roster/crew-tripulante-display';
 import { CrewTripulanteSummary } from '@/components/flight-board/CrewTripulanteSummary';
+import {
+  RosterCalendarEventIcon,
+  getRosterCalendarContainerClass,
+  getRosterCalendarCellPillClass,
+} from '@/lib/roster/roster-calendar-icons';
+import { getRosterEventVisualType } from '@/lib/roster/roster-calendar-visual';
 
 export default function SchedulePage() {
   const { schedule, reload } = useScheduleData();
@@ -63,13 +69,6 @@ export default function SchedulePage() {
       .filter((entry) => getDay(entry.date) === selectedDay)
       .sort(compareScheduleEntries);
   }, [filteredSchedule, selectedDay]);
-
-  const getActivityIcon = (entry: typeof schedule[0]) => {
-    if (entry.is_flight) return <Plane className="w-4 h-4 text-primary" />;
-    if (['DO', 'FOLGA', 'OFF', 'X'].includes(entry.activity_type)) return <Coffee className="w-4 h-4 text-success" />;
-    if (['HSB', 'HSBE', 'ASB'].includes(entry.activity_type)) return <Clock className="w-4 h-4 text-warning" />;
-    return <Clock className="w-4 h-4 text-muted-foreground" />;
-  };
 
   return (
     <AppLayout>
@@ -150,15 +149,14 @@ export default function SchedulePage() {
                     {item.entries.slice(0, 2).map((entry) => (
                       <div
                         key={entry.id}
-                        className={`rounded px-1 py-0.5 text-[8px] sm:text-[9px] lg:text-[10px] font-mono truncate ${
-                          entry.is_flight
-                            ? 'bg-primary/10 text-primary font-medium'
-                            : ['DO', 'FOLGA', 'OFF', 'X'].includes(entry.activity_type)
-                              ? 'bg-success/10 text-success'
-                              : 'bg-warning/10 text-warning'
-                        }`}
+                        className={`flex min-w-0 items-center gap-0.5 rounded px-1 py-0.5 text-[8px] sm:text-[9px] lg:text-[10px] font-mono truncate ${getRosterCalendarCellPillClass(entry)}`}
                       >
-                        {entry.is_flight ? `${entry.departure}→${entry.arrival}` : entry.activity_type}
+                        <span className="shrink-0 opacity-90">
+                          <RosterCalendarEventIcon entry={entry} size="sm" />
+                        </span>
+                        <span className="min-w-0 truncate">
+                          {entry.is_flight ? `${entry.departure}→${entry.arrival}` : entry.activity_type}
+                        </span>
                       </div>
                     ))}
                     {item.entries.length > 2 && <span className="text-[8px] sm:text-[9px] text-muted-foreground">+{item.entries.length - 2}</span>}
@@ -197,11 +195,9 @@ export default function SchedulePage() {
                 >
                   <div className="flex items-start gap-3 min-w-0">
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                        entry.is_flight ? 'bg-primary/10' : ['DO', 'FOLGA', 'OFF', 'X'].includes(entry.activity_type) ? 'bg-success/10' : 'bg-warning/10'
-                      }`}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${getRosterCalendarContainerClass(entry)}`}
                     >
-                      {getActivityIcon(entry)}
+                      <RosterCalendarEventIcon entry={entry} size="md" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -254,20 +250,27 @@ export default function SchedulePage() {
                           </div>
                           {tripCrew && (
                             <div className="mt-3 pt-3 border-t border-border">
-                              <CrewTripulanteSummary crew={tripCrew} />
+                              <CrewTripulanteSummary crew={tripCrew} scheduleEntry={entry} />
                             </div>
                           )}
                         </>
                       )}
 
-                      {!entry.is_flight && ['DO', 'FOLGA', 'OFF', 'X'].includes(entry.activity_type) && (
-                        <div className="flex items-center gap-2 mt-2 min-w-0">
-                          <BedDouble className="w-4 h-4 text-success shrink-0" />
-                          <span className="text-sm text-success font-medium break-words">Folga / Descanso</span>
+                      {!entry.is_flight && getRosterEventVisualType(entry) === 'rest' && (
+                        <div className="mt-2 flex min-w-0 items-center gap-2">
+                          <RosterCalendarEventIcon entry={entry} size="md" />
+                          <span className="break-words text-sm font-medium text-success">
+                            Folga / Descanso
+                          </span>
                         </div>
                       )}
 
-                      {entry.hotel_name && <p className="text-xs text-muted-foreground mt-2 break-words">🏨 {entry.hotel_name}</p>}
+                      {entry.hotel_name && (
+                        <p className="mt-2 flex items-start gap-1.5 break-words text-xs text-muted-foreground">
+                          <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span>{entry.hotel_name}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
                 </motion.div>

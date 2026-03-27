@@ -3,6 +3,7 @@ import { Clock, Plane, Radio, CalendarClock } from "lucide-react";
 import { motion } from "framer-motion";
 import type { DutyPeriod } from "@/lib/duty-grouping";
 import { formatDateBR } from "@/lib/date-utils";
+import { CrewFunctionActivityBadge } from "@/components/roster/CrewFunctionActivityBadge";
 
 interface DashboardNextPresentationCardProps {
   nextDuty: DutyPeriod | null;
@@ -100,6 +101,15 @@ export function DashboardNextPresentationCard({
             </span>
           )}
         </div>
+
+        {nextDuty.legs[0] && (
+          <div className="border-t border-border/40 pt-3">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Função no 1.º trecho
+            </p>
+            <CrewFunctionActivityBadge leg={nextDuty.legs[0]} />
+          </div>
+        )}
 
         <Link
           to="/pro-board"

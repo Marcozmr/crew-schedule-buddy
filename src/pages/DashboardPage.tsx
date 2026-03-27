@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -122,6 +122,7 @@ export default function DashboardPage() {
 
   const hasSchedule = !loading && schedule.length > 0;
   const allDutyPeriods = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
+  const [expandedDutyId, setExpandedDutyId] = useState<string | null>(null);
 
   const todayDuties = useMemo(
     () => getTodayDutyPeriods(allDutyPeriods, todayStr, homeBase),
@@ -618,6 +619,13 @@ export default function DashboardPage() {
                           duty.reportTime || duty.dutyStartTime
                         )
                       )}
+                      allDutiesOrdered={allDutyPeriods}
+                      expanded={expandedDutyId === duty.id}
+                      onToggle={() =>
+                        setExpandedDutyId((prev) =>
+                          prev === duty.id ? null : duty.id
+                        )
+                      }
                     />
                   ))}
                 </div>

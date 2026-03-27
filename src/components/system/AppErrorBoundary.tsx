@@ -1,4 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import {
+  isRecoverableLoadFailureMessage,
+  performStaleAssetRecovery,
+} from '@/lib/app-recovery/appRecoveryManager';
 
 interface Props {
   children: ReactNode;
@@ -53,14 +57,31 @@ export class AppErrorBoundary extends Component<Props, State> {
     const { error, componentStack } = this.state;
     if (error) {
       const stackShort = summarizeStack(componentStack);
+      const looksLikeStaleBuild = isRecoverableLoadFailureMessage(error.message);
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
           <p className="mb-2 text-center text-lg font-semibold text-foreground">Ocorreu um erro ao carregar o EscalaX</p>
+          {looksLikeStaleBuild && (
+            <p className="mb-4 max-w-md text-center text-sm text-muted-foreground">
+              Pode ser uma atualização em curso. Tente atualizar a aplicação — a sua sessão será mantida.
+            </p>
+          )}
           <div className="mb-4 w-full max-w-lg rounded-lg border border-border bg-muted/40 p-4 text-left text-sm text-foreground">
             <p className="mb-2 font-mono text-xs font-medium text-destructive break-words">{error.message}</p>
             <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">{stackShort}</p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
+            {looksLikeStaleBuild && (
+              <button
+                type="button"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                onClick={() => {
+                  void performStaleAssetRecovery().then(() => window.location.reload());
+                }}
+              >
+                Atualizar aplicação
+              </button>
+            )}
             <button
               type="button"
               className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground"
@@ -70,7 +91,7 @@ export class AppErrorBoundary extends Component<Props, State> {
             </button>
             <button
               type="button"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground"
               onClick={() => window.location.reload()}
             >
               Recarregar

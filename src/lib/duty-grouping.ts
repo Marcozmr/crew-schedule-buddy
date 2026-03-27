@@ -527,3 +527,64 @@ export function formatDutyTime(minutes: number): string {
   if (m === 0) return `${h}h`;
   return `${h}h${String(m).padStart(2, '0')}`;
 }
+
+/**
+ * Fim operacional da jornada (última chegada ou debrief, o que for mais tardio),
+ * na mesma escala de minutos absolutos que `dutyStartAbsoluteMin`.
+ */
+export function getDutyOperationalEndAbsoluteMin(duty: DutyPeriod): number {
+  const legs = duty.legs;
+  const first = legs[0];
+  const dutyStartTime = first.report_time || first.departure_time;
+  const startMs = parseLocalDateTimeToMs(first.date, dutyStartTime);
+  if (startMs == null) return duty.dutyStartAbsoluteMin;
+
+  const lastFlight = [...legs].reverse().find((l) => l.is_flight);
+  const endLeg = lastFlight ?? legs[legs.length - 1];
+  const endTime = endLeg.arrival_time ?? endLeg.debrief_time;
+  if (!endTime) return duty.dutyStartAbsoluteMin;
+
+  let endMs = parseLocalDateTimeToMs(endLeg.date, endTime);
+  if (endMs == null && endLeg.sort_datetime) {
+    const p = Date.parse(endLeg.sort_datetime);
+    if (!Number.isNaN(p)) endMs = p;
+  }
+  if (endMs == null) return duty.dutyStartAbsoluteMin;
+  endMs = advanceEndUntilAfterStartMs(endMs, startMs);
+
+  if (lastFlight?.debrief_time) {
+    const debMsRaw = parseLocalDateTimeToMs(lastFlight.date, lastFlight.debrief_time);
+    if (debMsRaw != null) {
+      const debMs = advanceEndUntilAfterStartMs(debMsRaw, startMs);
+      endMs = Math.max(endMs, debMs);
+    }
+  }
+
+  return Math.round((endMs - EPOCH) / 60000);
+}
+
+/**
+ * Próxima jornada na linha do tempo global (lista já ordenada por `groupIntoDutyPeriods`).
+ */
+export function findNextChronologicalDuty(
+  sortedAll: DutyPeriod[],
+  current: DutyPeriod,
+): DutyPeriod | null {
+  const sorted = [...sortedAll].sort((a, b) => a.dutyStartAbsoluteMin - b.dutyStartAbsoluteMin);
+  const idx = sorted.findIndex((d) => d.id === current.id);
+  if (idx < 0 || idx >= sorted.length - 1) return null;
+  return sorted[idx + 1] ?? null;
+}
+
+/**
+ * Intervalo em solo entre duas pernas consecutivas da mesma jornada (minutos).
+ * Reutiliza a mesma regra de conexão usada em `connectionTimes`.
+ */
+export function getGroundIntervalBetweenLegs(
+  prevLeg: ScheduleEntry,
+  nextLeg: ScheduleEntry,
+): number | null {
+  const g = gapBetweenLegs(prevLeg, nextLeg);
+  if (g <= 0) return null;
+  return g;
+}

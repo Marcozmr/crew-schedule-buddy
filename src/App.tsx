@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useEffect } from "react";
+import { clearRecoverySessionFlag } from "@/lib/app-recovery/appRecoveryManager";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -276,6 +277,7 @@ const AppRoutes = () => (
 
 const App = () => {
   useEffect(() => {
+    clearRecoverySessionFlag();
     console.log("[EscalaX boot] app mount ok");
   }, []);
   return (

@@ -1,20 +1,22 @@
 import "./index.css";
 import {
-  registerBootErrorListeners,
-  unregisterBootServiceWorkers,
-  clearStaleWebCaches,
-} from "./lib/boot";
+  registerAppRecoveryHandlers,
+  isRecoverableLoadFailureMessage,
+  handleRecoverableFailure,
+  showHardRecoveryFallback,
+  RECOVERY_SESSION_KEY,
+} from "@/lib/app-recovery/appRecoveryManager";
+import { runStorageMigrationOnBoot } from "@/lib/storageMigrationManager";
+import { getEscalaxBuildId } from "@/lib/build-id";
 import { logEnvValidationOnBoot } from "./lib/envCheck";
 
-registerBootErrorListeners();
-console.log("[EscalaX boot] boot start");
-console.log("[EscalaX boot] build id:", __ESCALAX_BUILD_ID__);
+registerAppRecoveryHandlers();
+console.log("[EscalaX boot] build id:", getEscalaxBuildId());
 logEnvValidationOnBoot();
+runStorageMigrationOnBoot();
 
 void (async () => {
   try {
-    await unregisterBootServiceWorkers();
-    await clearStaleWebCaches();
     const [{ createRoot }, { default: App }, { AppErrorBoundary }] = await Promise.all([
       import("react-dom/client"),
       import("./App.tsx"),
@@ -35,10 +37,24 @@ void (async () => {
       </AppErrorBoundary>,
     );
   } catch (e) {
-    console.error("EscalaX boot: falha ao carregar módulos da aplicação:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[EscalaX boot] falha ao carregar módulos:", e);
+    if (isRecoverableLoadFailureMessage(msg)) {
+      await handleRecoverableFailure("main-bootstrap", msg.slice(0, 400));
+      return;
+    }
+    try {
+      if (sessionStorage.getItem(RECOVERY_SESSION_KEY) === "1") {
+        sessionStorage.removeItem(RECOVERY_SESSION_KEY);
+        showHardRecoveryFallback();
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
     document.body.insertAdjacentHTML(
       "beforeend",
-      '<p style="padding:1rem;font-family:system-ui,sans-serif">Erro ao carregar o EscalaX. Recarregue a página ou limpe o cache do navegador.</p>',
+      '<p style="padding:1rem;font-family:system-ui,sans-serif">Erro ao carregar o EscalaX. Recarregue a página.</p>',
     );
   }
 })();

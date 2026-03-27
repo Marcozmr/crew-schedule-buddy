@@ -11,6 +11,7 @@ const pkg = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"
 
 /** Muda a cada build (CI) ou inclui versão + sufixo local — força nomes de ficheiro e meta distintos. */
 const escalaxBuildId =
+  process.env.VITE_ESCALAX_BUILD_ID?.trim() ||
   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ||
   process.env.VERCEL_DEPLOYMENT_ID ||
   process.env.CI_COMMIT_SHA?.slice(0, 12) ||
@@ -54,16 +55,24 @@ export default defineConfig(({ mode }) => ({
     escalaxHtmlBuildMeta(),
     mode === "development" && componentTagger(),
     VitePWA({
-      /** Mantido desativado: evita SW a servir shell antiga em domínio customizado/CDN. */
-      disable: true,
-      registerType: "autoUpdate",
+      /** Produção: SW + precache com hash; dev: sem SW ativo (devOptions.enabled false). */
+      disable: false,
+      devOptions: {
+        enabled: false,
+      },
+      /** Registo apenas via `useRegisterSW` no React — evita script duplicado no index.html. */
+      injectRegister: null,
+      /** Utilizador confirma atualização (toast “Atualizar agora”) — evita ativar build nova em segundo plano sem controlo. */
+      registerType: "prompt",
       includeAssets: ["escalax-icon.png", "favicon.ico"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        navigateFallbackDenylist: [/^\/~oauth/],
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/~oauth/, /^\/api\//],
         cleanupOutdatedCaches: true,
-        skipWaiting: true,
-        clientsClaim: true,
+        /** Com `registerType: 'prompt'`, o skipWaiting é acionado ao chamar `updateServiceWorker(true)`. */
+        skipWaiting: false,
+        clientsClaim: false,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -71,15 +80,6 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: "google-fonts",
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-api-v2",
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 3 },
-              networkTimeoutSeconds: 10,
             },
           },
         ],
