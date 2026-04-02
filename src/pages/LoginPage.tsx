@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
+import { formatAuthErrorForUser } from '@/lib/auth/formatAuthError';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
@@ -17,7 +18,7 @@ const AuthLoading = () => (
 );
 
 export default function LoginPage() {
-  const { session, signIn, loading: authLoading } = useAuth();
+  const { session, signIn, loading: authLoading, emailConfirmed } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +30,7 @@ export default function LoginPage() {
       toast.error('Preencha email e senha');
       return;
     }
-    if (!checkRateLimit('login', 5, 60_000)) {
+    if (!checkRateLimit('login', 8, 60_000)) {
       toast.error(getRateLimitMessage());
       return;
     }
@@ -38,14 +39,14 @@ export default function LoginPage() {
       await signIn(email, password);
       toast.success('Login realizado!');
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao fazer login');
+      toast.error(formatAuthErrorForUser(err));
     } finally {
       setLoading(false);
     }
   }, [email, password, signIn]);
 
   if (authLoading) return <AuthLoading />;
-  if (session) return <Navigate to="/home" replace />;
+  if (session && emailConfirmed) return <Navigate to="/home" replace />;
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden">
@@ -87,6 +88,7 @@ export default function LoginPage() {
 
           <div className="mt-4 text-center space-y-2">
             <Link to="/forgot-password" className="text-sm text-white/50 hover:text-white/80 block">Esqueci minha senha</Link>
+            <Link to="/verify-email" className="text-sm text-white/40 hover:text-white/70 block">Não recebeu o email de confirmação?</Link>
             <p className="text-sm text-white/50">
               Não tem conta?{' '}
               <Link to="/signup" className="text-white/80 hover:text-white font-medium">Criar conta</Link>

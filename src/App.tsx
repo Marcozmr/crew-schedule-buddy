@@ -14,6 +14,10 @@ import { UserThemeSync } from "@/components/UserThemeSync";
 // Eager-load auth pages (first paint)
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
+import UpdatePasswordPage from "./pages/UpdatePasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
+import { AuthFlashToast } from "./components/AuthFlashToast";
 
 // Lazy-load everything else
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
@@ -72,16 +76,22 @@ function BootTrace() {
   return null;
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+/** Guard usado nas rotas autenticadas — exportado para testes de integração. */
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { session, user, loading, emailConfirmed } = useAuth();
 
   if (loading) return <Loading />;
-  if (!session) return <Navigate to="/login" replace />;
+  if (!session || !user) return <Navigate to="/login" replace />;
+  if (!emailConfirmed) {
+    return <Navigate to="/verify-email" replace state={{ email: user.email ?? undefined }} />;
+  }
 
   return <>{children}</>;
 }
 
-const AppRoutes = () => (
+/** Árvore de rotas (Suspense + Routes) — exportada para testes com MemoryRouter. */
+export function AppRoutes() {
+  return (
   <Suspense fallback={<Loading />}>
     <Routes>
       <Route path="/" element={<LoginPage />} />
@@ -89,6 +99,9 @@ const AppRoutes = () => (
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/auth/update-password" element={<UpdatePasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route
         path="/onboarding"
         element={
@@ -273,7 +286,32 @@ const AppRoutes = () => (
       <Route path="*" element={<NotFound />} />
     </Routes>
   </Suspense>
-);
+  );
+}
+
+/**
+ * Conteúdo dentro do Router (Browser ou Memory): auth + UI principal.
+ * Permite testes de integração com `MemoryRouter` sem duplicar rotas.
+ */
+export function AppAuthShell() {
+  return (
+    <>
+      <BootTrace />
+      <AuthProvider>
+        <UserThemeSync />
+        <LaunchQueueHandler />
+        <TooltipProvider>
+          <Sonner />
+          <PWAUpdatePrompt />
+          <div className="min-h-dvh w-full min-w-0 bg-background">
+            <AuthFlashToast />
+            <AppRoutes />
+          </div>
+        </TooltipProvider>
+      </AuthProvider>
+    </>
+  );
+}
 
 const App = () => {
   useEffect(() => {
@@ -284,16 +322,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="escalax-theme" disableTransitionOnChange>
         <BrowserRouter>
-          <BootTrace />
-          <AuthProvider>
-            <UserThemeSync />
-            <LaunchQueueHandler />
-            <TooltipProvider>
-              <Sonner />
-              <PWAUpdatePrompt />
-              <AppRoutes />
-            </TooltipProvider>
-          </AuthProvider>
+          <AppAuthShell />
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>

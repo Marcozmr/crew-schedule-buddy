@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { AppLayout } from "../components/AppLayout";
+import { SurfacePanel } from "@/components/presentation/PremiumChrome";
 import { PdfImportDialog } from "../components/PdfImportDialog";
 import { DashboardPersonalStrip } from "../components/dashboard/DashboardPersonalStrip";
 import { DashboardNextPresentationCard } from "../components/dashboard/DashboardNextPresentationCard";
@@ -266,35 +267,37 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="pb-10">
+      <div className="space-y-8 pb-12">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
-        <motion.div {...fade(0)} className="mb-6 min-w-0 space-y-4">
-          <div>
-            <h1 className="break-words text-xl font-semibold text-foreground lg:text-2xl">
-              {greeting()},{" "}
-              <span className="text-primary">
-                {profile?.name?.split(" ")[0] || "Tripulante"}
-              </span>
-            </h1>
-            <p className="mt-1 text-xs text-muted-foreground">Seu dia operacional</p>
-          </div>
+        <motion.div {...fade(0)} className="mb-2 min-w-0">
+          <SurfacePanel className="space-y-5 p-6 md:space-y-6 md:p-8">
+            <div>
+              <h1 className="break-words text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
+                {greeting()},{" "}
+                <span className="text-primary">
+                  {profile?.name?.split(" ")[0] || "Tripulante"}
+                </span>
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">Seu dia operacional</p>
+            </div>
 
-          <DashboardRosterUpdatedHint
-            lastUpdatedIso={activeRosterMeta?.synced_at ?? activeRosterMeta?.updated_at}
-            operationalTodayIso={todayStr}
-            operationalTimezone={safeTz}
-          />
+            <DashboardRosterUpdatedHint
+              lastUpdatedIso={activeRosterMeta?.synced_at ?? activeRosterMeta?.updated_at}
+              operationalTodayIso={todayStr}
+              operationalTimezone={safeTz}
+            />
 
-          <DashboardPersonalStrip dateLabel={operationalDateLabel} homeBase={homeBase} />
+            <DashboardPersonalStrip dateLabel={operationalDateLabel} homeBase={homeBase} />
 
-          {!loading && (
-            <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
-          )}
+            {!loading && (
+              <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
+            )}
+          </SurfacePanel>
         </motion.div>
 
         {loading && (
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-4">
             {[...Array(4)].map((_, index) => (
               <div key={index} className="skeleton h-[104px] rounded-2xl" />
             ))}
@@ -305,7 +308,7 @@ export default function DashboardPage() {
           <>
             <motion.div
               {...fade(0.05)}
-              className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4"
+              className="mb-10 grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-4"
             >
               {[
                 {
@@ -461,10 +464,10 @@ export default function DashboardPage() {
         )}
 
         {hasSchedule && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <motion.div
               {...fade(0.05)}
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4"
+              className="grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-4"
             >
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -587,8 +590,8 @@ export default function DashboardPage() {
             </motion.div>
 
             <motion.div {...fade(0.1)}>
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-sm font-semibold text-foreground">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-foreground">
                   Meu dia operacional
                 </h2>
 
@@ -607,7 +610,7 @@ export default function DashboardPage() {
               </div>
 
               {todayDuties.length > 0 ? (
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 gap-5">
                   {todayDuties.map((duty, index) => (
                     <DutyPeriodCard
                       key={duty.id}
@@ -662,7 +665,7 @@ export default function DashboardPage() {
 
             <motion.div
               {...fade(0.2)}
-              className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+              className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
               {[
                 {

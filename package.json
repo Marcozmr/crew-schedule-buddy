@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:auth": "vitest run src/lib/auth src/pages/AuthCallbackPage.test.tsx src/pages/UpdatePasswordPage.test.tsx src/App.auth-integration.test.tsx",
     "test:watch": "vitest"
   },
   "dependencies": {

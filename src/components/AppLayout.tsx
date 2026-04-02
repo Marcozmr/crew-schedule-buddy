@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { ConnectedRosterLifecycle } from '@/components/roster/ConnectedRosterLifecycle';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
+import { AppShell } from '@/components/layout/AppShell';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,6 +20,14 @@ const navItems = [
   { path: '/regulation', label: 'Calculadora operacional', icon: Shield },
   { path: '/settings', label: 'Configurações', icon: Settings },
 ];
+
+function desktopNavLinkClass(active: boolean) {
+  return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${
+    active
+      ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground'
+  }`;
+}
 
 interface AppNavLinkProps {
   children: ReactNode;
@@ -77,33 +86,34 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
   const pageTitle = navItems.find((item) => location.pathname === item.path)?.label || '';
 
   return (
-    <div className="min-h-screen min-h-svh min-h-dvh flex bg-background overflow-x-clip">
-      <ConnectedRosterLifecycle />
-      <aside className="hidden lg:flex flex-col w-[240px] shrink-0 sticky top-0 h-screen min-h-dvh border-r border-border bg-card safe-area-top safe-area-bottom">
-        <div className="px-5 h-16 flex items-center gap-3 border-b border-border">
-          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-            <Plane className="w-4 h-4 text-primary-foreground" />
+    <AppShell>
+      <div className="flex min-h-dvh w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background lg:flex-row">
+        <ConnectedRosterLifecycle />
+        <aside className="hidden w-[248px] shrink-0 flex-col border-b border-border bg-card safe-area-top safe-area-bottom dark:border-border dark:bg-card/50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-dvh lg:border-b-0 lg:border-r lg:border-border lg:shadow-sm">
+        <div className="flex h-16 items-center gap-3 border-b border-border px-5 dark:border-border">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
+            <Plane className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-base font-bold text-foreground tracking-tight">EscalaX</span>
+          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
               <AppNavLink
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+                className={desktopNavLinkClass(active)}
               >
-                <item.icon className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-primary' : ''}`} />
+                <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-sidebar-primary-foreground' : ''}`} />
                 <span>{item.label}</span>
               </AppNavLink>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-border space-y-2">
+        <div className="space-y-2 border-t border-border p-3 dark:border-border">
           {profile && (
             <AppNavLink to="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
               <Avatar className="w-7 h-7">
@@ -122,7 +132,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen min-h-svh min-h-dvh overflow-x-clip">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
         <header className="sticky top-0 z-40 min-h-[3.5rem] px-4 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
           <div className="flex items-center gap-2 min-w-0">
             <button onClick={() => navigate(-1)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
@@ -151,18 +161,42 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <header className="hidden lg:flex h-14 px-6 items-center justify-between border-b border-border bg-card/50 backdrop-blur-xl">
-          <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
-          <div className="flex items-center gap-3">
-            <AppNavLink to="/support" className="text-muted-foreground hover:text-foreground transition-colors">
-              <HelpCircle className="w-4 h-4" />
+        <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
+            {pageTitle}
+          </h1>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <AppNavLink
+              to="/support"
+              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4" />
             </AppNavLink>
-            <AppNavLink to="/notifications" className="relative text-muted-foreground hover:text-foreground transition-colors">
-              <Bell className="w-4 h-4" />
+            <AppNavLink
+              to="/notifications"
+              className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+            >
+              <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{unreadCount}</span>
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+                  {unreadCount}
+                </span>
               )}
             </AppNavLink>
+            {profile && (
+              <AppNavLink
+                to="/profile"
+                className="ml-1 flex items-center gap-2 rounded-xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:hover:border-border dark:hover:bg-secondary"
+              >
+                <Avatar className="h-9 w-9 border border-slate-200/80 shadow-sm dark:border-border">
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                </Avatar>
+                <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-800 xl:inline dark:text-foreground">
+                  {profile.name}
+                </span>
+              </AppNavLink>
+            )}
           </div>
         </header>
 
@@ -187,7 +221,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
               {navItems.map((item) => {
                 const active = location.pathname === item.path;
                 return (
-                  <AppNavLink key={item.path} to={item.path} onClick={() => setDrawerOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
+                  <AppNavLink key={item.path} to={item.path} onClick={() => setDrawerOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active ? 'bg-sidebar-primary/12 text-sidebar-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
                     <item.icon className="w-4 h-4" />
                     {item.label}
                   </AppNavLink>
@@ -205,8 +239,8 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
           </SheetContent>
         </Sheet>
 
-        <main className="flex-1 overflow-x-hidden overflow-y-visible">
-          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-screen-2xl mx-auto w-full safe-area-bottom pb-safe-content">
+        <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible bg-background">
+          <div className="w-full max-w-none px-3 py-5 pb-safe-content sm:px-4 sm:py-6 md:px-5 md:py-7 lg:px-6 lg:py-8 xl:px-8 2xl:px-12 safe-area-bottom">
             {children}
           </div>
         </main>
@@ -215,6 +249,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
         <PWAInstallPrompt />
       </div>
     </div>
+    </AppShell>
   );
 }
 
@@ -272,32 +307,34 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
   const pageTitle = navItems.find((item) => pathname === item.path)?.label || '';
 
   return (
-    <div className="min-h-screen min-h-svh min-h-dvh flex bg-background overflow-x-clip">
-      <aside className="hidden lg:flex flex-col w-[240px] shrink-0 sticky top-0 h-screen min-h-dvh border-r border-border bg-card safe-area-top safe-area-bottom">
-        <div className="px-5 h-16 flex items-center gap-3 border-b border-border">
-          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-            <Plane className="w-4 h-4 text-primary-foreground" />
+    <AppShell>
+      <div className="flex min-h-dvh w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background lg:flex-row">
+        <ConnectedRosterLifecycle />
+        <aside className="hidden w-[248px] shrink-0 flex-col border-b border-border bg-card safe-area-top safe-area-bottom dark:border-border dark:bg-card/50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-dvh lg:border-b-0 lg:border-r lg:border-border lg:shadow-sm">
+        <div className="flex h-16 items-center gap-3 border-b border-border px-5 dark:border-border">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
+            <Plane className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-base font-bold text-foreground tracking-tight">EscalaX</span>
+          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {navItems.map((item) => {
             const active = pathname === item.path;
             return (
               <a
                 key={item.path}
                 href={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+                className={desktopNavLinkClass(active)}
               >
-                <item.icon className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-primary' : ''}`} />
+                <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-sidebar-primary-foreground' : ''}`} />
                 <span>{item.label}</span>
               </a>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-border space-y-2">
+        <div className="space-y-2 border-t border-border p-3 dark:border-border">
           {profile && (
             <a href="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
               <Avatar className="w-7 h-7">
@@ -316,7 +353,7 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen min-h-svh min-h-dvh overflow-x-clip">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
         <header className="sticky top-0 z-40 min-h-[3.5rem] px-4 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
           <div className="flex items-center gap-2 min-w-0">
             <button onClick={() => navigate(-1)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
@@ -345,18 +382,42 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
           </div>
         </header>
 
-        <header className="hidden lg:flex h-14 px-6 items-center justify-between border-b border-border bg-card/50 backdrop-blur-xl">
-          <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
-          <div className="flex items-center gap-3">
-            <a href="/support" className="text-muted-foreground hover:text-foreground transition-colors">
-              <HelpCircle className="w-4 h-4" />
+        <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
+            {pageTitle}
+          </h1>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <a
+              href="/support"
+              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4" />
             </a>
-            <a href="/notifications" className="relative text-muted-foreground hover:text-foreground transition-colors">
-              <Bell className="w-4 h-4" />
+            <a
+              href="/notifications"
+              className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+            >
+              <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{unreadCount}</span>
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+                  {unreadCount}
+                </span>
               )}
             </a>
+            {profile && (
+              <a
+                href="/profile"
+                className="ml-1 flex items-center gap-2 rounded-xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:hover:border-border dark:hover:bg-secondary"
+              >
+                <Avatar className="h-9 w-9 border border-slate-200/80 shadow-sm dark:border-border">
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                </Avatar>
+                <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-800 xl:inline dark:text-foreground">
+                  {profile.name}
+                </span>
+              </a>
+            )}
           </div>
         </header>
 
@@ -381,7 +442,7 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
               {navItems.map((item) => {
                 const active = pathname === item.path;
                 return (
-                  <a key={item.path} href={item.path} onClick={() => setDrawerOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
+                  <a key={item.path} href={item.path} onClick={() => setDrawerOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active ? 'bg-sidebar-primary/12 text-sidebar-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
                     <item.icon className="w-4 h-4" />
                     {item.label}
                   </a>
@@ -399,8 +460,8 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
           </SheetContent>
         </Sheet>
 
-        <main className="flex-1 overflow-x-hidden overflow-y-visible">
-          <div className="px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-screen-2xl mx-auto w-full safe-area-bottom pb-safe-content">
+        <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible bg-background">
+          <div className="w-full max-w-none px-3 py-5 pb-safe-content sm:px-4 sm:py-6 md:px-5 md:py-7 lg:px-6 lg:py-8 xl:px-8 2xl:px-12 safe-area-bottom">
             {children}
           </div>
         </main>
@@ -409,5 +470,6 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
         <PWAInstallPrompt />
       </div>
     </div>
+    </AppShell>
   );
 }

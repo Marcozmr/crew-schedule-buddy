@@ -77,6 +77,8 @@ try {
       storage: localStorage,
       persistSession: true,
       autoRefreshToken: true,
+      /** Sessão a partir de hash/query é tratada em `/auth/callback` (evita corrida com AuthProvider). */
+      detectSessionInUrl: false,
     },
   });
 } catch (e) {
@@ -86,6 +88,7 @@ try {
       storage: localStorage,
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: false,
     },
   });
 }

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { AppLayout } from "@/components/AppLayout";
+import { PageSection } from "@/components/presentation/PremiumChrome";
 import { FlightBoard } from "@/components/flight-board";
 import { useScheduleData } from "@/hooks/useScheduleData";
 import { useOperationalPreferences } from "@/hooks/useOperationalPreferences";
@@ -18,9 +19,9 @@ export default function ProBoardPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-4 pb-6">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm text-muted-foreground">
+      <PageSection className="space-y-6 pb-10">
+        <div className="rounded-[var(--radius-card,1.25rem)] border border-slate-200/70 bg-slate-50/80 px-5 py-4 dark:border-border dark:bg-muted/25">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Consulta por aeroporto, filtros e dados ao vivo (OpenSky). Para o seu dia na escala, use o{" "}
             <span className="font-medium text-foreground">Dashboard</span>.
           </p>
@@ -33,7 +34,7 @@ export default function ProBoardPage() {
           operationalTimezone={safeTz}
           scheduleSourceLabel={dashboardRosterSource?.sourceLabel}
         />
-      </div>
+      </PageSection>
     </AppLayout>
   );
 }

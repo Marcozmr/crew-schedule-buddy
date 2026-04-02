@@ -1,7 +1,19 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  ReactNode,
+} from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthCallbackUrl } from '@/lib/auth/authRedirect';
+import { deriveAuthAccessState, isEmailConfirmed, type AuthAccessState } from '@/lib/auth/authAccess';
+import { AuthFlowError, AUTH_FLOW_CODES } from '@/lib/auth/authErrors';
+import { emailDomainOnly, logAuthAuditEvent } from '@/lib/auth/authAudit';
 import { Session, User } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
+
 /** Chave legada para limpar sessão de portal no logout (compatibilidade). */
 const PORTAL_SESSION_STORAGE_KEY_LEGACY = 'escalax_portal_session';
 
@@ -23,9 +35,13 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   providerToken: string | null;
+  /** Indica se o email foi confirmado (auth.users.email_confirmed_at). */
+  emailConfirmed: boolean;
+  authAccessState: AuthAccessState;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  resendConfirmationEmail: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -74,12 +90,22 @@ function captureAndPersistProviderToken(session: Session | null): string | null 
   return null;
 }
 
+/**
+ * Garante uma linha em `profiles` por `user_id` (constraint UNIQUE + upsert idempotente).
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [providerToken, setProviderToken] = useState<string | null>(null);
+
+  const emailConfirmed = useMemo(() => isEmailConfirmed(user), [user]);
+
+  const authAccessState = useMemo(
+    () => deriveAuthAccessState(loading, session, user),
+    [loading, session, user],
+  );
 
   const fetchProfile = async (userId: string) => {
     const { data: row, error } = await supabase
@@ -101,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    /** Sem linha: criar via RLS (INSERT permitido para auth.uid() = user_id). Cobre usuários antigos / trigger ausente. */
+    /** Sem linha: upsert idempotente (onConflict user_id) — não cria duplicados. */
     const { data: authData } = await supabase.auth.getUser();
     const u = authData.user;
     if (!u || u.id !== userId) {
@@ -142,78 +168,131 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const token = captureAndPersistProviderToken(session);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      const token = captureAndPersistProviderToken(nextSession);
       setProviderToken(token);
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
 
       if (event === 'SIGNED_OUT') {
         setProfile(null);
         setProviderToken(null);
         _queryClient?.clear();
-      } else if (session?.user) {
-        setTimeout(() => fetchProfile(session.user.id), 200);
+      } else if (nextSession?.user && isEmailConfirmed(nextSession.user)) {
+        setTimeout(() => fetchProfile(nextSession.user.id), 200);
       } else {
         setProfile(null);
       }
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session: initial } }) => {
-      const token = captureAndPersistProviderToken(initial);
-      setProviderToken(token);
+    const deferInitialSession =
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/auth/callback' &&
+      (window.location.hash.length > 1 || window.location.search.includes('code='));
 
-      /**
-       * `getSession()` lê o storage — o access_token pode estar expirado enquanto `user` ainda parece válido.
-       * `getUser()` valida com o Auth e atualiza a sessão (refresh automático quando aplicável).
-       * Depois reler `getSession()` para alinhar React com o cliente Supabase.
-       */
-      let session = initial;
-      if (session?.access_token) {
-        const { error: userErr } = await supabase.auth.getUser();
-        if (userErr) {
-          const { data: ref } = await supabase.auth.refreshSession();
-          session = ref.session ?? session;
-          await supabase.auth.getUser();
-          const { data: again } = await supabase.auth.getSession();
-          session = again.session ?? session;
-        } else {
-          const { data: again } = await supabase.auth.getSession();
-          session = again.session ?? session;
+    const runInitialSession = () => {
+      void supabase.auth.getSession().then(async ({ data: { session: initial } }) => {
+        const token = captureAndPersistProviderToken(initial);
+        setProviderToken(token);
+
+        let next = initial;
+        if (next?.access_token) {
+          const { error: userErr } = await supabase.auth.getUser();
+          if (userErr) {
+            const { data: ref } = await supabase.auth.refreshSession();
+            next = ref.session ?? next;
+            await supabase.auth.getUser();
+            const { data: again } = await supabase.auth.getSession();
+            next = again.session ?? next;
+          } else {
+            const { data: again } = await supabase.auth.getSession();
+            next = again.session ?? next;
+          }
         }
-      }
 
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      setLoading(false);
-    });
+        setSession(next);
+        setUser(next?.user ?? null);
+        if (next?.user && isEmailConfirmed(next.user)) {
+          void fetchProfile(next.user.id);
+        } else {
+          setProfile(null);
+        }
+        setLoading(false);
+      });
+    };
 
+    if (deferInitialSession) {
+      const id = window.setTimeout(runInitialSession, 220);
+      return () => {
+        window.clearTimeout(id);
+        subscription.unsubscribe();
+      };
+    }
+
+    runInitialSession();
     return () => subscription.unsubscribe();
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {
     const normalizedEmail = normalizeEmail(email);
-    const { error } = await supabase.auth.signUp({
+    logAuthAuditEvent('signup_requested', { domain: emailDomainOnly(normalizedEmail) });
+    const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
         data: { name },
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     });
     if (error) throw error;
+    logAuthAuditEvent('signup_completed', { ok: true });
+    if (data?.user && !isEmailConfirmed(data.user)) {
+      logAuthAuditEvent('email_confirmation_sent', { domain: emailDomainOnly(normalizedEmail) });
+    }
   };
 
   const signIn = async (email: string, password: string) => {
     const normalizedEmail = normalizeEmail(email);
     sessionStorage.removeItem('escalax_onboarding_dismissed');
-    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
-    if (error) throw error;
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+    if (error) {
+      logAuthAuditEvent('login_failed', { code: error.code ?? 'unknown' });
+      throw error;
+    }
+    const u = data.user;
+    if (u && !isEmailConfirmed(u)) {
+      await supabase.auth.signOut();
+      logAuthAuditEvent('blocked_unconfirmed_user', { domain: emailDomainOnly(u.email ?? undefined) });
+      throw new AuthFlowError(AUTH_FLOW_CODES.EMAIL_NOT_CONFIRMED);
+    }
+    logAuthAuditEvent('login_succeeded', { domain: emailDomainOnly(u?.email ?? undefined) });
+  };
+
+  const resendConfirmationEmail = async (email: string) => {
+    const normalizedEmail = normalizeEmail(email);
+    logAuthAuditEvent('resend_confirmation_requested', { domain: emailDomainOnly(normalizedEmail) });
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: normalizedEmail,
+      options: {
+        emailRedirectTo: getAuthCallbackUrl(),
+      },
+    });
+    if (error) {
+      logAuthAuditEvent('resend_confirmation_failed', { code: error.code ?? 'unknown' });
+      throw error;
+    }
+    logAuthAuditEvent('email_confirmation_sent', { domain: emailDomainOnly(normalizedEmail) });
   };
 
   const signOut = async () => {
+    logAuthAuditEvent('logout');
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     sessionStorage.removeItem('escalax_onboarding_dismissed');
 
@@ -236,7 +315,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, providerToken, signUp, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user,
+        profile,
+        loading,
+        providerToken,
+        emailConfirmed,
+        authAccessState,
+        signUp,
+        signIn,
+        signOut,
+        resendConfirmationEmail,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

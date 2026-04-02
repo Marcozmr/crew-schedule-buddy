@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthCallbackUrl } from '@/lib/auth/authRedirect';
+import { formatAuthErrorForUser } from '@/lib/auth/formatAuthError';
+import { emailDomainOnly, logAuthAuditEvent } from '@/lib/auth/authAudit';
+import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 
@@ -20,12 +24,18 @@ export default function ForgotPasswordPage() {
       toast.error('Digite seu email');
       return;
     }
+    if (!checkRateLimit('forgot-password', 5, 300_000)) {
+      toast.error(getRateLimitMessage());
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+    const normalized = email.trim().toLowerCase();
+    logAuthAuditEvent('password_reset_requested', { domain: emailDomainOnly(normalized) });
+    const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
+      redirectTo: getAuthCallbackUrl(),
     });
     if (error) {
-      toast.error(error.message || 'Erro ao enviar email');
+      toast.error(formatAuthErrorForUser(error));
     } else {
       setSent(true);
       toast.success('Email de recuperação enviado!');

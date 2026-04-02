@@ -74,7 +74,7 @@ export class AppErrorBoundary extends Component<Props, State> {
             {looksLikeStaleBuild && (
               <button
                 type="button"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
                 onClick={() => {
                   void performStaleAssetRecovery().then(() => window.location.reload());
                 }}

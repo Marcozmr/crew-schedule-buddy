@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import { PageSection, SurfacePanel } from "@/components/presentation/PremiumChrome";
 import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
 import { CorporateRosterFlowBanner } from "@/components/roster/CorporateRosterFlowBanner";
 import { Calendar } from "lucide-react";
@@ -11,10 +12,12 @@ import { Calendar } from "lucide-react";
 export default function MyRosterPage() {
   return (
     <AppLayout>
-      <div className="space-y-6 pb-8">
-        <div className="min-w-0 space-y-1">
-          <h1 className="text-xl font-semibold text-foreground lg:text-2xl">Minha escala</h1>
-          <p className="text-sm text-muted-foreground">
+      <PageSection className="pb-12">
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
+            Minha escala
+          </h1>
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
             Aqui você acompanha a escala importada, baixa o PDF e atualiza os dados. O resumo do seu dia
             operacional fica no{" "}
             <Link to="/dashboard" className="font-medium text-primary hover:underline">
@@ -24,20 +27,24 @@ export default function MyRosterPage() {
           </p>
         </div>
 
-        <CorporateRosterFlowBanner />
-        <RosterConnectionBanner />
+        <SurfacePanel className="space-y-5 p-5 md:p-7">
+          <CorporateRosterFlowBanner />
+          <RosterConnectionBanner />
+        </SurfacePanel>
 
         <Link
           to="/schedule"
-          className="flex items-center gap-3 rounded-xl border border-border/70 bg-card/50 px-4 py-3 text-sm text-foreground transition-colors hover:bg-muted/50"
+          className="glass-elevated flex items-center gap-4 rounded-[var(--radius-card,1.25rem)] px-5 py-4 text-sm text-foreground transition-colors hover:bg-muted/30"
         >
           <Calendar className="h-5 w-5 shrink-0 text-primary" />
           <span>
-            <span className="font-medium">Calendário da escala</span>
-            <span className="block text-xs text-muted-foreground">Visualização mensal e detalhes por dia</span>
+            <span className="font-semibold">Calendário da escala</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Visualização mensal e detalhes por dia
+            </span>
           </span>
         </Link>
-      </div>
+      </PageSection>
     </AppLayout>
   );
 }

@@ -861,15 +861,15 @@ export function FlightBoard({
   return (
     <div
       className={cn(
-        "w-full min-w-0 max-w-full overflow-x-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm",
-        "dark:border-border/40 dark:bg-card/60",
+        "w-full min-w-0 max-w-full overflow-x-hidden rounded-[var(--radius-card,1.25rem)] border border-slate-200/85 bg-card shadow-[0_6px_36px_rgba(15,23,42,0.09)] backdrop-blur-sm",
+        "dark:border-border/50 dark:bg-card/90 dark:shadow-xl",
         className
       )}
     >
-      <div className="w-full min-w-0 border-b border-border/60 bg-muted/30 px-4 py-3 sm:px-5">
+      <div className="w-full min-w-0 border-b border-slate-200/70 bg-slate-50/90 px-5 py-4 sm:px-6 dark:border-border/60 dark:bg-muted/30">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-foreground sm:text-xl">
               EscalaX Flight Board Pro
             </h2>
             {scheduleSourceLabel && (
@@ -894,7 +894,7 @@ export function FlightBoard({
         </div>
       </div>
 
-      <div className="w-full min-w-0 max-w-full overflow-x-hidden p-4 sm:p-5">
+      <div className="w-full min-w-0 max-w-full overflow-x-hidden p-5 sm:p-6 md:p-7">
         {renderBody()}
       </div>
     </div>
