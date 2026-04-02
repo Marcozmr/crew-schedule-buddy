@@ -13,7 +13,8 @@ import {
   type PasswordFieldErrors,
 } from "@/lib/auth/updatePasswordValidation";
 import { PasswordStrengthHints } from "@/components/auth/PasswordStrengthHints";
-import { logAuthAuditEvent } from "@/lib/auth/authAudit";
+import { emailDomainOnly, logAuthAuditEvent } from "@/lib/auth/authAudit";
+import { reportAuthFlowFailure } from "@/lib/monitoring/errorReporting";
 import { toast } from "sonner";
 import airplaneBg from "@/assets/airplane-bg.jpg";
 
@@ -51,9 +52,15 @@ export default function UpdatePasswordPage() {
       setLoading(false);
 
       if (error) {
+        reportAuthFlowFailure("update_password", error);
         toast.error(formatAuthErrorForUser(error));
         return;
       }
+
+      const { data: userData } = await supabase.auth.getUser();
+      logAuthAuditEvent("password_reset_completed", {
+        domain: emailDomainOnly(userData.user?.email ?? undefined),
+      });
 
       setSuccess(true);
       toast.success("Senha atualizada com sucesso.");

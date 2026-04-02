@@ -8,8 +8,11 @@ import {
 } from "@/lib/app-recovery/appRecoveryManager";
 import { runStorageMigrationOnBoot } from "@/lib/storageMigrationManager";
 import { getEscalaxBuildId } from "@/lib/build-id";
+import { initSentry } from "@/lib/monitoring/initSentry";
+import { reportUnexpectedError } from "@/lib/monitoring/errorReporting";
 import { logEnvValidationOnBoot } from "./lib/envCheck";
 
+initSentry();
 registerAppRecoveryHandlers();
 console.log("[EscalaX boot] build id:", getEscalaxBuildId());
 logEnvValidationOnBoot();
@@ -37,6 +40,7 @@ void (async () => {
       </AppErrorBoundary>,
     );
   } catch (e) {
+    reportUnexpectedError(e, { flow: "main_bootstrap" });
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[EscalaX boot] falha ao carregar módulos:", e);
     if (isRecoverableLoadFailureMessage(msg)) {

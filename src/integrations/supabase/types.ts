@@ -1035,12 +1035,50 @@ export type Database = {
         }
         Relationships: []
       }
+      auth_audit_events: {
+        Row: {
+          id: string
+          created_at: string
+          event_name: string
+          user_id: string | null
+          client_route: string | null
+          client_origin: string | null
+          metadata: Json
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          event_name: string
+          user_id?: string | null
+          client_route?: string | null
+          client_origin?: string | null
+          metadata?: Json
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          event_name?: string
+          user_id?: string | null
+          client_route?: string | null
+          client_origin?: string | null
+          metadata?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      log_auth_audit_event: {
+        Args: {
+          p_event_name: string
+          p_metadata?: Json
+          p_route?: string | null
+          p_origin?: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -7,6 +7,7 @@ import { importPdfFile, type PdfImportResult } from '@/lib/pdf-import';
 import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
 import { ROSTER_UX_MESSAGES } from '@/lib/roster/roster-ux-messages';
 import { toast } from 'sonner';
+import { reportUnexpectedError } from '@/lib/monitoring/errorReporting';
 
 interface PdfImportDialogProps {
   onImportComplete?: () => void;
@@ -32,7 +33,18 @@ export function PdfImportDialog({ onImportComplete, trigger }: PdfImportDialogPr
     if (!file || !user) return;
     setProcessing(true);
     setResult(null);
-    const res = await importPdfFile(file, user.id);
+    let res: PdfImportResult;
+    try {
+      res = await importPdfFile(file, user.id);
+    } catch (e) {
+      reportUnexpectedError(e, {
+        flow: 'roster_pdf_import',
+        extra: { file_name: file.name },
+      });
+      toast.error('Não foi possível processar o PDF.');
+      setProcessing(false);
+      return;
+    }
     setResult(res);
     setProcessing(false);
     if (res.duplicate) {

@@ -1,5 +1,6 @@
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
+import { reportReactBoundaryError } from "@/lib/monitoring/errorReporting";
 
 interface Props {
   children: ReactNode;
@@ -25,6 +26,11 @@ export class RouteErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     const label = this.props.scope ? `:${this.props.scope}` : "";
+    reportReactBoundaryError(error, {
+      boundary: "route",
+      scope: this.props.scope,
+      componentStack: info.componentStack ?? undefined,
+    });
     console.error(`[RouteErrorBoundary${label}]`, error, info.componentStack);
   }
 

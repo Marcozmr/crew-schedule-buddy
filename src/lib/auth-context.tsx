@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAuthCallbackUrl } from '@/lib/auth/authRedirect';
 import { deriveAuthAccessState, isEmailConfirmed, type AuthAccessState } from '@/lib/auth/authAccess';
 import { AuthFlowError, AUTH_FLOW_CODES } from '@/lib/auth/authErrors';
+import { assertAuthRateLimitAllowed } from '@/lib/auth/authRateLimitClient';
 import { emailDomainOnly, logAuthAuditEvent } from '@/lib/auth/authAudit';
 import { Session, User } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
@@ -238,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     const normalizedEmail = normalizeEmail(email);
+    await assertAuthRateLimitAllowed('signup', normalizedEmail);
     logAuthAuditEvent('signup_requested', { domain: emailDomainOnly(normalizedEmail) });
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -256,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const normalizedEmail = normalizeEmail(email);
+    await assertAuthRateLimitAllowed('login', normalizedEmail);
     sessionStorage.removeItem('escalax_onboarding_dismissed');
     const { data, error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
@@ -276,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resendConfirmationEmail = async (email: string) => {
     const normalizedEmail = normalizeEmail(email);
+    await assertAuthRateLimitAllowed('resend_confirmation', normalizedEmail);
     logAuthAuditEvent('resend_confirmation_requested', { domain: emailDomainOnly(normalizedEmail) });
     const { error } = await supabase.auth.resend({
       type: 'signup',
@@ -288,7 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logAuthAuditEvent('resend_confirmation_failed', { code: error.code ?? 'unknown' });
       throw error;
     }
-    logAuthAuditEvent('email_confirmation_sent', { domain: emailDomainOnly(normalizedEmail) });
+    logAuthAuditEvent('resend_confirmation_succeeded', { domain: emailDomainOnly(normalizedEmail) });
   };
 
   const signOut = async () => {

@@ -13,6 +13,7 @@ import {
   RESEND_CONFIRMATION_COOLDOWN_MS,
 } from "@/lib/auth/resendCooldown";
 import { checkRateLimit, getRateLimitMessage } from "@/lib/rate-limit";
+import { reportAuthFlowFailure } from "@/lib/monitoring/errorReporting";
 import { toast } from "sonner";
 import airplaneBg from "@/assets/airplane-bg.jpg";
 
@@ -63,6 +64,7 @@ export default function VerifyEmailPage() {
       setCooldownLeft(Math.ceil(RESEND_CONFIRMATION_COOLDOWN_MS / 1000));
       toast.success("Se existir uma conta pendente, enviámos um novo email de confirmação.");
     } catch (e: unknown) {
+      reportAuthFlowFailure('verify_email_resend', e);
       toast.error(formatAuthErrorForUser(e));
     } finally {
       setLoading(false);

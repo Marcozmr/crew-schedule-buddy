@@ -10,6 +10,7 @@ import { importPdfFile } from '@/lib/pdf-import';
 import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
 import { ROSTER_UX_MESSAGES } from '@/lib/roster/roster-ux-messages';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
+import { reportUnexpectedError } from '@/lib/monitoring/errorReporting';
 
 type LaunchQueueWindow = Window & {
   launchQueue?: {
@@ -60,7 +61,8 @@ export function LaunchQueueHandler() {
           } else if (res.error) {
             toast.error(res.error);
           }
-        } catch {
+        } catch (e) {
+          reportUnexpectedError(e, { flow: 'roster_pdf_launch_queue' });
           toast.error('Não foi possível abrir o arquivo.');
         }
       }

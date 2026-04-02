@@ -12,6 +12,7 @@ import { formatAuthErrorForUser } from "@/lib/auth/formatAuthError";
 import { setAuthFlash } from "@/lib/auth/authFlash";
 import { AUTH_UPDATE_PASSWORD_PATH } from "@/lib/auth/authRedirect";
 import { logAuthAuditEvent } from "@/lib/auth/authAudit";
+import { reportAuthFlowFailure, reportUnexpectedError } from "@/lib/monitoring/errorReporting";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -31,6 +32,7 @@ export default function AuthCallbackPage() {
     ran.current = true;
 
     void (async () => {
+      try {
       const href = window.location.href;
       const url = new URL(href);
       const parts = parseAuthUrlParts(url.hash, url.search);
@@ -53,6 +55,7 @@ export default function AuthCallbackPage() {
       const result = await establishSessionFromCurrentUrl(supabase, href);
       if (!result.ok) {
         logAuthAuditEvent("auth_callback_error", { phase: "establish_session" });
+        reportAuthFlowFailure("auth_callback_establish_session", result.error);
         if (import.meta.env.DEV) {
           console.warn("[AuthCallback] establishSession failed", result.error);
         }
@@ -106,6 +109,13 @@ export default function AuthCallbackPage() {
           const _exhaustive: never = decision;
           return _exhaustive;
         }
+      }
+      } catch (e: unknown) {
+        reportUnexpectedError(e, { flow: "auth_callback" });
+        setTitle("Erro");
+        setMessage("Não foi possível concluir a autenticação. Tente novamente.");
+        setHint(undefined);
+        setShowError(true);
       }
     })();
   }, [navigate]);

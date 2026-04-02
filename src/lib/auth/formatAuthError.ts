@@ -1,11 +1,16 @@
 import type { AuthError } from "@supabase/supabase-js";
 import { AuthFlowError, AUTH_FLOW_CODES } from "./authErrors";
+import { AuthRateLimitError } from "./authRateLimitError";
 
 /**
  * Mensagem segura em português para exibir ao utilizador (sem detalhes técnicos do Supabase).
  */
 export function formatAuthErrorForUser(err: unknown): string {
   if (!err) return "Ocorreu um erro inesperado. Tente novamente.";
+
+  if (AuthRateLimitError.is(err)) {
+    return err.message;
+  }
 
   if (AuthFlowError.is(err) && err.flowCode === AUTH_FLOW_CODES.EMAIL_NOT_CONFIRMED) {
     return "Confirme o seu email antes de entrar. Verifique a caixa de entrada ou a pasta de spam.";

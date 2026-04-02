@@ -18,6 +18,7 @@ import {
   isKnownOperationalTimezone,
   OPERATIONAL_TIMEZONE_OPTIONS,
 } from '@/lib/timezone-options';
+import { reportUnexpectedError } from '@/lib/monitoring/errorReporting';
 
 const SESSION_DISMISSED_KEY = 'escalax_onboarding_dismissed';
 
@@ -84,7 +85,9 @@ export function OnboardingModal({ open, onClose }: Props) {
     if (!user || !open) return;
     OnboardingService.getProgress(user.id)
       .then(({ step: savedStep }) => setStep(savedStep))
-      .catch(() => {});
+      .catch((e) => {
+        reportUnexpectedError(e, { flow: 'onboarding_get_progress' });
+      });
   }, [user?.id, open]);
 
   const totalSteps = ONBOARDING_STEPS.length;
@@ -92,29 +95,34 @@ export function OnboardingModal({ open, onClose }: Props) {
 
   const goNext = async () => {
     if (!user) return;
-    if (step === 1) {
-      await OnboardingService.saveProfile(user.id, profileForm);
-      await refreshProfile();
-    }
-    if (step === 2) {
-      await OnboardingService.savePreferences(user.id, prefsForm);
-    }
-    const nextStep = step + 1;
-    if (nextStep >= totalSteps) {
-      setCompleting(true);
-      await OnboardingService.completeOnboarding(user.id);
-      await NotificationService.create({
-        userId: user.id,
-        title: 'Bem-vindo ao EscalaX! ✈️',
-        message: 'Seu perfil está configurado. Importe sua escala para começar.',
-        type: 'info',
-      });
-      await refreshProfile();
+    try {
+      if (step === 1) {
+        await OnboardingService.saveProfile(user.id, profileForm);
+        await refreshProfile();
+      }
+      if (step === 2) {
+        await OnboardingService.savePreferences(user.id, prefsForm);
+      }
+      const nextStep = step + 1;
+      if (nextStep >= totalSteps) {
+        setCompleting(true);
+        await OnboardingService.completeOnboarding(user.id);
+        await NotificationService.create({
+          userId: user.id,
+          title: 'Bem-vindo ao EscalaX! ✈️',
+          message: 'Seu perfil está configurado. Importe sua escala para começar.',
+          type: 'info',
+        });
+        await refreshProfile();
+        setCompleting(false);
+        onClose();
+      } else {
+        await OnboardingService.saveStep(user.id, nextStep);
+        setStep(nextStep);
+      }
+    } catch (e) {
+      reportUnexpectedError(e, { flow: 'onboarding_step', extra: { step } });
       setCompleting(false);
-      onClose();
-    } else {
-      await OnboardingService.saveStep(user.id, nextStep);
-      setStep(nextStep);
     }
   };
 
@@ -123,10 +131,15 @@ export function OnboardingModal({ open, onClose }: Props) {
   const skipToEnd = async () => {
     if (!user) return;
     setCompleting(true);
-    await OnboardingService.completeOnboarding(user.id);
-    await refreshProfile();
-    setCompleting(false);
-    onClose();
+    try {
+      await OnboardingService.completeOnboarding(user.id);
+      await refreshProfile();
+      onClose();
+    } catch (e) {
+      reportUnexpectedError(e, { flow: 'onboarding_skip_to_end' });
+    } finally {
+      setCompleting(false);
+    }
   };
 
   return (

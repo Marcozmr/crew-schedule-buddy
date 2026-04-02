@@ -3,6 +3,7 @@ import {
   isRecoverableLoadFailureMessage,
   performStaleAssetRecovery,
 } from '@/lib/app-recovery/appRecoveryManager';
+import { reportReactBoundaryError } from '@/lib/monitoring/errorReporting';
 
 interface Props {
   children: ReactNode;
@@ -31,6 +32,10 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
     const err = error instanceof Error ? error : new Error(String(error));
+    reportReactBoundaryError(err, {
+      boundary: 'app',
+      componentStack: info.componentStack ?? undefined,
+    });
     console.error('[EscalaX] AppErrorBoundary — erro:', err);
     console.error('[EscalaX] AppErrorBoundary — componentStack:\n', info.componentStack);
     this.setState({

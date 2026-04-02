@@ -12,6 +12,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 const authMocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  getUser: vi.fn(),
   updateUser: vi.fn(),
 }));
 
@@ -24,6 +25,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: {
       getSession: authMocks.getSession,
+      getUser: authMocks.getUser,
       updateUser: authMocks.updateUser,
     },
   },
@@ -40,7 +42,11 @@ describe("UpdatePasswordPage", () => {
   beforeEach(() => {
     navigate.mockClear();
     authMocks.getSession.mockReset();
+    authMocks.getUser.mockReset();
     authMocks.updateUser.mockReset();
+    authMocks.getUser.mockResolvedValue({
+      data: { user: { email: "user@example.com" } },
+    });
     toastMocks.success.mockClear();
     toastMocks.error.mockClear();
   });

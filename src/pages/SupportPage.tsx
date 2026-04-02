@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { submitSupport } from '@/lib/services/support-service';
+import { reportSupportFlowResult, reportUnexpectedError } from '@/lib/monitoring/errorReporting';
 import { useAuth } from '@/lib/auth-context';
 import { motion } from 'framer-motion';
 
@@ -45,16 +46,26 @@ export default function SupportPage() {
     setStatus('idle');
     setFeedbackMsg('');
 
-    const result = await submitSupport({
-      name,
-      email,
-      message,
-      type: 'contact',
-      subject: 'Contato via suporte',
-      route: '/support',
-    });
+    let result: Awaited<ReturnType<typeof submitSupport>>;
+    try {
+      result = await submitSupport({
+        name,
+        email,
+        message,
+        type: 'contact',
+        subject: 'Contato via suporte',
+        route: '/support',
+      });
+    } catch (e) {
+      reportUnexpectedError(e, { flow: 'support_submit' });
+      setSending(false);
+      setStatus('error');
+      setFeedbackMsg('Não foi possível enviar. Tente novamente.');
+      return;
+    }
 
     setSending(false);
+    reportSupportFlowResult(result.outcome, result.userMessage);
 
     if (result.outcome === 'email_sent') {
       setStatus('success');

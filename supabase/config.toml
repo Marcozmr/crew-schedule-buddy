@@ -6,3 +6,7 @@ project_id = "fbryqzwykdhnmskfectg"
 # Validação JWT no handler (getUser) — evita 401 no gateway antes do worker e respostas opacas no cliente.
 [functions.send-support-email]
 verify_jwt = false
+
+# Login/signup não têm JWT de utilizador; validação apenas com anon key + rate limit no worker.
+[functions.auth-rate-limit]
+verify_jwt = false

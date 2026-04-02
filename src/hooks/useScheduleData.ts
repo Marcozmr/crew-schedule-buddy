@@ -5,6 +5,7 @@ import { emitRosterUpdated, subscribeRosterUpdated } from '@/lib/events/roster-e
 import type { DashboardScheduleSourceKind } from '@/lib/roster/dashboard-schedule-consolidation';
 import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
 import { applyHomeBaseFromRoster } from '@/lib/services/apply-home-base-from-roster';
+import { reportUnexpectedError } from '@/lib/monitoring/errorReporting';
 
 export interface DashboardRosterSourceState {
   rosterId: string | null;
@@ -136,6 +137,7 @@ export function useScheduleData() {
         });
       }
     } catch (e) {
+      reportUnexpectedError(e, { flow: 'schedule_load', extra: { scope: 'dashboard_flight_board' } });
       if (import.meta.env.DEV) {
         console.error('[useScheduleData] loadSchedule erro não tratado (dashboard pode ficar em loading):', e);
       }

@@ -10,6 +10,7 @@ import { formatAuthErrorForUser } from '@/lib/auth/formatAuthError';
 import { toast } from 'sonner';
 import airplaneBg from '@/assets/airplane-bg.jpg';
 import { checkRateLimit, getRateLimitMessage } from '@/lib/rate-limit';
+import { reportAuthFlowFailure } from '@/lib/monitoring/errorReporting';
 
 const AuthLoading = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -39,6 +40,7 @@ export default function LoginPage() {
       await signIn(email, password);
       toast.success('Login realizado!');
     } catch (err: unknown) {
+      reportAuthFlowFailure('login', err);
       toast.error(formatAuthErrorForUser(err));
     } finally {
       setLoading(false);

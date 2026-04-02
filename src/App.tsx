@@ -10,6 +10,7 @@ import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { LaunchQueueHandler } from "@/components/roster/LaunchQueueHandler";
 import { ThemeProvider } from "next-themes";
 import { UserThemeSync } from "@/components/UserThemeSync";
+import { SentryRuntimeContext } from "@/lib/monitoring/SentryRuntimeContext";
 
 // Eager-load auth pages (first paint)
 import LoginPage from "./pages/LoginPage";
@@ -298,6 +299,7 @@ export function AppAuthShell() {
     <>
       <BootTrace />
       <AuthProvider>
+        <SentryRuntimeContext />
         <UserThemeSync />
         <LaunchQueueHandler />
         <TooltipProvider>

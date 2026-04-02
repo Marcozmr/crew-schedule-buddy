@@ -8,12 +8,13 @@
     "build": "vite build",
     "deploy:flight-status": "npx supabase functions deploy flight-status --project-ref fbryqzwykdhnmskfectg",
     "deploy:send-support-email": "npx supabase functions deploy send-support-email --project-ref fbryqzwykdhnmskfectg",
-    "deploy:functions": "npm run deploy:flight-status && npm run deploy:send-support-email",
+    "deploy:auth-rate-limit": "npx supabase functions deploy auth-rate-limit --project-ref fbryqzwykdhnmskfectg",
+    "deploy:functions": "npm run deploy:flight-status && npm run deploy:send-support-email && npm run deploy:auth-rate-limit",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:auth": "vitest run src/lib/auth src/pages/AuthCallbackPage.test.tsx src/pages/UpdatePasswordPage.test.tsx src/App.auth-integration.test.tsx",
+    "test:auth": "vitest run src/lib/auth src/pages/AuthCallbackPage.test.tsx src/pages/UpdatePasswordPage.test.tsx src/pages/ForgotPasswordPage.test.tsx src/App.auth-integration.test.tsx",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "@radix-ui/react-toggle": "^1.1.9",
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
+    "@sentry/react": "^8.55.1",
     "@supabase/supabase-js": "^2.99.1",
     "@tanstack/react-query": "^5.83.0",
     "class-variance-authority": "^0.7.1",
