@@ -8,7 +8,11 @@ import type {
   FlightRaw,
 } from "./types";
 import type { EnrichmentFetchMeta } from "./flightProvider";
-import { resolveOperationalStatus } from "./operationalStatus";
+import {
+  resolveOperationalStatus,
+  OPERATIONAL_STATUS_LABEL_PT,
+  type OperationalStatusKey,
+} from "./operationalStatus";
 
 export interface PipelineLogPayload {
   scaleFlights: number;
@@ -61,18 +65,19 @@ export function computePipelineMetrics(args: {
   finalDep: FlightNormalized[];
   finalArr: FlightNormalized[];
   scaleCount: number;
-  boardMode: "my_schedule" | "airport_base";
+  boardMode: "my_schedule" | "airport_base" | "free_search";
   meta: EnrichmentFetchMeta;
 }): PipelineLogPayload {
   const finalFlights = args.finalDep.length + args.finalArr.length;
   const openSkyMatches = countOpenSkyMatches(args.raw);
   const airportEnriched = countAirportEnriched(args.raw);
+  const bm = args.boardMode ?? "my_schedule";
 
   let fallbackReason: EnrichmentFallbackReason = "NONE";
   if (args.meta.skipped || args.meta.reason !== "ok") {
     fallbackReason = "NO_ENRICHMENT";
   } else if (args.raw.length === 0) {
-    fallbackReason = args.boardMode === "airport_base" ? "AIRPORT_ONLY" : "SCALE_ONLY";
+    fallbackReason = bm === "airport_base" || bm === "free_search" ? "AIRPORT_ONLY" : "SCALE_ONLY";
   } else if (openSkyMatches === 0) {
     fallbackReason = "NO_MATCH";
   } else if (!args.raw.some((r) => r.tracking)) {
@@ -83,7 +88,7 @@ export function computePipelineMetrics(args: {
     scaleFlights: args.scaleCount,
     openSkyMatches,
     airportEnriched,
-    baseAirportFlights: args.boardMode === "airport_base" ? args.raw.length : 0,
+    baseAirportFlights: bm === "airport_base" || bm === "free_search" ? args.raw.length : 0,
     finalFlights,
     fallbackReason,
   };
@@ -96,7 +101,7 @@ export function finalizeNormalizedFlights(
   list: FlightNormalized[],
   rawById: Map<string, FlightRaw>,
   opts: {
-    boardMode: "my_schedule" | "airport_base";
+    boardMode: "my_schedule" | "airport_base" | "free_search";
     meta: EnrichmentFetchMeta;
   }
 ): FlightNormalized[] {
@@ -152,12 +157,16 @@ export function finalizeNormalizedFlights(
       airport: Boolean(
         raw?.airportInfo?.departure?.city || raw?.airportInfo?.arrival?.city
       ),
-      baseAirport: opts.boardMode === "airport_base",
+      baseAirport: opts.boardMode === "airport_base" || opts.boardMode === "free_search",
     };
+
+    const opLabel =
+      OPERATIONAL_STATUS_LABEL_PT[operationalStatus as OperationalStatusKey];
 
     return {
       ...f,
       operationalStatus,
+      statusLabel: opLabel ?? f.statusLabel,
       dataSources,
       openSkyMatch,
       enrichmentFallback,

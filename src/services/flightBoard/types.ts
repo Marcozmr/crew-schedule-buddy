@@ -183,8 +183,13 @@ export interface FlightFilters {
   /**
    * Minha escala: lista alinhada à escala local + merge com edge.
    * Aeroporto: lista montada a partir do payload da edge (mesmos voos da escala no servidor, prioriza status/aeroporto do servidor).
+   * Busca livre: Edge `flight-search` + OpenSky, sem depender da escala importada.
    */
-  boardMode: "my_schedule" | "airport_base";
+  boardMode: "my_schedule" | "airport_base" | "free_search";
+  /**
+   * Apenas em `free_search`: busca por aeroporto (janela OpenSky) ou por identificação do voo.
+   */
+  freeSearchMode?: "airport" | "flight";
 }
 
 export interface FlightBoardResult {

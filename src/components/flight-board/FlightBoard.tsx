@@ -43,6 +43,8 @@ import {
   logFlightBoardPipeline,
   logFlightBoardAirportMode,
 } from "@/services/flightBoard/flightBoardPipeline";
+import { invokeFlightSearch } from "@/services/flightSearch/flightSearchClient";
+import { mapFlightSearchItemToFlightRaw } from "@/services/flightSearch/mapFlightSearchToFlightRaw";
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
@@ -231,6 +233,7 @@ export function FlightBoard({
       date: initialDate,
       mode: "departures",
       boardMode: "my_schedule",
+      freeSearchMode: "airport",
     };
   });
 
@@ -285,6 +288,8 @@ export function FlightBoard({
   const [technicalError, setTechnicalError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [enrichmentWarning, setEnrichmentWarning] = useState<string | null>(null);
+  /** Mensagens amigáveis da busca livre (validação / quota / dicas) */
+  const [freeSearchBanner, setFreeSearchBanner] = useState<string | null>(null);
 
   const baseResolved = useMemo(
     () =>
@@ -301,6 +306,150 @@ export function FlightBoard({
     setFatalError(null);
     setTechnicalError(null);
     setEnrichmentWarning(null);
+    setFreeSearchBanner(null);
+
+    /** Busca livre: Edge `flight-search` + cache + rate limit (sem escala importada) */
+    if (filters.boardMode === "free_search") {
+      setLoading(true);
+      const fsMode = filters.freeSearchMode ?? "airport";
+
+      if (fsMode === "airport" && filters.airportCode === FLIGHT_BOARD_ALL_AIRPORTS) {
+        setDepartures([]);
+        setArrivals([]);
+        setLastUpdated(new Date().toISOString());
+        setLoading(false);
+        setFreeSearchBanner(
+          "Selecione um aeroporto específico para pesquisar voos fora da sua escala.",
+        );
+        return;
+      }
+
+      if (
+        fsMode === "flight" &&
+        (!filters.airlineCode?.trim() || !filters.flightNumber?.trim())
+      ) {
+        setDepartures([]);
+        setArrivals([]);
+        setLastUpdated(new Date().toISOString());
+        setLoading(false);
+        setFreeSearchBanner(
+          "Informe companhia e número do voo. O aeroporto é opcional, mas melhora bastante o resultado.",
+        );
+        return;
+      }
+
+      try {
+        const res = await invokeFlightSearch({
+          mode: fsMode === "airport" ? "airport" : "flight",
+          direction: filters.mode === "departures" ? "departure" : "arrival",
+          airport:
+            filters.airportCode !== FLIGHT_BOARD_ALL_AIRPORTS
+              ? filters.airportCode
+              : undefined,
+          date: filters.date,
+          airline: filters.airlineCode?.trim() || undefined,
+          flightNumber: filters.flightNumber?.trim() || undefined,
+        });
+
+        if (!res.ok) {
+          setDepartures([]);
+          setArrivals([]);
+          setLastUpdated(new Date().toISOString());
+          if (res.error === "rate_limited") {
+            setFatalError(
+              res.message ??
+                "Limite diário de buscas atingido. Tente novamente amanhã.",
+            );
+          } else if (res.error === "unauthorized") {
+            setFatalError("Inicie sessão para usar a busca livre.");
+          } else {
+            setFatalError(
+              "Não foi possível concluir a pesquisa. Verifique a ligação e tente novamente.",
+            );
+            if (import.meta.env.DEV && res.message) setTechnicalError(res.message);
+          }
+          setLoading(false);
+          return;
+        }
+
+        const raw = res.data.map(mapFlightSearchItemToFlightRaw);
+        const pivot =
+          filters.airportCode !== FLIGHT_BOARD_ALL_AIRPORTS
+            ? filters.airportCode
+            : raw.find((r) => r.origin && r.origin !== "—")?.origin ??
+              homeBase ??
+              "GRU";
+
+        const built = buildNormalizedListsFromEnrichmentRaw(raw, filters.date, pivot);
+        const rawById = new Map(raw.map((r) => [r.id, r]));
+        const metaOk: EnrichmentFetchMeta = { skipped: false, reason: "ok" };
+
+        let dep = finalizeNormalizedFlights(built.departures, rawById, {
+          boardMode: "free_search",
+          meta: metaOk,
+        });
+        let arr = finalizeNormalizedFlights(built.arrivals, rawById, {
+          boardMode: "free_search",
+          meta: metaOk,
+        });
+        dep = getDepartures(dep, {
+          airlineCode: filters.airlineCode || undefined,
+          flightNumber: filters.flightNumber || undefined,
+        });
+        arr = getArrivals(arr, {
+          airlineCode: filters.airlineCode || undefined,
+          flightNumber: filters.flightNumber || undefined,
+        });
+
+        logFlightBoardPipeline(
+          computePipelineMetrics({
+            raw,
+            finalDep: dep,
+            finalArr: arr,
+            scaleCount: 0,
+            boardMode: "free_search",
+            meta: metaOk,
+          }),
+        );
+
+        setDepartures(dep);
+        setArrivals(arr);
+        setLastUpdated(new Date().toISOString());
+
+        const parts: string[] = [];
+        if (res.cached) parts.push("Resultado em cache (rápido).");
+        if (res.quotaConsumed === false) parts.push("Cache: não consumiu quota diária.");
+        if (res.rate)
+          parts.push(
+            `Pesquisas hoje: ${res.rate.count}/${res.rate.limit} (restantes: ${res.rate.remaining}).`,
+          );
+        if (res.hint === "opensky_credentials_required") {
+          parts.push("Configure credenciais OpenSky na função (servidor).");
+        } else if (res.hint === "airport_recommended_for_ground") {
+          parts.push(
+            "Sem aeroporto, só aparecem voos com posição ao vivo. Indique um aeroporto para horários no solo.",
+          );
+        }
+        setEnrichmentWarning(parts.length ? parts.join(" ") : null);
+
+        if (raw.length === 0) {
+          setFreeSearchBanner(
+            "Não foi possível localizar dados ao vivo para este voo. Verifique os dados informados ou tente pesquisar por aeroporto.",
+          );
+        }
+      } catch (e) {
+        console.error("[FlightBoard] free_search", e);
+        setDepartures([]);
+        setArrivals([]);
+        setFatalError(
+          "Não foi possível carregar a busca livre. Tente novamente dentro de instantes.",
+        );
+        if (import.meta.env.DEV && e instanceof Error) setTechnicalError(e.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     /** Modo Aeroporto: não depende da escala importada — só edge + OpenSky por aeroporto */
     if (filters.boardMode === "airport_base") {
@@ -600,6 +749,8 @@ export function FlightBoard({
     filters.airlineCode,
     filters.flightNumber,
     filters.boardMode,
+    filters.freeSearchMode,
+    filters.mode,
     tzResolved,
     todayFromDashboard,
     enrichmentAirport,
@@ -656,9 +807,10 @@ export function FlightBoard({
   }, [list, now]);
 
   useEffect(() => {
+    if (filters.boardMode === "free_search") return;
     const interval = setInterval(() => void loadFlights(), monitorIntervalMs);
     return () => clearInterval(interval);
-  }, [loadFlights, monitorIntervalMs]);
+  }, [loadFlights, monitorIntervalMs, filters.boardMode]);
 
   useEffect(() => {
     const unsubscribe = subscribeRosterUpdated(() => {
@@ -700,8 +852,8 @@ export function FlightBoard({
       );
     }
 
-    /** Modo Aeroporto: UI não depende da escala importada */
-    if (filters.boardMode === "airport_base") {
+    /** Modo Aeroporto / Busca livre: UI não depende da escala importada */
+    if (filters.boardMode === "airport_base" || filters.boardMode === "free_search") {
       if (loading && list.length === 0) {
         return <FlightBoardSkeleton />;
       }
@@ -709,17 +861,29 @@ export function FlightBoard({
         return (
           <FlightBoardNeutral
             variant="airport_base_empty"
-            title="Nenhum voo neste aeroporto para esta data (modo Aeroporto)"
-            subtitle={
-              enrichmentWarning ??
-              "Confira credenciais OpenSky na edge, data (UTC) e filtros de companhia/número."
+            title={
+              filters.boardMode === "free_search"
+                ? "Nenhum resultado na busca livre"
+                : "Nenhum voo neste aeroporto para esta data (modo Aeroporto)"
             }
-            airportHint={airportContextHint}
+            subtitle={
+              freeSearchBanner ??
+              enrichmentWarning ??
+              (filters.boardMode === "free_search"
+                ? "Não foi possível localizar dados ao vivo para este voo. Verifique os dados informados ou tente pesquisar por aeroporto."
+                : "Confira credenciais OpenSky na edge, data (UTC) e filtros de companhia/número.")
+            }
+            airportHint={filters.boardMode === "free_search" ? undefined : airportContextHint}
           />
         );
       }
       return (
         <div className="w-full min-w-0 space-y-2 overflow-hidden pb-2">
+          {freeSearchBanner && filters.boardMode === "free_search" && (
+            <p className="max-w-full break-words rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-950 dark:text-amber-100">
+              {freeSearchBanner}
+            </p>
+          )}
           {enrichmentWarning && (
             <p className="max-w-full break-words rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               {enrichmentWarning}

@@ -1,0 +1,45 @@
+# Ping diário à Edge Function `keep-alive` (POST + header secreto).
+# Requer secrets no repositório: KEEP_ALIVE_URL, KEEP_ALIVE_SECRET
+#
+# Ativar: Settings → Secrets and variables → Actions → adicionar os dois secrets.
+# O corpo da resposta e o header secreto NÃO são impressos no log (apenas código HTTP e ok:true).
+
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # ~06:15 UTC diariamente (ajuste o horário se preferir)
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST keep-alive
+        env:
+          KEEP_ALIVE_SECRET: ${{ secrets.KEEP_ALIVE_SECRET }}
+          KEEP_ALIVE_URL: ${{ secrets.KEEP_ALIVE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEEP_ALIVE_SECRET:-}" ] || [ -z "${KEEP_ALIVE_URL:-}" ]; then
+            echo "::error::Defina KEEP_ALIVE_SECRET e KEEP_ALIVE_URL nos secrets do repositório."
+            exit 1
+          fi
+          out="$(mktemp)"
+          trap 'rm -f "$out"' EXIT
+          # Sem --fail: curl devolve 0 mesmo com HTTP 4xx/5xx; validamos %{http_code} e JSON.
+          code=$(curl -sS --max-time 45 -o "$out" -w "%{http_code}" -X POST "$KEEP_ALIVE_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-keep-alive-secret: $KEEP_ALIVE_SECRET" \
+            -d '{}') || { echo "::error::curl falhou (rede/timeout)"; exit 1; }
+          if [ "$code" != "200" ]; then
+            echo "::error::HTTP esperado 200, obtido ${code}"
+            exit 1
+          fi
+          if ! grep -q '"ok":true' "$out" || ! grep -q '"status":"ok"' "$out"; then
+            echo "::error::Resposta JSON inválida (esperado ok:true e status ok)"
+            exit 1
+          fi
+          echo "::notice::keep-alive OK (HTTP 200)"

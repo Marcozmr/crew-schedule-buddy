@@ -69,7 +69,7 @@ export function resolveOperationalStatus(input: OperationalStatusInput): Operati
 export const OPERATIONAL_STATUS_LABEL_PT: Record<OperationalStatusKey, string> = {
   scheduled: "Programado",
   enroute: "Em voo",
-  landed: "Aterrissou",
+  landed: "Pousado",
   delayed: "Atrasado",
   unknown: "Indefinido",
 };

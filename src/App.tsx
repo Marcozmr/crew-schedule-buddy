@@ -11,6 +11,7 @@ import { LaunchQueueHandler } from "@/components/roster/LaunchQueueHandler";
 import { ThemeProvider } from "next-themes";
 import { UserThemeSync } from "@/components/UserThemeSync";
 import { SentryRuntimeContext } from "@/lib/monitoring/SentryRuntimeContext";
+import { SystemHealthIndicator } from "@/components/SystemHealthIndicator";
 
 // Eager-load auth pages (first paint)
 import LoginPage from "./pages/LoginPage";
@@ -306,6 +307,7 @@ export function AppAuthShell() {
           <Sonner />
           <PWAUpdatePrompt />
           <div className="min-h-dvh w-full min-w-0 bg-background">
+            <SystemHealthIndicator />
             <AuthFlashToast />
             <AppRoutes />
           </div>

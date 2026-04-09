@@ -13,6 +13,8 @@ interface ImportMetaEnv {
   readonly VITE_AUTH_RATE_LIMIT_FAIL_OPEN?: string;
   /** Default: ligado — chama RPC `log_auth_audit_event` para persistir auditoria de auth. `false` desativa só a persistência (eventos continuam em DEV no console). */
   readonly VITE_AUTH_AUDIT_PERSIST_ENABLED?: string;
+  /** `true` mostra o indicador de system health (canto). Fora de DEV o default é oculto. */
+  readonly VITE_SYSTEM_HEALTH_INDICATOR?: string;
 }
 
 declare const __ESCALAX_BUILD_ID__: string;

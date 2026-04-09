@@ -10,3 +10,10 @@ verify_jwt = false
 # Login/signup não têm JWT de utilizador; validação apenas com anon key + rate limit no worker.
 [functions.auth-rate-limit]
 verify_jwt = false
+
+# Chamada com header secreto (sem JWT de utilizador).
+[functions.keep-alive]
+verify_jwt = false
+
+[functions.flight-search]
+verify_jwt = false

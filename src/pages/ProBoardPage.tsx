@@ -22,7 +22,9 @@ export default function ProBoardPage() {
       <PageSection className="space-y-6 pb-10">
         <div className="rounded-[var(--radius-card,1.25rem)] border border-slate-200/70 bg-slate-50/80 px-5 py-4 dark:border-border dark:bg-muted/25">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Consulta por aeroporto, filtros e dados ao vivo (OpenSky). Para o seu dia na escala, use o{" "}
+            Minha escala, aeroporto (dados da escala) ou{" "}
+            <span className="font-medium text-foreground">busca livre</span> (qualquer voo, OpenSky, com
+            cache e limite diário). Para o seu dia operacional, use o{" "}
             <span className="font-medium text-foreground">Dashboard</span>.
           </p>
         </div>

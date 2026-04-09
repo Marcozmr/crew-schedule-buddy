@@ -67,7 +67,9 @@ export function FlightFilters({
         <Select
           value={filters.boardMode ?? "my_schedule"}
           onValueChange={(v) =>
-            onChange({ boardMode: v as "my_schedule" | "airport_base" })
+            onChange({
+              boardMode: v as "my_schedule" | "airport_base" | "free_search",
+            })
           }
         >
           <SelectTrigger className="h-9 w-full min-w-0 sm:w-[220px] lg:w-[240px]">
@@ -75,7 +77,8 @@ export function FlightFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="my_schedule">Minha escala</SelectItem>
-            <SelectItem value="airport_base">Aeroporto</SelectItem>
+            <SelectItem value="airport_base">Aeroporto (escala)</SelectItem>
+            <SelectItem value="free_search">Busca livre</SelectItem>
           </SelectContent>
         </Select>
 
@@ -102,6 +105,27 @@ export function FlightFilters({
           </Button>
         </div>
       </div>
+
+      {(filters.boardMode ?? "my_schedule") === "free_search" && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Tipo de busca
+          </span>
+          <Tabs
+            value={filters.freeSearchMode ?? "airport"}
+            onValueChange={(v) => onChange({ freeSearchMode: v as "airport" | "flight" })}
+          >
+            <TabsList className="h-9 w-full min-w-0 sm:w-auto">
+              <TabsTrigger value="airport" className="flex-1 text-xs sm:flex-initial sm:text-sm">
+                Por aeroporto
+              </TabsTrigger>
+              <TabsTrigger value="flight" className="flex-1 text-xs sm:flex-initial sm:text-sm">
+                Por voo
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {homeBase && (
         <p className="text-[11px] leading-snug text-muted-foreground">
