@@ -297,6 +297,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     logAuthAuditEvent('logout');
+    const uid = user?.id;
+    if (uid) {
+      sessionStorage.removeItem(`escalax_latam_app_last_sync_ms_${uid}`);
+      sessionStorage.removeItem(`escalax_latam_app_initial_connect_${uid}`);
+    }
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     sessionStorage.removeItem('escalax_onboarding_dismissed');
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   runSystemHealthChecks,
   showSystemHealthIndicator,
@@ -6,6 +7,29 @@ import {
 } from "@/lib/health/healthCheckService";
 
 const POLL_MS = 120_000;
+
+/** Rotas públicas de autenticação — não exibir badge de diagnóstico. */
+const PUBLIC_AUTH_PATHS = new Set([
+  "/",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/callback",
+  "/auth/update-password",
+  "/verify-email",
+]);
+
+function normalizePathname(pathname: string): string {
+  const p = pathname.trim();
+  if (!p) return "/";
+  const noTrail = p.replace(/\/+$/, "");
+  return noTrail === "" ? "/" : noTrail;
+}
+
+function isPublicAuthPath(pathname: string): boolean {
+  return PUBLIC_AUTH_PATHS.has(normalizePathname(pathname));
+}
 
 function statusLabel(overall: SystemHealthReport["overall"]): string {
   if (overall === "healthy") return "OK";
@@ -21,9 +45,11 @@ function statusClass(overall: SystemHealthReport["overall"]): string {
 
 /**
  * Indicador opcional (só DEV ou `VITE_SYSTEM_HEALTH_INDICATOR=true`).
- * Corre probes em background — não bloqueia a UI.
+ * Em rotas públicas de login/registo não renderiza.
+ * Quando todos os checks estão saudáveis, não ocupa espaço na UI (sem ruído visual).
  */
 export function SystemHealthIndicator() {
+  const location = useLocation();
   const [report, setReport] = useState<SystemHealthReport | null>(null);
 
   useEffect(() => {
@@ -50,7 +76,11 @@ export function SystemHealthIndicator() {
     };
   }, []);
 
-  if (!showSystemHealthIndicator() || !report) return null;
+  if (!showSystemHealthIndicator()) return null;
+  /** Rotas de login/registo: nunca mostrar o badge (independente de estado do relatório). */
+  if (isPublicAuthPath(location.pathname)) return null;
+  if (!report) return null;
+  if (report.overall === "healthy") return null;
 
   const title = report.checks
     .map((c) => `${c.id}: ${c.status}${c.detail ? ` (${c.detail})` : ""}`)

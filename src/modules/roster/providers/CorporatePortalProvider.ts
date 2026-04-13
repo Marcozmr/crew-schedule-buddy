@@ -1,7 +1,7 @@
 /**
- * CorporatePortalProvider — portal corporativo LATAM como ponto de autenticação.
+ * CorporatePortalProvider — portal corporativo LATAM como ponto de autenticação no browser.
  * Abre o portal em popup; retorno via callback EscalaX ou confirmação manual.
- * NÃO implementa scraping, automação de login, engenharia reversa ou APIs privadas.
+ * NÃO implementa scraping nem sessão Playwright (isso fica no serviço Node `services/roster-automation`).
  */
 
 import { corporatePortalConfig, getResolvedLoginUrl, isLoginUrlConfigured, isTestMode } from '@/lib/corporate-portal-config';

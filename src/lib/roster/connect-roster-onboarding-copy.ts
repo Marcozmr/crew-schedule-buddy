@@ -27,3 +27,24 @@ export const CONNECT_ROSTER_ONBOARDING = {
   successTitle: 'Escala conectada com sucesso.',
   successDescription: 'Redirecionando para o painel principal.',
 } as const;
+
+/** Quando o serviço de automação (Playwright) está configurado — fluxo ponta a ponta no servidor. */
+export const CONNECT_ROSTER_AUTOMATION = {
+  intro:
+    'Autentique uma vez no portal corporativo na janela segura do servidor. Em seguida o EscalaX acede ao SAB, ao iFlight e importa o CrewRosterReport automaticamente — sem baixar PDF manualmente como passo principal.',
+  steps: [
+    'Conectar ao portal (sessão segura no servidor)',
+    'Portal SAB e iFlight abertos pela automação',
+    'CrewRosterReport localizado e importado',
+    'Escala ativa e sincronizada no EscalaX',
+  ],
+  hintStep1: 'Toque em “Conectar portal corporativo” na área de estado abaixo (ou aguarde se já houver sessão).',
+  hintStep2: 'A automação navega até à sua escala oficial.',
+  hintStep3: 'O PDF é obtido e aplicado ao seu perfil sem precisar de upload manual.',
+  hintStep4: 'Nas próximas vezes, a sincronização pode repetir-se sozinha enquanto a sessão for válida.',
+  waitingMessage: 'A sincronização oficial está em curso no servidor.',
+  waitingPulse: 'A processar…',
+  readyToImport: 'A importação manual de PDF fica disponível só como contingência, abaixo.',
+  automationNote:
+    'O fluxo principal é 100% automático após o login. O portal no seu browser (se abrir) serve apenas para consulta — não é necessário para importar a escala.',
+} as const;

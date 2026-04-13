@@ -65,7 +65,7 @@ export function computePipelineMetrics(args: {
   finalDep: FlightNormalized[];
   finalArr: FlightNormalized[];
   scaleCount: number;
-  boardMode: "my_schedule" | "airport_base" | "free_search";
+  boardMode: "my_schedule" | "free_search";
   meta: EnrichmentFetchMeta;
 }): PipelineLogPayload {
   const finalFlights = args.finalDep.length + args.finalArr.length;
@@ -77,7 +77,7 @@ export function computePipelineMetrics(args: {
   if (args.meta.skipped || args.meta.reason !== "ok") {
     fallbackReason = "NO_ENRICHMENT";
   } else if (args.raw.length === 0) {
-    fallbackReason = bm === "airport_base" || bm === "free_search" ? "AIRPORT_ONLY" : "SCALE_ONLY";
+    fallbackReason = bm === "free_search" ? "AIRPORT_ONLY" : "SCALE_ONLY";
   } else if (openSkyMatches === 0) {
     fallbackReason = "NO_MATCH";
   } else if (!args.raw.some((r) => r.tracking)) {
@@ -88,7 +88,7 @@ export function computePipelineMetrics(args: {
     scaleFlights: args.scaleCount,
     openSkyMatches,
     airportEnriched,
-    baseAirportFlights: bm === "airport_base" || bm === "free_search" ? args.raw.length : 0,
+    baseAirportFlights: bm === "free_search" ? args.raw.length : 0,
     finalFlights,
     fallbackReason,
   };
@@ -101,7 +101,7 @@ export function finalizeNormalizedFlights(
   list: FlightNormalized[],
   rawById: Map<string, FlightRaw>,
   opts: {
-    boardMode: "my_schedule" | "airport_base" | "free_search";
+    boardMode: "my_schedule" | "free_search";
     meta: EnrichmentFetchMeta;
   }
 ): FlightNormalized[] {
@@ -132,7 +132,7 @@ export function finalizeNormalizedFlights(
       enrichmentFallbackLabel = "Servidor de enriquecimento não retornou dados válidos.";
     } else if (!hasLive && raw) {
       enrichmentFallback = "NO_MATCH";
-      enrichmentFallbackLabel = "OpenSky sem posição ao vivo para este voo.";
+      enrichmentFallbackLabel = "Sem posição ao vivo para este voo.";
     }
 
     const depMs = raw?.departure?.scheduledISO
@@ -157,7 +157,7 @@ export function finalizeNormalizedFlights(
       airport: Boolean(
         raw?.airportInfo?.departure?.city || raw?.airportInfo?.arrival?.city
       ),
-      baseAirport: opts.boardMode === "airport_base" || opts.boardMode === "free_search",
+      baseAirport: opts.boardMode === "free_search",
     };
 
     const opLabel =

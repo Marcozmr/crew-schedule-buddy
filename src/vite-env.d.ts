@@ -15,6 +15,8 @@ interface ImportMetaEnv {
   readonly VITE_AUTH_AUDIT_PERSIST_ENABLED?: string;
   /** `true` mostra o indicador de system health (canto). Fora de DEV o default é oculto. */
   readonly VITE_SYSTEM_HEALTH_INDICATOR?: string;
+  /** URL base do serviço Node Playwright (`services/roster-automation`), ex. http://127.0.0.1:8790 */
+  readonly VITE_ROSTER_AUTOMATION_URL?: string;
 }
 
 declare const __ESCALAX_BUILD_ID__: string;

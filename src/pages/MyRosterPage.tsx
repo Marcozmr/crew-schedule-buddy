@@ -3,6 +3,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { PageSection, SurfacePanel } from "@/components/presentation/PremiumChrome";
 import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
 import { CorporateRosterFlowBanner } from "@/components/roster/CorporateRosterFlowBanner";
+import { RosterSourcesCard } from "@/components/roster/RosterSourcesCard";
 import { Calendar } from "lucide-react";
 
 /**
@@ -30,6 +31,7 @@ export default function MyRosterPage() {
         <SurfacePanel className="space-y-5 p-5 md:p-7">
           <CorporateRosterFlowBanner />
           <RosterConnectionBanner />
+          <RosterSourcesCard />
         </SurfacePanel>
 
         <Link

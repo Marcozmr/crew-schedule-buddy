@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Circle,
+  ChevronRight,
   ExternalLink,
   Loader2,
   Upload,
@@ -12,14 +13,16 @@ import {
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
+import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 import { useAuth } from '@/lib/auth-context';
 import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { RosterSyncService } from '@/modules/roster/services/RosterSyncService';
 import { UserRosterConnectionService, type RosterConnectionState } from '@/modules/roster/services/UserRosterConnectionService';
 import { corporatePortalConfig, isLoginUrlConfigured } from '@/lib/corporate-portal-config';
 import { emitRosterUpdated, subscribeRosterUpdated } from '@/lib/events/roster-events';
+import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
 import { toast } from 'sonner';
-import { CONNECT_ROSTER_ONBOARDING } from '@/lib/roster/connect-roster-onboarding-copy';
+import { CONNECT_ROSTER_AUTOMATION, CONNECT_ROSTER_ONBOARDING } from '@/lib/roster/connect-roster-onboarding-copy';
 
 function stepCompletion(rs: RosterConnectionState | undefined, portalConnected: boolean) {
   const s4 = rs === 'roster_connected';
@@ -125,7 +128,9 @@ export default function ConnectRosterPage() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const steps = CONNECT_ROSTER_ONBOARDING.steps;
+  const useAutomationCopy = isRosterAutomationConfigured();
+  const copy = useAutomationCopy ? CONNECT_ROSTER_AUTOMATION : CONNECT_ROSTER_ONBOARDING;
+  const steps = copy.steps;
 
   return (
     <div className="min-h-screen bg-background">
@@ -145,68 +150,85 @@ export default function ConnectRosterPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-1">
             <Sparkles className="w-7 h-7" />
           </div>
-          <p className="text-sm text-muted-foreground leading-relaxed px-1">{CONNECT_ROSTER_ONBOARDING.intro}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed px-1">{copy.intro}</p>
         </motion.div>
 
-        <div className="space-y-3">
-          {steps.map((label, i) => {
-            const completed =
-              i === 0 ? done.step1 : i === 1 ? done.step2 : i === 2 ? done.step3 : done.step4;
-            const active = currentIdx === i && !completed;
+        {useAutomationCopy && 'automationNote' in copy && (
+          <div className="rounded-2xl border border-border/80 bg-muted/30 p-3 text-left">
+            <p className="text-xs text-muted-foreground leading-relaxed">{copy.automationNote}</p>
+          </div>
+        )}
 
-            return (
-              <motion.div
-                key={label}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className={`rounded-2xl border p-4 flex gap-3 items-start transition-colors ${
-                  completed
-                    ? 'border-success/35 bg-success/[0.06]'
-                    : active
-                      ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-primary/15'
-                      : 'border-border bg-card/50'
-                }`}
-              >
-                <div className="shrink-0 mt-0.5">
-                  {completed ? (
-                    <CheckCircle2 className="w-6 h-6 text-success" />
-                  ) : active ? (
-                    <div className="w-6 h-6 rounded-full border-2 border-primary flex items-center justify-center text-xs font-bold text-primary">
-                      {i + 1}
-                    </div>
-                  ) : (
-                    <Circle className="w-6 h-6 text-muted-foreground/50" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-sm font-medium ${
-                      completed ? 'text-foreground' : active ? 'text-foreground' : 'text-muted-foreground'
-                    }`}
-                  >
-                    <span className="text-muted-foreground font-normal mr-1.5">{i + 1}.</span>
-                    {label}
-                  </p>
-                  {active && i === 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">{CONNECT_ROSTER_ONBOARDING.hintStep1}</p>
-                  )}
-                  {active && i === 1 && (
-                    <p className="text-xs text-muted-foreground mt-1">{CONNECT_ROSTER_ONBOARDING.hintStep2}</p>
-                  )}
-                  {active && i === 2 && (
-                    <p className="text-xs text-muted-foreground mt-1">{CONNECT_ROSTER_ONBOARDING.hintStep3}</p>
-                  )}
-                  {active && i === 3 && (
-                    <p className="text-xs text-muted-foreground mt-1">{CONNECT_ROSTER_ONBOARDING.hintStep4}</p>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+        {useAutomationCopy && (
+          <AutomationStatusCard
+            active
+            onRosterActivated={() => {
+              void refresh();
+              navigate('/dashboard', { replace: true });
+            }}
+          />
+        )}
 
-        {showWaitingPortal && (
+        {!useAutomationCopy ? (
+          <div className="space-y-3">
+            {steps.map((label, i) => {
+              const completed =
+                i === 0 ? done.step1 : i === 1 ? done.step2 : i === 2 ? done.step3 : done.step4;
+              const active = currentIdx === i && !completed;
+
+              return (
+                <motion.div
+                  key={label}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className={`rounded-2xl border p-4 flex gap-3 items-start transition-colors ${
+                    completed
+                      ? 'border-success/35 bg-success/[0.06]'
+                      : active
+                        ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-primary/15'
+                        : 'border-border bg-card/50'
+                  }`}
+                >
+                  <div className="shrink-0 mt-0.5">
+                    {completed ? (
+                      <CheckCircle2 className="w-6 h-6 text-success" />
+                    ) : active ? (
+                      <div className="w-6 h-6 rounded-full border-2 border-primary flex items-center justify-center text-xs font-bold text-primary">
+                        {i + 1}
+                      </div>
+                    ) : (
+                      <Circle className="w-6 h-6 text-muted-foreground/50" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`text-sm font-medium ${
+                        completed ? 'text-foreground' : active ? 'text-foreground' : 'text-muted-foreground'
+                      }`}
+                    >
+                      <span className="text-muted-foreground font-normal mr-1.5">{i + 1}.</span>
+                      {label}
+                    </p>
+                    {active && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {i === 0
+                          ? CONNECT_ROSTER_ONBOARDING.hintStep1
+                          : i === 1
+                            ? CONNECT_ROSTER_ONBOARDING.hintStep2
+                            : i === 2
+                              ? CONNECT_ROSTER_ONBOARDING.hintStep3
+                              : CONNECT_ROSTER_ONBOARDING.hintStep4}
+                      </p>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {showWaitingPortal && !useAutomationCopy && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -220,7 +242,7 @@ export default function ConnectRosterPage() {
           </motion.div>
         )}
 
-        {rs === 'iflight_accessed' && !done.step4 && (
+        {rs === 'iflight_accessed' && !done.step4 && !useAutomationCopy && (
           <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
             <p className="text-sm text-foreground">{CONNECT_ROSTER_ONBOARDING.readyToImport}</p>
           </div>
@@ -229,7 +251,7 @@ export default function ConnectRosterPage() {
         <div className="rounded-2xl border border-border bg-card/80 p-4 space-y-3 shadow-sm">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{CONNECT_ROSTER_ONBOARDING.actionsTitle}</p>
           <div className="flex flex-col gap-2">
-            {corporatePortalConfig.isEnabled && isLoginUrlConfigured() && (
+            {!useAutomationCopy && corporatePortalConfig.isEnabled && isLoginUrlConfigured() && (
               <Button
                 type="button"
                 className="w-full justify-center gap-2"
@@ -240,6 +262,7 @@ export default function ConnectRosterPage() {
                 {CONNECT_ROSTER_ONBOARDING.openPortal}
               </Button>
             )}
+            {!useAutomationCopy && (
             <Button
               type="button"
               variant="secondary"
@@ -249,6 +272,8 @@ export default function ConnectRosterPage() {
             >
               {CONNECT_ROSTER_ONBOARDING.openedIFlight}
             </Button>
+            )}
+            {!useAutomationCopy && (
             <PdfImportDialog
               onImportComplete={() => void handleImportComplete()}
               trigger={
@@ -258,6 +283,27 @@ export default function ConnectRosterPage() {
                 </Button>
               }
             />
+            )}
+            {useAutomationCopy && (
+              <details className="group rounded-xl border border-border/60 bg-muted/15 open:bg-muted/25 transition-colors">
+                <summary className="cursor-pointer list-none px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden select-none">
+                  <span>Importação manual (contingência)</span>
+                  <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90" />
+                </summary>
+                <div className="px-3 pb-3 pt-0 border-t border-border/50 space-y-2">
+                  <p className="text-xs text-muted-foreground pt-2">{CONNECT_ROSTER_AUTOMATION.readyToImport}</p>
+                  <PdfImportDialog
+                    onImportComplete={() => void handleImportComplete()}
+                    trigger={
+                      <Button type="button" variant="secondary" className="w-full gap-2">
+                        <Upload className="w-4 h-4" />
+                        Importar PDF da escala
+                      </Button>
+                    }
+                  />
+                </div>
+              </details>
+            )}
             <Button type="button" variant="ghost" className="w-full text-muted-foreground" asChild>
               <Link to="/dashboard">{CONNECT_ROSTER_ONBOARDING.backDashboard}</Link>
             </Button>

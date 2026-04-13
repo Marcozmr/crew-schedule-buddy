@@ -31,6 +31,8 @@ import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
+import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
+import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 
 interface RosterSourcesCardProps {
   onImportComplete?: () => void;
@@ -200,6 +202,16 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const showAwaitingIFlightGuidance = showRosterFlowPanel && flowState !== 'iflight_accessed';
   const showImportAfterIFlight = showRosterFlowPanel && flowState === 'iflight_accessed';
 
+  /**
+   * Automação Playwright como fluxo principal: não exige portal “conectado” no WebView —
+   * o login ocorre na janela do worker. Abrange todo o painel corporativo sem escala ativa.
+   */
+  const automationAsPrimary =
+    isRosterAutomationConfigured() &&
+    corporatePortalConfig.isEnabled &&
+    !activeRosterMeta &&
+    flowState !== 'roster_connected';
+
   const iflightBlocked = !portalIsConnected;
   const iflightBadge = !corporatePortalConfig.iflightEnabled
     ? 'Indisponível'
@@ -225,8 +237,9 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 <p className="font-medium text-foreground break-words">Portal corporativo LATAM</p>
                 {isLoginUrlConfigured() ? (
                   <p className="text-xs text-muted-foreground break-words">
-                    Toque em Conectar para abrir o portal. Depois volte ao EscalaX e siga os passos indicados — SAB,
-                    iFlight e importação do CrewRosterReport (o app não fecha o portal automaticamente).
+                    {automationAsPrimary
+                      ? 'A sincronização oficial corre no servidor (login seguro na janela do automatizador). Opcionalmente pode abrir o portal aqui só para consulta — não é necessário para importar a escala.'
+                      : 'Toque em Conectar para abrir o portal. Depois volte ao EscalaX e siga os passos indicados — SAB, iFlight e importação do CrewRosterReport (o app não fecha o portal automaticamente).'}
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground break-words">{corporateSource.description}</p>
@@ -277,7 +290,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
               )}
             </div>
           </div>
-          {portalIsConfigured && !portalIsConnected && (
+          {portalIsConfigured && !portalIsConnected && !isRosterAutomationConfigured() && (
             <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border/60">
               <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleManualPortalConfirm}>
                 Concluí o login no portal
@@ -290,7 +303,17 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             </div>
           )}
 
-          {showAwaitingIFlightGuidance && (
+          {automationAsPrimary && (
+            <AutomationStatusCard
+              active
+              onRosterActivated={() => {
+                void refreshConnection();
+                void loadLastSync();
+              }}
+            />
+          )}
+
+          {showAwaitingIFlightGuidance && !automationAsPrimary && (
             <div className="mt-1 pt-3 border-t border-primary/20 space-y-3 rounded-xl bg-primary/5 p-4 border border-primary/15">
               <p className="text-sm text-foreground font-semibold break-words">{CORPORATE_ROSTER_FLOW.awaitingTitle}</p>
               <p className="text-xs text-muted-foreground leading-relaxed">{CORPORATE_ROSTER_FLOW.awaitingLead}</p>
@@ -327,7 +350,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             </div>
           )}
 
-          {showImportAfterIFlight && (
+          {showImportAfterIFlight && !automationAsPrimary && (
             <div className="mt-1 pt-3 border-t border-primary/30 space-y-3 rounded-xl bg-primary/[0.07] p-4 border border-primary/20">
               <p className="text-sm text-foreground font-semibold break-words">{CORPORATE_ROSTER_FLOW.importPrimaryTitle}</p>
               <p className="text-xs text-muted-foreground leading-relaxed">{CORPORATE_ROSTER_FLOW.importPrimaryLead}</p>
@@ -369,7 +392,19 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         </div>
       )}
 
-      {iflightSource && corporatePortalConfig.iflightEnabled && (
+      {iflightSource && corporatePortalConfig.iflightEnabled && automationAsPrimary && (
+        <div className="flex flex-col gap-2 p-4 rounded-xl border border-border/60 bg-muted/20 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Plane className="w-4 h-4 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              iFlight Crew System: o fluxo principal usa o servidor para abrir o ambiente autorizado. Este módulo continua
+              disponível para referência quando necessário.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {iflightSource && corporatePortalConfig.iflightEnabled && !automationAsPrimary && (
         <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-muted/30 min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
@@ -414,7 +449,9 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             <p className="text-sm text-muted-foreground break-words mt-0.5">
               {dailyMode
                 ? 'Sua escala já está no EscalaX. Para uma nova versão, importe o CrewRosterReport. Portal e iFlight ficam abaixo apenas para reconfiguração.'
-                : 'Escolha como deseja importar sua escala. O módulo iFlight depende do portal LATAM.'}
+                : automationAsPrimary
+                  ? 'A escala oficial é sincronizada automaticamente pelo servidor após a autenticação. Importação manual só como contingência.'
+                  : 'Escolha como deseja importar sua escala. O módulo iFlight depende do portal LATAM.'}
             </p>
           </div>
         </div>
@@ -440,7 +477,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       </div>
 
       <div className="space-y-3 min-w-0">
-        {pdfSource && pdfSource.available && (
+        {pdfSource && pdfSource.available && !automationAsPrimary && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl border border-border bg-background/60 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -463,7 +500,47 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
           </div>
         )}
 
-        {user && (
+        {pdfSource && pdfSource.available && automationAsPrimary && (
+          <details className="group rounded-xl border border-border/60 bg-muted/15 open:bg-muted/25 transition-colors">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden select-none">
+              <span>Importar manualmente (contingência)</span>
+              <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90 text-muted-foreground" />
+            </summary>
+            <div className="px-4 pb-4 pt-0 space-y-4 border-t border-border/50">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground break-words">{pdfSource.displayName}</p>
+                    <p className="text-xs text-muted-foreground break-words">{pdfSource.description}</p>
+                  </div>
+                </div>
+                <PdfImportDialog
+                  onImportComplete={handleImportComplete}
+                  trigger={
+                    <Button variant="secondary" className="w-full sm:w-auto shrink-0">
+                      <Upload className="w-4 h-4 mr-2" />
+                      Importar PDF da escala
+                    </Button>
+                  }
+                />
+              </div>
+              {user && (
+                <div className="p-3 rounded-lg border border-border/60 bg-background/50 min-w-0 space-y-2">
+                  <p className="text-sm font-medium text-foreground">Reprocessar último PDF autorizado</p>
+                  <p className="text-xs text-muted-foreground">
+                    Reprocessa o último PDF oficial já guardado (mesmo arquivo = sem alteração).
+                  </p>
+                  <CrewRosterQuickImportControls onImportDone={handleImportComplete} showRecentList />
+                </div>
+              )}
+            </div>
+          </details>
+        )}
+
+        {user && !automationAsPrimary && (
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 min-w-0 space-y-2">
             <p className="text-sm font-medium text-foreground">CrewRosterReport rápido</p>
             <p className="text-xs text-muted-foreground">

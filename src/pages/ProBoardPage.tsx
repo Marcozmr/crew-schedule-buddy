@@ -7,10 +7,6 @@ import { useOperationalPreferences } from "@/hooks/useOperationalPreferences";
 import { useOperationalClock } from "@/hooks/useOperationalClock";
 import { resolveSafeIANATimezone } from "@/lib/date-utils";
 
-/**
- * EscalaX Pro Board — consulta por aeroporto, modos de painel, voos ao vivo e enriquecimento.
- * Separado do Dashboard, que foca apenas na escala pessoal do dia.
- */
 export default function ProBoardPage() {
   const { schedule, loading, reload, dashboardRosterSource } = useScheduleData();
   const { timezone } = useOperationalPreferences();
@@ -19,16 +15,7 @@ export default function ProBoardPage() {
 
   return (
     <AppLayout>
-      <PageSection className="space-y-6 pb-10">
-        <div className="rounded-[var(--radius-card,1.25rem)] border border-slate-200/70 bg-slate-50/80 px-5 py-4 dark:border-border dark:bg-muted/25">
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Minha escala, aeroporto (dados da escala) ou{" "}
-            <span className="font-medium text-foreground">busca livre</span> (qualquer voo, OpenSky, com
-            cache e limite diário). Para o seu dia operacional, use o{" "}
-            <span className="font-medium text-foreground">Dashboard</span>.
-          </p>
-        </div>
-
+      <PageSection className="pb-10">
         <FlightBoard
           schedule={schedule}
           scheduleLoading={loading}

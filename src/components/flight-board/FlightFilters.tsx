@@ -68,16 +68,15 @@ export function FlightFilters({
           value={filters.boardMode ?? "my_schedule"}
           onValueChange={(v) =>
             onChange({
-              boardMode: v as "my_schedule" | "airport_base" | "free_search",
+              boardMode: v as "my_schedule" | "free_search",
             })
           }
         >
-          <SelectTrigger className="h-9 w-full min-w-0 sm:w-[220px] lg:w-[240px]">
+          <SelectTrigger className="h-9 w-full min-w-0 sm:w-[200px] lg:w-[220px]">
             <SelectValue placeholder="Modo" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="my_schedule">Minha escala</SelectItem>
-            <SelectItem value="airport_base">Aeroporto (escala)</SelectItem>
             <SelectItem value="free_search">Busca livre</SelectItem>
           </SelectContent>
         </Select>
@@ -109,7 +108,7 @@ export function FlightFilters({
       {(filters.boardMode ?? "my_schedule") === "free_search" && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Tipo de busca
+            Como pesquisar
           </span>
           <Tabs
             value={filters.freeSearchMode ?? "airport"}
@@ -127,13 +126,11 @@ export function FlightFilters({
         </div>
       )}
 
-      {homeBase && (
+      {homeBase ? (
         <p className="text-[11px] leading-snug text-muted-foreground">
-          Minha base:{" "}
-          <span className="font-semibold text-foreground">{homeBase}</span>
-          <span className="text-muted-foreground"> · detectada da escala</span>
+          Base: <span className="font-semibold text-foreground">{homeBase}</span>
         </p>
-      )}
+      ) : null}
 
       {/* Mobile: coluna única | Tablet: 2 cols | Desktop: 5 cols */}
       <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -159,7 +156,7 @@ export function FlightFilters({
 
         <div className="min-w-0">
           <Input
-            placeholder="Companhia (LA, G3)"
+            placeholder="Companhia (ex.: G3)"
             value={filters.airlineCode}
             onChange={(e) =>
               onChange({ airlineCode: e.target.value.toUpperCase().slice(0, 3) })

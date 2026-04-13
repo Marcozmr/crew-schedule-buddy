@@ -37,6 +37,8 @@ export interface UserRosterConnectionRow {
   current_active_roster_id: string | null;
   last_error: string | null;
   is_auto_update_enabled: boolean;
+  /** Sessão de automação Playwright (worker) — preenchido pelo servidor ao iniciar `/v1/latam/connect`. */
+  automation_session_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +50,7 @@ function normalizeUserRosterRow(
   return {
     ...row,
     roster_connection_state: row.roster_connection_state ?? 'idle',
+    automation_session_id: row.automation_session_id ?? null,
   };
 }
 

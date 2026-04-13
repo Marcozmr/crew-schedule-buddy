@@ -17,7 +17,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:auth": "vitest run src/lib/auth src/pages/AuthCallbackPage.test.tsx src/pages/UpdatePasswordPage.test.tsx src/pages/ForgotPasswordPage.test.tsx src/App.auth-integration.test.tsx",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "roster-automation:dev": "npm run dev --prefix services/roster-automation"
   },
   "dependencies": {
     "@capacitor/cli": "^8.2.0",

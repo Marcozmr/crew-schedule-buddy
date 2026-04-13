@@ -13,6 +13,7 @@ import {
   rowMatchesFlightQuery,
   iataToIcao,
   normalizeCallsign,
+  normalizeOpenSkyFlightRow,
 } from "./opensky.ts";
 
 export type SearchPayload = {
@@ -54,10 +55,6 @@ export async function runFlightSearch(payload: SearchPayload): Promise<{
     return { items: [], source: "opensky", hint: "invalid_date" };
   }
 
-  if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) {
-    return { items: [], source: "opensky", hint: "opensky_credentials_required" };
-  }
-
   const airline = (payload.airline ?? "").trim().toUpperCase();
   const flightNum = (payload.flightNumber ?? "").trim();
 
@@ -74,7 +71,8 @@ export async function runFlightSearch(payload: SearchPayload): Promise<{
     const items: InternalFlightItem[] = [];
     for (const row of depRows) {
       if (typeof row !== "object" || !row) continue;
-      const it = openSkyScheduleRowToInternal(row as Record<string, unknown>, "departure");
+      const nr = normalizeOpenSkyFlightRow(row as Record<string, unknown>);
+      const it = openSkyScheduleRowToInternal(nr, "departure", ap);
       if (it && (it.origin === ap || it.destination === ap)) {
         if (airline && !String(it.airline).toUpperCase().startsWith(airline)) continue;
         if (flightNum && !String(it.flightNumber).includes(flightNum.replace(/\D/g, ""))) continue;
@@ -83,7 +81,8 @@ export async function runFlightSearch(payload: SearchPayload): Promise<{
     }
     for (const row of arrRows) {
       if (typeof row !== "object" || !row) continue;
-      const it = openSkyScheduleRowToInternal(row as Record<string, unknown>, "arrival");
+      const nr = normalizeOpenSkyFlightRow(row as Record<string, unknown>);
+      const it = openSkyScheduleRowToInternal(nr, "arrival", ap);
       if (it && (it.origin === ap || it.destination === ap)) {
         if (airline && !String(it.airline).toUpperCase().startsWith(airline)) continue;
         if (flightNum && !String(it.flightNumber).includes(flightNum.replace(/\D/g, ""))) continue;
@@ -110,14 +109,16 @@ export async function runFlightSearch(payload: SearchPayload): Promise<{
     const candidates: InternalFlightItem[] = [];
     for (const row of depRows) {
       if (typeof row !== "object" || !row) continue;
-      if (!rowMatchesFlightQuery(row as Record<string, unknown>, airline, flightNum)) continue;
-      const it = openSkyScheduleRowToInternal(row as Record<string, unknown>, "departure");
+      const nr = normalizeOpenSkyFlightRow(row as Record<string, unknown>);
+      if (!rowMatchesFlightQuery(nr, airline, flightNum)) continue;
+      const it = openSkyScheduleRowToInternal(nr, "departure", ap);
       if (it) candidates.push(it);
     }
     for (const row of arrRows) {
       if (typeof row !== "object" || !row) continue;
-      if (!rowMatchesFlightQuery(row as Record<string, unknown>, airline, flightNum)) continue;
-      const it = openSkyScheduleRowToInternal(row as Record<string, unknown>, "arrival");
+      const nr = normalizeOpenSkyFlightRow(row as Record<string, unknown>);
+      if (!rowMatchesFlightQuery(nr, airline, flightNum)) continue;
+      const it = openSkyScheduleRowToInternal(nr, "arrival", ap);
       if (it) candidates.push(it);
     }
     const states = await fetchOpenSkyStates(cfg);

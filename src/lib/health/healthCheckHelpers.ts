@@ -52,6 +52,18 @@ export function failureStatusForCheck(id: HealthCheckId): HealthStatus {
   return "degraded";
 }
 
+/**
+ * Corpo típico de `GET /health` do worker `services/roster-automation` (`{ "ok": true }`).
+ * Aceita também `{ "status": "ok" }` para compatibilidade.
+ */
+export function isHealthyAutomationHealthJson(body: unknown): boolean {
+  if (body === null || typeof body !== "object") return false;
+  const o = body as Record<string, unknown>;
+  if (o.ok === true) return true;
+  if (typeof o.status === "string" && o.status.toLowerCase() === "ok") return true;
+  return false;
+}
+
 export function aggregateOverallStatus(checks: HealthCheckResult[]): HealthStatus {
   if (checks.some((c) => c.status === "down")) return "down";
   if (checks.some((c) => c.status === "degraded")) return "degraded";

@@ -37,6 +37,13 @@ export async function invokeFlightSearch(
   }
 
   if (data && typeof data === "object" && "ok" in data) {
+    if (import.meta.env.DEV) {
+      const d = data as FlightSearchResponse;
+      console.log("[flight-search]", {
+        ok: d.ok,
+        count: d.ok ? d.data?.length ?? 0 : d.error,
+      });
+    }
     return data as FlightSearchResponse;
   }
 

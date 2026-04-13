@@ -3,6 +3,7 @@ import { Signpost, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
+import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
 
 /**
  * Lembrete no dashboard quando o usuário ainda está no fluxo portal → iFlight → PDF
@@ -11,6 +12,9 @@ import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
 export function CorporateRosterFlowBanner() {
   const { connection, activeRosterMeta, loading } = useUserRosterConnection();
   const state = connection?.roster_connection_state ?? 'idle';
+
+  /** Com automação configurada, o progresso fica no cartão dedicado — evita CTA duplicado de importação manual. */
+  if (isRosterAutomationConfigured()) return null;
 
   if (loading || activeRosterMeta) return null;
 

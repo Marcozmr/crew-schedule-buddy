@@ -1,5 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
-import { emitRosterUpdated } from '@/lib/events/roster-events';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   normalizeCrewRosterPdfText,
   parseCrewRosterEntries,
@@ -9,12 +8,14 @@ import {
   type CrewRosterParseStats,
 } from '@/lib/roster/crew-roster-parser';
 import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
-import { UserRosterConnectionService } from '@/modules/roster/services/UserRosterConnectionService';
+import type { UserRosterConnectionType } from '@/modules/roster/services/UserRosterConnectionService';
 import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
 import * as pdfjsLib from 'pdfjs-dist';
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+const isNodeRuntime =
+  typeof window === 'undefined' &&
+  typeof process !== 'undefined' &&
+  Boolean((process as { versions?: { node?: string } }).versions?.node);
 
 async function sha256Hex(buf: ArrayBuffer): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', buf);
@@ -132,7 +133,17 @@ function sortPdfTextItems(items: PdfTextItem[]): Array<{ str: string; x: number;
 }
 
 async function extractTextFromPdf(pdfBytes: ArrayBuffer): Promise<string> {
-  const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+  let lib: typeof pdfjsLib;
+  if (isNodeRuntime) {
+    const legacy = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    lib = legacy as unknown as typeof pdfjsLib;
+    lib.GlobalWorkerOptions.workerSrc = '';
+  } else {
+    lib = pdfjsLib;
+    const mod = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+    lib.GlobalWorkerOptions.workerSrc = (mod as { default: string }).default;
+  }
+  const doc = await lib.getDocument({ data: pdfBytes, verbosity: 0 }).promise;
   const chunks: string[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
@@ -267,6 +278,34 @@ function duplicateResult(
   };
 }
 
+export type PdfImportRunOptions = {
+  /** Cliente Supabase (browser ou service role no backend de automação). */
+  supabaseClient: SupabaseClient;
+  fileName: string;
+  arrayBuffer: ArrayBuffer;
+  /** user_id alvo (obrigatório em modo serviço). */
+  userId: string;
+  /**
+   * true: resolve utilizador via auth.getUser() quando existir sessão (app).
+   * false: usa apenas userId (importação servidor / automação LATAM).
+   */
+  useSessionUser: boolean;
+  /** Emitir evento de roster atualizado (apenas browser). */
+  emitRosterEvent: boolean;
+  /** Origem gravada em imported_rosters / metadados. */
+  importOrigin: 'manual' | 'latam_automation';
+  /** Quando a importação vem do worker Playwright (coluna `automation_run_id`). */
+  automationRunId?: string | null;
+};
+
+/**
+ * Importa PDF com cliente Supabase injetado — usado pelo serviço Node `roster-automation` (service role).
+ * Não armazena credenciais; o PDF já foi obtido no fluxo autorizado do utilizador.
+ */
+export async function importPdfArrayBufferWithClient(opts: PdfImportRunOptions): Promise<PdfImportResult> {
+  return importPdfArrayBufferCore(opts);
+}
+
 /**
  * Importa PDF a partir de bytes (upload, armazenamento ou “Abrir com”).
  * Dedupe: hash SHA-256, depois nome+tamanho, depois mesma storage_path no bucket.
@@ -276,6 +315,30 @@ export async function importPdfArrayBuffer(
   arrayBuffer: ArrayBuffer,
   userId: string
 ): Promise<PdfImportResult> {
+  const { supabase } = await import('@/integrations/supabase/client');
+  return importPdfArrayBufferCore({
+    supabaseClient: supabase,
+    fileName,
+    arrayBuffer,
+    userId,
+    useSessionUser: true,
+    emitRosterEvent: true,
+    importOrigin: 'manual',
+    automationRunId: null,
+  });
+}
+
+async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<PdfImportResult> {
+  const {
+    supabaseClient,
+    fileName,
+    arrayBuffer,
+    userId,
+    useSessionUser,
+    emitRosterEvent,
+    importOrigin,
+    automationRunId,
+  } = params;
   const emptyDebug: ImportDebugInfo = { currentUserId: userId, rosterId: null, deactivatedRosterIds: [], activeRoster: null, totalRowsActiveRoster: 0, totalRowsOldRosters: 0 };
   const emptyStats = EMPTY_PARSE_STATS;
   const emptyResult = (error: string): PdfImportResult => ({
@@ -285,13 +348,16 @@ export async function importPdfArrayBuffer(
   });
 
   try {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    const effectiveUserId = authUser?.id || userId;
+    let effectiveUserId = userId;
+    if (useSessionUser) {
+      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
+      effectiveUserId = authUser?.id || userId;
+    }
 
     const fileSizeBytes = arrayBuffer.byteLength;
     const contentSha256 = await sha256Hex(arrayBuffer);
 
-    const { data: dupByHash } = await supabase
+    const { data: dupByHash } = await supabaseClient
       .from('imported_rosters')
       .select('id')
       .eq('user_id', effectiveUserId)
@@ -302,7 +368,7 @@ export async function importPdfArrayBuffer(
       return duplicateResult(fileName, (dupByHash as { id: string }).id, emptyDebug, emptyStats);
     }
 
-    const { data: dupByMeta } = await supabase
+    const { data: dupByMeta } = await supabaseClient
       .from('imported_rosters')
       .select('id')
       .eq('user_id', effectiveUserId)
@@ -317,7 +383,7 @@ export async function importPdfArrayBuffer(
 
     const storagePath = `${effectiveUserId}/${Date.now()}-${fileName}`;
     const blob = new Blob([new Uint8Array(arrayBuffer)], { type: 'application/pdf' });
-    await supabase.storage.from('crew-rosters').upload(storagePath, blob, { contentType: 'application/pdf', upsert: true });
+    await supabaseClient.storage.from('crew-rosters').upload(storagePath, blob, { contentType: 'application/pdf', upsert: true });
 
     let extractedText: string;
     try {
@@ -384,7 +450,7 @@ export async function importPdfArrayBuffer(
 
     // Desativa escalas ativas anteriores para ativar a nova importação.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: deactivatedRows } = await (supabase.from('imported_rosters') as any)
+    const { data: deactivatedRows } = await (supabaseClient.from('imported_rosters') as any)
       .update({ is_active: false })
       .eq('user_id', effectiveUserId)
       .eq('is_active', true)
@@ -393,12 +459,16 @@ export async function importPdfArrayBuffer(
 
     // Create new roster
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: rosterRow, error: rosterError } = await (supabase.from('imported_rosters') as any).insert({
+    const sourceMsg =
+      importOrigin === 'latam_automation'
+        ? `latam-automation-${Date.now()}`
+        : `manual-upload-${Date.now()}`;
+    const { data: rosterRow, error: rosterError } = await (supabaseClient.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
       file_name: fileName,
       file_size_bytes: fileSizeBytes,
       content_sha256: contentSha256,
-      source_message_id: `manual-upload-${Date.now()}`,
+      source_message_id: sourceMsg,
       storage_path: storagePath,
       name: header.crewName || null,
       employee_code: header.employeeCode || null,
@@ -411,13 +481,14 @@ export async function importPdfArrayBuffer(
       duty_hours_total: header.dutyHoursTotal,
       raw_text_excerpt: extractedText.substring(0, 2000),
       parser_version: PARSER_VERSION,
-      import_origin: 'manual',
-      roster_provider: 'pdf',
+      import_origin: importOrigin,
+      roster_provider: importOrigin === 'latam_automation' ? 'corporate_portal' : 'pdf',
       source_type: isOfficialPdf ? 'official_pdf' : 'pdf',
       import_status: 'processing',
       parsed_count: entries.length,
       is_active: true,
       is_official_crew_roster_pdf: isOfficialPdf,
+      ...(automationRunId ? { automation_run_id: automationRunId } : {}),
     }).select('id').single();
 
     if (rosterError) return emptyResult(`Erro ao criar roster: ${rosterError.message}`);
@@ -425,8 +496,8 @@ export async function importPdfArrayBuffer(
 
     if (rosterId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: metaErr } = await (supabase.from('imported_rosters') as any).update({
-        roster_source: 'manual',
+      const { error: metaErr } = await (supabaseClient.from('imported_rosters') as any).update({
+        roster_source: importOrigin === 'latam_automation' ? 'corporate_portal' : 'manual',
         roster_status: 'active',
       }).eq('id', rosterId);
       if (metaErr) {
@@ -436,7 +507,7 @@ export async function importPdfArrayBuffer(
 
     if (rosterId && deactivatedRosterIds.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from('imported_rosters') as any)
+      await (supabaseClient.from('imported_rosters') as any)
         .update({ superseded_by_roster_id: rosterId })
         .in('id', deactivatedRosterIds);
     }
@@ -492,7 +563,7 @@ export async function importPdfArrayBuffer(
         console.log('INSERT PAYLOAD row count:', insertRows.length);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: insertError } = await (supabase.from('schedule_entries') as any).insert(insertRows);
+      const { error: insertError } = await (supabaseClient.from('schedule_entries') as any).insert(insertRows);
       if (import.meta.env.DEV) {
         console.log('INSERT RESULT (bulk):', insertError ? 'failed' : 'ok', insertRows.length, 'rows');
         console.log('INSERT ERROR (bulk):', insertError);
@@ -500,7 +571,7 @@ export async function importPdfArrayBuffer(
       if (insertError) {
         for (const row of insertRows) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: rowErr } = await (supabase.from('schedule_entries') as any).insert([row]);
+          const { error: rowErr } = await (supabaseClient.from('schedule_entries') as any).insert([row]);
           if (import.meta.env.DEV && rowErr) {
             const isDup = (rowErr as { code?: string }).code === '23505';
             if (isDup) {
@@ -520,7 +591,7 @@ export async function importPdfArrayBuffer(
     const syncNow = new Date().toISOString();
     if (rosterId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from('imported_rosters') as any).update({
+      await (supabaseClient.from('imported_rosters') as any).update({
         import_status: insertedCount > 0 ? 'success' : 'error',
         inserted_count: insertedCount,
         import_error: insertedCount === 0 ? 'Falha ao inserir registros' : null,
@@ -534,28 +605,53 @@ export async function importPdfArrayBuffer(
     if (header.crewName || header.baseAirport) {
       const updates: Record<string, unknown> = { airline: 'LATAM' };
       if (header.crewName) updates.name = header.crewName;
-      await supabase.from('profiles').update(updates).eq('user_id', effectiveUserId);
+      await supabaseClient.from('profiles').update(updates).eq('user_id', effectiveUserId);
     }
 
-    const connectionType = isOfficialPdf ? 'official_pdf' : 'corporate_pdf';
+    const connectionType: UserRosterConnectionType =
+      importOrigin === 'latam_automation'
+        ? 'corporate_pdf'
+        : isOfficialPdf
+          ? 'official_pdf'
+          : 'corporate_pdf';
     if (rosterId && insertedCount > 0) {
-      await UserRosterConnectionService.recordSuccessfulImport({
-        userId: effectiveUserId,
-        rosterId,
-        connectionType,
-      });
+      const nowIso = new Date().toISOString();
+      const { data: existingConn } = await supabaseClient
+        .from('user_roster_connection')
+        .select('connected_at, is_auto_update_enabled')
+        .eq('user_id', effectiveUserId)
+        .maybeSingle();
+      const ex = existingConn as { connected_at: string | null; is_auto_update_enabled: boolean } | null;
+      await supabaseClient.from('user_roster_connection').upsert(
+        {
+          user_id: effectiveUserId,
+          connection_type: connectionType,
+          connection_status: 'connected',
+          roster_connection_state: 'roster_connected',
+          connected_at: ex?.connected_at ?? nowIso,
+          last_checked_at: nowIso,
+          last_successful_import_at: nowIso,
+          current_active_roster_id: rosterId,
+          last_error: null,
+          is_auto_update_enabled: ex?.is_auto_update_enabled ?? true,
+        },
+        { onConflict: 'user_id' },
+      );
     }
 
     const replaced = deactivatedRosterIds.length > 0;
-    emitRosterUpdated({
-      userId: effectiveUserId,
-      reason: replaced ? 'roster_replaced' : isOfficialPdf ? 'official_pdf_import' : 'corporate_pdf_import',
-      at: syncNow,
-    });
+    if (emitRosterEvent) {
+      const { emitRosterUpdated } = await import('@/lib/events/roster-events');
+      emitRosterUpdated({
+        userId: effectiveUserId,
+        reason: replaced ? 'roster_replaced' : isOfficialPdf ? 'official_pdf_import' : 'corporate_pdf_import',
+        at: syncNow,
+      });
+    }
 
     // Fetch diagnostics
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: savedPreview } = await (supabase.from('schedule_entries') as any)
+    const { data: savedPreview } = await (supabaseClient.from('schedule_entries') as any)
       .select('date, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, activity_type, is_flight, raw_line, aircraft_type, flight_hours, duty_hours, sort_datetime, entry_type, crew_status_code, crew_status_label, activity_label')
       .eq('user_id', effectiveUserId)
       .eq('roster_id', rosterId)
@@ -563,7 +659,7 @@ export async function importPdfArrayBuffer(
       .limit(10);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: activeRosterData } = await (supabase.from('imported_rosters') as any)
+    const { data: activeRosterData } = await (supabaseClient.from('imported_rosters') as any)
       .select('id, file_name, is_active, created_at')
       .eq('user_id', effectiveUserId)
       .eq('is_active', true)
@@ -572,13 +668,13 @@ export async function importPdfArrayBuffer(
       .maybeSingle();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { count: activeCount } = await (supabase.from('schedule_entries') as any)
+    const { count: activeCount } = await (supabaseClient.from('schedule_entries') as any)
       .select('id', { count: 'exact', head: true })
       .eq('user_id', effectiveUserId)
       .eq('roster_id', rosterId);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { count: oldCount } = await (supabase.from('schedule_entries') as any)
+    const { count: oldCount } = await (supabaseClient.from('schedule_entries') as any)
       .select('id', { count: 'exact', head: true })
       .eq('user_id', effectiveUserId)
       .neq('roster_id', rosterId);

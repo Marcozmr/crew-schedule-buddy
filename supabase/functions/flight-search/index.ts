@@ -144,7 +144,7 @@ serve(async (req) => {
         status: "error",
         error: "rate_limited",
         message:
-          "Limite diário de buscas atingido. Tente novamente amanhã ou repita a mesma pesquisa dentro de alguns minutos para usar o cache.",
+          "No momento não é possível fazer mais pesquisas. Tente novamente mais tarde.",
         rate: {
           limit: rate?.limit ?? dailyLimit,
           count: rate?.count ?? dailyLimit,
@@ -158,6 +158,14 @@ serve(async (req) => {
   console.log(JSON.stringify({ event: "flight_search_cache_miss", mode: payload.mode }));
 
   const result = await runFlightSearch(payload);
+  console.log(
+    JSON.stringify({
+      event: "flight_search_engine_result",
+      mode: payload.mode,
+      item_count: result.items.length,
+      hint: result.hint ?? null,
+    }),
+  );
 
   const toCache = {
     ok: true,

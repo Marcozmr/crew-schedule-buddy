@@ -5,6 +5,7 @@ import {
   failureStatusForCheck,
   fetchWithTimeout,
   HEALTH_CHECK_DEFAULTS,
+  isHealthyAutomationHealthJson,
   isReachableHttpStatus,
   retry,
 } from "./healthCheckHelpers";
@@ -24,6 +25,12 @@ function anonKey(): string {
     (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() ||
     ""
   );
+}
+
+/** Base URL do worker Playwright — mesmo env da UI de automação. */
+function rosterAutomationBase(): string | null {
+  const u = import.meta.env.VITE_ROSTER_AUTOMATION_URL?.trim();
+  return u ? u.replace(/\/$/, "") : null;
 }
 
 function reportFailures(report: SystemHealthReport): void {
@@ -216,6 +223,50 @@ function probeFlightDataProvider(
 }
 
 /**
+ * `GET /health` no worker — resposta esperada: `{ "ok": true }` ou `{ "status": "ok" }`.
+ * Falhas contam como degradado (não derrubam o agregado para `down` como Supabase/auth).
+ */
+function probeRosterAutomation(
+  automationBase: string,
+  timeoutMs: number,
+  attempts: number,
+  delayMs: number,
+): Promise<HealthCheckResult> {
+  const id: HealthCheckId = "roster_automation";
+  const healthUrl = `${automationBase}/health`;
+  return probeOnce(id, async () => {
+    const result = await retry(
+      async () => {
+        const t0 = performance.now();
+        const res = await fetchWithTimeout(
+          healthUrl,
+          { method: "GET", headers: { Accept: "application/json" } },
+          timeoutMs,
+        );
+        const latencyMs = Math.round(performance.now() - t0);
+        if (!res.ok) {
+          throw new Error(`roster_automation_http_${res.status}`);
+        }
+        const text = (await res.text()).trim();
+        let parsed: unknown = null;
+        try {
+          parsed = text.length ? JSON.parse(text) : null;
+        } catch {
+          throw new Error("roster_automation_invalid_json");
+        }
+        if (isHealthyAutomationHealthJson(parsed)) {
+          return { id, status: "healthy" as const, latencyMs };
+        }
+        throw new Error("roster_automation_payload_not_healthy");
+      },
+      attempts,
+      delayMs,
+    );
+    return result;
+  });
+}
+
+/**
  * Executa probes em paralelo (rápido), com timeout e retry por check.
  * Nunca lança — falhas devolvem relatório degradado.
  */
@@ -231,11 +282,15 @@ export async function runSystemHealthChecks(): Promise<SystemHealthReport> {
 
     const { timeoutMs, retryAttempts, retryDelayMs } = HEALTH_CHECK_DEFAULTS;
 
+    const automationBase = rosterAutomationBase();
     const checks = await Promise.all([
       probeSupabaseConnection(base, key, timeoutMs, retryAttempts, retryDelayMs),
       probeAuthService(base, key, timeoutMs, retryAttempts, retryDelayMs),
       probeEdgeFunctions(base, timeoutMs, retryAttempts, retryDelayMs),
       probeFlightDataProvider(base, timeoutMs, retryAttempts, retryDelayMs),
+      ...(automationBase
+        ? [probeRosterAutomation(automationBase, timeoutMs, retryAttempts, retryDelayMs)]
+        : []),
     ]);
 
     const report: SystemHealthReport = {

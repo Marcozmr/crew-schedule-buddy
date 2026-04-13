@@ -8,6 +8,7 @@ import { AuthProvider, useAuth, registerQueryClient } from "@/lib/auth-context";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { LaunchQueueHandler } from "@/components/roster/LaunchQueueHandler";
+import { LatamAutomationAppLoad } from "@/hooks/useLatamAutomationAppLoad";
 import { ThemeProvider } from "next-themes";
 import { UserThemeSync } from "@/components/UserThemeSync";
 import { SentryRuntimeContext } from "@/lib/monitoring/SentryRuntimeContext";
@@ -303,6 +304,7 @@ export function AppAuthShell() {
         <SentryRuntimeContext />
         <UserThemeSync />
         <LaunchQueueHandler />
+        <LatamAutomationAppLoad />
         <TooltipProvider>
           <Sonner />
           <PWAUpdatePrompt />

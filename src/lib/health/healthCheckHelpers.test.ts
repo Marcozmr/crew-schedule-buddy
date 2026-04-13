@@ -4,6 +4,7 @@ import {
   emptyHealthReport,
   failureStatusForCheck,
   fetchWithTimeout,
+  isHealthyAutomationHealthJson,
   isReachableHttpStatus,
   retry,
   showSystemHealthIndicator,
@@ -24,9 +25,20 @@ describe("failureStatusForCheck", () => {
     expect(failureStatusForCheck("auth_service")).toBe("down");
   });
 
-  it("marca edge e flight como degraded", () => {
+  it("marca edge, flight e roster como degraded", () => {
     expect(failureStatusForCheck("edge_functions")).toBe("degraded");
     expect(failureStatusForCheck("flight_data_provider")).toBe("degraded");
+    expect(failureStatusForCheck("roster_automation")).toBe("degraded");
+  });
+});
+
+describe("isHealthyAutomationHealthJson", () => {
+  it("aceita ok true e status ok", () => {
+    expect(isHealthyAutomationHealthJson({ ok: true })).toBe(true);
+    expect(isHealthyAutomationHealthJson({ status: "ok" })).toBe(true);
+    expect(isHealthyAutomationHealthJson({ status: "OK" })).toBe(true);
+    expect(isHealthyAutomationHealthJson({ ok: false })).toBe(false);
+    expect(isHealthyAutomationHealthJson(null)).toBe(false);
   });
 });
 

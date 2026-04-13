@@ -1,6 +1,6 @@
 /**
  * Tipos do EscalaX Flight Board Pro
- * Preparados para pipeline de escala + enriquecimento local + OpenSky
+ * Pipeline de escala importada + enriquecimento e busca livre.
  */
 
 import type { FlightOperationalStatus } from "./operationalStatus";
@@ -181,11 +181,10 @@ export interface FlightFilters {
   date: string;
   mode: "departures" | "arrivals";
   /**
-   * Minha escala: lista alinhada à escala local + merge com edge.
-   * Aeroporto: lista montada a partir do payload da edge (mesmos voos da escala no servidor, prioriza status/aeroporto do servidor).
-   * Busca livre: Edge `flight-search` + OpenSky, sem depender da escala importada.
+   * Minha escala: trechos da escala importada com enriquecimento opcional.
+   * Busca livre: pesquisa por aeroporto ou por voo, independente da escala.
    */
-  boardMode: "my_schedule" | "airport_base" | "free_search";
+  boardMode: "my_schedule" | "free_search";
   /**
    * Apenas em `free_search`: busca por aeroporto (janela OpenSky) ou por identificação do voo.
    */
@@ -204,7 +203,7 @@ export interface FlightProviderOptions {
   date: string;
   airlineCode?: string;
   flightNumber?: string;
-  /** default my_schedule — airport_base ativa OpenSky flights no edge */
+  /** `my_schedule`: merge com escala; `airport_base`: usado por integrações que consultam só o aeroporto. */
   boardMode?: "my_schedule" | "airport_base";
 }
 

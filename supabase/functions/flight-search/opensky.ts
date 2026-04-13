@@ -48,37 +48,63 @@ export function readOpenSkyConfig(): OpenSkyConfig {
   };
 }
 
+/** OpenSky pode responder em camelCase ou snake_case; normaliza para leitura estável. */
+export function normalizeOpenSkyFlightRow(row: Record<string, unknown>): Record<string, unknown> {
+  const o = { ...row };
+  const map: [string, string][] = [
+    ["est_departure_airport", "estDepartureAirport"],
+    ["est_arrival_airport", "estArrivalAirport"],
+    ["first_seen", "firstSeen"],
+    ["last_seen", "lastSeen"],
+  ];
+  for (const [snake, camel] of map) {
+    if (o[camel] == null && o[snake] != null) o[camel] = o[snake];
+  }
+  return o;
+}
+
+function openSkyAuthHeaders(cfg: OpenSkyConfig): Record<string, string> | undefined {
+  if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) return undefined;
+  const basic = btoa(`${cfg.openSkyClientId}:${cfg.openSkyClientSecret}`);
+  return { Authorization: `Basic ${basic}` };
+}
+
 export async function fetchOpenSkyAirportDayFlights(
   cfg: OpenSkyConfig,
   icao: string,
   begin: number,
   end: number,
 ): Promise<{ depRows: Record<string, unknown>[]; arrRows: Record<string, unknown>[] }> {
-  if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) {
-    return { depRows: [], arrRows: [] };
-  }
-  const basic = btoa(`${cfg.openSkyClientId}:${cfg.openSkyClientSecret}`);
   const depUrl =
     `${cfg.openSkyBaseUrl}/flights/departure?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`;
   const arrUrl =
     `${cfg.openSkyBaseUrl}/flights/arrival?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`;
-  const [depRes, arrRes] = await Promise.all([
-    fetch(depUrl, { headers: { Authorization: `Basic ${basic}` } }),
-    fetch(arrUrl, { headers: { Authorization: `Basic ${basic}` } }),
-  ]);
+  const auth = openSkyAuthHeaders(cfg);
+  const init: RequestInit = auth ? { headers: auth } : {};
+  const [depRes, arrRes] = await Promise.all([fetch(depUrl, init), fetch(arrUrl, init)]);
   let depRows: Record<string, unknown>[] = [];
   let arrRows: Record<string, unknown>[] = [];
   try {
     const depJ = depRes.ok ? await depRes.json() : [];
-    depRows = Array.isArray(depJ) ? depJ : [];
+    depRows = Array.isArray(depJ) ? depJ.map((r) => normalizeOpenSkyFlightRow(r as Record<string, unknown>)) : [];
   } catch {
     depRows = [];
   }
   try {
     const arrJ = arrRes.ok ? await arrRes.json() : [];
-    arrRows = Array.isArray(arrJ) ? arrJ : [];
+    arrRows = Array.isArray(arrJ) ? arrJ.map((r) => normalizeOpenSkyFlightRow(r as Record<string, unknown>)) : [];
   } catch {
     arrRows = [];
+  }
+  if (!auth && (depRows.length + arrRows.length === 0)) {
+    console.log(
+      JSON.stringify({
+        event: "opensky_airport_fetch_empty_anon",
+        dep_status: depRes.status,
+        arr_status: arrRes.status,
+        icao,
+      }),
+    );
   }
   return { depRows, arrRows };
 }
@@ -119,11 +145,11 @@ export async function fetchOpenSkyStates(cfg: OpenSkyConfig): Promise<NonNullabl
   if (statesCache && now < statesCache.expiresAt) {
     return statesCache.states.filter(Boolean) as NonNullable<ReturnType<typeof parseOpenSkyRow>>[];
   }
-  if (!cfg.openSkyClientId || !cfg.openSkyClientSecret) return [];
-  const basic = btoa(`${cfg.openSkyClientId}:${cfg.openSkyClientSecret}`);
+  const auth = openSkyAuthHeaders(cfg);
+  if (!auth) return [];
   try {
     const res = await fetch(`${cfg.openSkyBaseUrl}/states/all`, {
-      headers: { Authorization: `Basic ${basic}` },
+      headers: auth,
     });
     const data = await res.json();
     if (!res.ok) return [];
@@ -216,6 +242,8 @@ function mapInternalStatus(
 export function openSkyScheduleRowToInternal(
   row: Record<string, unknown>,
   role: "departure" | "arrival",
+  /** IATA do aeroporto pesquisado — usado quando a API devolve ICAO nulo nos campos estimados. */
+  airportContextIata?: string,
 ): InternalFlightItem | null {
   const icao24 = String(row.icao24 ?? "");
   const firstSeen = Number(row.firstSeen);
@@ -225,19 +253,36 @@ export function openSkyScheduleRowToInternal(
   const arrIcao = row.estArrivalAirport != null ? String(row.estArrivalAirport).toUpperCase() : "";
   if (!icao24 || !Number.isFinite(firstSeen) || !Number.isFinite(lastSeen)) return null;
 
-  const origin = icaoToIata(depIcao);
-  const destination = icaoToIata(arrIcao);
+  let origin = depIcao ? icaoToIata(depIcao) : "UNK";
+  let destination = arrIcao ? icaoToIata(arrIcao) : "UNK";
+  if (airportContextIata) {
+    if (role === "departure" && (!depIcao || origin === "UNK")) {
+      origin = airportContextIata;
+    }
+    if (role === "arrival" && (!arrIcao || destination === "UNK")) {
+      destination = airportContextIata;
+    }
+  }
   const depIso = new Date(firstSeen * 1000).toISOString();
   const arrIso = new Date(lastSeen * 1000).toISOString();
-  const fn = callsign ? callsign.replace(/\s+/g, "").toUpperCase() : `OSK${icao24.slice(-4)}`;
-  const carrier = fn.length >= 2 ? fn.slice(0, 2) : "OS";
+  const fnRaw = callsign ? callsign.replace(/\s+/g, "").toUpperCase() : `OSK${icao24.slice(-4)}`;
+  let carrier = "OS";
+  let flightNumDigits = fnRaw;
+  const csMatch = fnRaw.match(/^([A-Z]{2,3})(\d[\w]*)$/);
+  if (csMatch) {
+    carrier = csMatch[1];
+    flightNumDigits = csMatch[2].replace(/\D/g, "") || csMatch[2];
+  } else if (fnRaw.length >= 2) {
+    carrier = fnRaw.slice(0, 2);
+    flightNumDigits = fnRaw.slice(2).replace(/^0+/, "") || fnRaw.slice(2);
+  }
   const nowMs = Date.now();
   const st = mapInternalStatus(row, role, nowMs);
 
   return {
-    flightIdent: `${carrier}-${fn}-${icao24}-${role}`,
+    flightIdent: `${carrier}-${fnRaw}-${icao24}-${role}`,
     airline: carrier,
-    flightNumber: fn.replace(/^[A-Z]{2,3}/, "").replace(/^0+/, "") || fn,
+    flightNumber: flightNumDigits || fnRaw,
     origin,
     destination,
     scheduledDeparture: depIso,
@@ -249,7 +294,7 @@ export function openSkyScheduleRowToInternal(
     status: st.status,
     statusLabel: st.statusLabel,
     aircraft: null,
-    callsign: callsign ?? fn,
+    callsign: callsign ?? fnRaw,
     icao24,
     tracking: null,
   };
