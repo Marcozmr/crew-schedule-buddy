@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, BedDouble, CheckCircle2, Clock3, MoonStar, PlaneTakeoff, ShieldAlert, ShieldCheck, Timer } from 'lucide-react';
+import { AlertTriangle, BedDouble, Clock3, PlaneTakeoff, ShieldAlert, ShieldCheck, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NumericInput } from '@/components/ui/numeric-input';
-import { calculateDuty, calculateRest, checkSingleDuty, type DutyPeriodInput, type ScheduleWindow } from '@/regulation';
+import { checkSingleDuty, type DutyPeriodInput, type ScheduleWindow } from '@/regulation';
 import { formatHoursMinutes } from '@/lib/date-utils';
 import { mapAircraftCategory, mapCrewRole, timeToMinutes, toUtcIso } from '@/lib/operational-analysis';
 
@@ -17,7 +17,38 @@ interface OperationalCalculatorPanelProps {
 interface ScenarioResult {
   dutyInput: DutyPeriodInput;
   compliance: ReturnType<typeof checkSingleDuty>;
-  restToNextDuty: ReturnType<typeof calculateRest> | null;
+}
+
+/** Bloco de voo sintético para o motor de regulamento (campos removidos do formulário). */
+const DEFAULT_POST_FLIGHT_MIN = 30;
+const DEFAULT_REPORT_TO_TAKEOFF_MIN = 35;
+const DEFAULT_AIRCRAFT = 'A320';
+const INTERNAL_CREW_ROLE = 'Comissário' as const;
+
+function minutesToHHMM(totalMinutes: number): string {
+  const normalized = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(normalized / 60);
+  const min = normalized % 60;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+/** Deriva decolagem / pouso a partir da apresentação e do número de trechos (simulação interna). */
+function deriveSyntheticLegTimes(
+  reportTime: string,
+  stages: number,
+): { takeoffTime: string; landingTime: string; takeoffDayOffset: number; landingDayOffset: number } {
+  const rep = timeToMinutes(reportTime);
+  const takeoffAbs = rep + DEFAULT_REPORT_TO_TAKEOFF_MIN;
+  const blockMin = Math.max(60, stages * 45);
+  const landingAbs = takeoffAbs + blockMin;
+  const takeoffDayOffset = Math.floor(takeoffAbs / (24 * 60));
+  const landingDayOffset = Math.floor(landingAbs / (24 * 60));
+  return {
+    takeoffTime: minutesToHHMM(takeoffAbs % (24 * 60)),
+    landingTime: minutesToHHMM(landingAbs % (24 * 60)),
+    takeoffDayOffset,
+    landingDayOffset,
+  };
 }
 
 function formatStatus(status: string): string {
@@ -30,46 +61,45 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [operationDate, setOperationDate] = useState(today);
   const [reportTime, setReportTime] = useState('05:45');
-  const [takeoffTime, setTakeoffTime] = useState('06:20');
-  const [landingTime, setLandingTime] = useState('09:10');
-  const [nextReportAt, setNextReportAt] = useState('');
   const [stages, setStages] = useState<number | null>(2);
-  const [postFlightMinutes, setPostFlightMinutes] = useState<number | null>(30);
-  const [crewRoleLabel, setCrewRoleLabel] = useState<'Comandante' | 'Copiloto' | 'Comissário'>('Comissário');
-  const [baseAirport, setBaseAirport] = useState((homeBase || 'GRU').toUpperCase());
-  const [departureAirport, setDepartureAirport] = useState((homeBase || 'GRU').toUpperCase());
-  const [arrivalAirport, setArrivalAirport] = useState('BSB');
-  const [aircraftType, setAircraftType] = useState('A320');
   const [error, setError] = useState('');
   const [result, setResult] = useState<ScenarioResult | null>(null);
 
   const handleCalculate = () => {
     setError('');
-    if (!operationDate || !reportTime || !takeoffTime || !landingTime) {
-      setError('Preencha data, apresentação, decolagem e pouso.');
+    const nStages = stages ?? 1;
+    if (!operationDate || !reportTime || nStages < 1) {
+      setError('Preencha data, apresentação e trechos (mínimo 1).');
       return;
     }
 
-    const dayOffset = timeToMinutes(landingTime) < timeToMinutes(takeoffTime) ? 1 : 0;
+    const { takeoffTime, landingTime, takeoffDayOffset, landingDayOffset } = deriveSyntheticLegTimes(
+      reportTime,
+      nStages,
+    );
+    const base = (homeBase || 'GRU').toUpperCase().slice(0, 4);
+    const departureAirport = base;
+    const arrivalAirport = base === 'GRU' ? 'BSB' : 'GRU';
+
     const dutyInput: DutyPeriodInput = {
       reportTimeUtc: toUtcIso(operationDate, reportTime, timezone),
       legs: [
         {
           id: 'manual-leg-1',
           flightNumber: 'SIM001',
-          departureAirport: departureAirport.toUpperCase(),
-          arrivalAirport: arrivalAirport.toUpperCase(),
-          scheduledDepartureUtc: toUtcIso(operationDate, takeoffTime, timezone),
-          scheduledArrivalUtc: toUtcIso(operationDate, landingTime, timezone, dayOffset),
-          aircraftCategory: mapAircraftCategory(aircraftType),
+          departureAirport,
+          arrivalAirport,
+          scheduledDepartureUtc: toUtcIso(operationDate, takeoffTime, timezone, takeoffDayOffset),
+          scheduledArrivalUtc: toUtcIso(operationDate, landingTime, timezone, landingDayOffset),
+          aircraftCategory: mapAircraftCategory(DEFAULT_AIRCRAFT),
           activityType: 'flight',
-          crossesMidnight: dayOffset > 0,
+          crossesMidnight: landingDayOffset > takeoffDayOffset,
         },
       ],
-      baseAirport: baseAirport.toUpperCase(),
-      crewRole: mapCrewRole(crewRoleLabel),
-      aircraftCategory: mapAircraftCategory(aircraftType),
-      postFlightMinutes: postFlightMinutes ?? 30,
+      baseAirport: base,
+      crewRole: mapCrewRole(INTERNAL_CREW_ROLE),
+      aircraftCategory: mapAircraftCategory(DEFAULT_AIRCRAFT),
+      postFlightMinutes: DEFAULT_POST_FLIGHT_MIN,
     };
 
     const crew: ScheduleWindow['crew'] = {
@@ -83,30 +113,10 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
 
     const compliance = checkSingleDuty(dutyInput, [], crew, dutyInput.reportTimeUtc);
 
-    let restToNextDuty: ReturnType<typeof calculateRest> | null = null;
-    if (nextReportAt) {
-      const nextDutyInput: DutyPeriodInput = {
-        reportTimeUtc: new Date(nextReportAt).toISOString(),
-        legs: [],
-        baseAirport: dutyInput.baseAirport,
-        crewRole: dutyInput.crewRole,
-        aircraftCategory: dutyInput.aircraftCategory,
-        postFlightMinutes: 30,
-      };
-      const firstDuty = calculateDuty(dutyInput, timezone);
-      const nextDuty = calculateDuty(nextDutyInput, timezone);
-      restToNextDuty = calculateRest(1, [firstDuty, nextDuty], {
-        dutyPeriods: [dutyInput, nextDutyInput],
-        referenceDate: nextDutyInput.reportTimeUtc,
-        crew,
-      });
-    }
-
-    setResult({ dutyInput, compliance, restToNextDuty });
+    setResult({ dutyInput, compliance });
   };
 
   const currentDuty = result?.compliance.duty;
-  const currentRest = result?.restToNextDuty;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] gap-6">
@@ -114,11 +124,12 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-foreground break-words">Cálculo operacional avançado</h2>
           <p className="text-sm text-muted-foreground mt-1 break-words">
-            Simule a jornada com a mesma base usada no painel, nos alertas e no descanso.
+            Simule a jornada com base nesses três dados; o restante é assumido internamente para esta estimativa —
+            não reproduz todos os detalhes de uma operação real.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5 min-w-0">
             <Label className="text-[11px] text-muted-foreground">Data</Label>
             <Input type="date" value={operationDate} onChange={(event) => setOperationDate(event.target.value)} />
@@ -130,56 +141,6 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
           <div className="space-y-1.5 min-w-0">
             <Label className="text-[11px] text-muted-foreground">Apresentação</Label>
             <Input type="time" value={reportTime} onChange={(event) => setReportTime(event.target.value)} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Decolagem</Label>
-            <Input type="time" value={takeoffTime} onChange={(event) => setTakeoffTime(event.target.value)} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Pouso final</Label>
-            <Input type="time" value={landingTime} onChange={(event) => setLandingTime(event.target.value)} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Pós-voo (min)</Label>
-            <NumericInput value={postFlightMinutes} onValueChange={setPostFlightMinutes} min={0} max={120} decimals={0} blurDefault={30} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Minha base</Label>
-            <Input value={baseAirport} onChange={(event) => setBaseAirport(event.target.value.toUpperCase())} maxLength={4} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Origem</Label>
-            <Input value={departureAirport} onChange={(event) => setDepartureAirport(event.target.value.toUpperCase())} maxLength={4} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Destino</Label>
-            <Input value={arrivalAirport} onChange={(event) => setArrivalAirport(event.target.value.toUpperCase())} maxLength={4} />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Aeronave</Label>
-            <Input value={aircraftType} onChange={(event) => setAircraftType(event.target.value.toUpperCase())} />
-          </div>
-          <div className="sm:col-span-2 space-y-1.5 min-w-0">
-            <Label className="text-[11px] text-muted-foreground">Próxima apresentação (opcional)</Label>
-            <Input type="datetime-local" value={nextReportAt} onChange={(event) => setNextReportAt(event.target.value)} />
-          </div>
-        </div>
-
-        <div className="space-y-2 min-w-0">
-          <Label className="text-[11px] text-muted-foreground">Função</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {(['Comandante', 'Copiloto', 'Comissário'] as const).map((role) => (
-              <button
-                key={role}
-                type="button"
-                onClick={() => setCrewRoleLabel(role)}
-                className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors break-words ${
-                  crewRoleLabel === role ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-muted'
-                }`}
-              >
-                {role}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -198,10 +159,12 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
 
       <section className="space-y-4 min-w-0">
         {!result || !currentDuty ? (
-          <div className="glass p-6 sm:p-8 min-h-[320px] flex items-center justify-center text-center">
+          <div className="glass p-6 sm:p-8 min-h-[240px] flex items-center justify-center text-center">
             <div className="min-w-0">
               <ShieldAlert className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground break-words">Preencha os horários para calcular jornada, descanso e situação operacional.</p>
+              <p className="text-sm text-muted-foreground break-words">
+                Preencha data, trechos e apresentação e toque em Calcular jornada.
+              </p>
             </div>
           </div>
         ) : (
@@ -219,7 +182,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
               </div>
             </motion.div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="glass p-5 min-w-0">
                 <p className="text-xs text-muted-foreground flex items-center gap-2"><Clock3 className="w-4 h-4 text-primary shrink-0" /> Jornada</p>
                 <p className="text-xl sm:text-2xl font-semibold text-foreground mt-2 break-words">{formatHoursMinutes(currentDuty.totalDutyHours)}</p>
@@ -233,41 +196,12 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
               <div className="glass p-5 min-w-0">
                 <p className="text-xs text-muted-foreground flex items-center gap-2"><Timer className="w-4 h-4 text-primary shrink-0" /> Fim da jornada</p>
                 <p className="text-xl sm:text-2xl font-semibold text-foreground mt-2 whitespace-nowrap">{currentDuty.endTimeLocal.slice(11, 16)}</p>
-                <p className="text-xs text-muted-foreground mt-1 break-words">Pouso final + {currentDuty.postFlightMinutes} min de pós-voo.</p>
+                <p className="text-xs text-muted-foreground mt-1 break-words">Após término operacional (inclui corte de motores e pós-voo padrão).</p>
               </div>
               <div className="glass p-5 min-w-0">
                 <p className="text-xs text-muted-foreground flex items-center gap-2"><BedDouble className="w-4 h-4 text-primary shrink-0" /> Início do descanso</p>
                 <p className="text-xl sm:text-2xl font-semibold text-foreground mt-2 whitespace-nowrap">{currentDuty.endTimeLocal.slice(11, 16)}</p>
                 <p className="text-xs text-muted-foreground mt-1 break-words">O descanso começa somente após o término operacional.</p>
-              </div>
-              <div className="glass p-5 min-w-0">
-                <p className="text-xs text-muted-foreground flex items-center gap-2"><MoonStar className="w-4 h-4 text-primary shrink-0" /> Período noturno</p>
-                <p className="text-base font-semibold text-foreground mt-2 break-words">
-                  {result.compliance.fatigue.woclExposure.totalMinutes > 0 ? 'Operação em período noturno' : 'Sem operação em período noturno'}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 break-words">{currentDuty.isMadrugadaDuty ? 'A jornada toca a faixa de madrugada.' : 'Sem operação em madrugada.'}</p>
-              </div>
-              <div className="glass p-5 min-w-0">
-                <p className="text-xs text-muted-foreground flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary shrink-0" /> Repouso até a próxima apresentação</p>
-                <p className="text-xl sm:text-2xl font-semibold text-foreground mt-2 break-words">{currentRest?.restBeforeDutyHours != null ? formatHoursMinutes(currentRest.restBeforeDutyHours) : '—'}</p>
-                <p className="text-xs text-muted-foreground mt-1 break-words">
-                  {currentRest ? `Mínimo exigido: ${formatHoursMinutes(currentRest.minRequiredRestHours)}${currentRest.augmentedRest ? ' (fora da base)' : ''}` : 'Informe a próxima apresentação para validar o descanso.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="glass p-5 min-w-0">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Alertas operacionais</h3>
-              <div className="space-y-2 min-w-0">
-                {result.compliance.alerts.length > 0 ? result.compliance.alerts.map((alert) => (
-                  <div key={`${alert.ruleId}-${alert.message}`} className="rounded-xl bg-muted/60 px-3 py-2 text-sm min-w-0">
-                    <p className="font-medium text-foreground break-words">{alert.message}</p>
-                  </div>
-                )) : (
-                  <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success flex items-start gap-2 min-w-0">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" /> <span className="break-words">Nenhum alerta relevante nesta simulação.</span>
-                  </div>
-                )}
               </div>
             </div>
           </>
