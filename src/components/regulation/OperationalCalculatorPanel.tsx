@@ -196,7 +196,7 @@ export function OperationalCalculatorPanel({ timezone, homeBase }: OperationalCa
               <div className="glass p-5 min-w-0">
                 <p className="text-xs text-muted-foreground flex items-center gap-2"><Timer className="w-4 h-4 text-primary shrink-0" /> Fim da jornada</p>
                 <p className="text-xl sm:text-2xl font-semibold text-foreground mt-2 whitespace-nowrap">{currentDuty.endTimeLocal.slice(11, 16)}</p>
-                <p className="text-xs text-muted-foreground mt-1 break-words">Após término operacional (inclui corte de motores e pós-voo padrão).</p>
+                <p className="text-xs text-muted-foreground mt-1 break-words">Após término operacional (inclui corte de motores).</p>
               </div>
               <div className="glass p-5 min-w-0">
                 <p className="text-xs text-muted-foreground flex items-center gap-2"><BedDouble className="w-4 h-4 text-primary shrink-0" /> Início do descanso</p>

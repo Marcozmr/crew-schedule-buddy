@@ -11,7 +11,8 @@ export default function DutyCalcPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Calcular jornada</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Simule apresentação, tempo de voo, pós-voo e descanso com a mesma base usada no app.
+            Simulação simplificada para consulta rápida: utilize data, trechos e apresentação. Os demais parâmetros
+            operacionais são estimados automaticamente pela aplicação, com a mesma base regulatória do EscalaX.
           </p>
         </div>
 
