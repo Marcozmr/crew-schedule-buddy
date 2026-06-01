@@ -7,29 +7,12 @@
  */
 import type { BrowserContext, Frame, Page } from 'playwright';
 import { withRetries } from '../../retry.js';
+import { isMicrosoftSsoHost } from './sso-hosts.js';
+import { detectCorporateSurface } from './surface-detector.js';
+
+export { isMicrosoftSsoHost } from './sso-hosts.js';
 
 const STEP_TIMEOUT_MS = 45_000;
-
-/** Hosts Microsoft onde o utilizador ainda está no fluxo SSO (não confundir com portal LATAM). */
-const MS_LOGIN_HOST_RE =
-  /^(?:login\.|device\.login\.|.*\.b2clogin\.)/i;
-
-export function isMicrosoftSsoHost(urlStr: string): boolean {
-  try {
-    const u = new URL(urlStr);
-    const h = u.hostname.toLowerCase();
-    if (MS_LOGIN_HOST_RE.test(h)) return true;
-    if (h === 'login.microsoftonline.com' || h.endsWith('.login.microsoftonline.com')) return true;
-    if (h === 'login.live.com' || h.endsWith('.login.live.com')) return true;
-    if (h.includes('microsoftonline.com') || h.includes('microsoft.com')) {
-      const path = u.pathname + u.search;
-      if (/\/oauth|\/authorize|\/login|\/signin|\/saml|\/wsfed|\/kmsi|\/common\//i.test(path)) return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
 
 /** Superfície LATAM / iFlight / SAB após redirecionamento pós-SSO (não é página de login Microsoft). */
 export function isPostSsoLatamSurface(urlStr: string): boolean {
@@ -70,6 +53,13 @@ function isCorporateLoginPath(urlStr: string): boolean {
  * Aguarda saída do Microsoft SSO e chegada a uma URL LATAM / iFlight / SAB, depois confirma sessão.
  * Não depende de botões na app — só URL, cookies opcionais e texto da página.
  */
+export type SsoPollInfo = {
+  surface: string;
+  url: string;
+  host: string;
+  fsmHint: 'waiting_sso' | 'authenticated_pending';
+};
+
 export async function waitForAuthenticationAfterSso(
   page: Page,
   context: BrowserContext,
@@ -77,14 +67,16 @@ export async function waitForAuthenticationAfterSso(
     deadlineMs: number;
     appendLog?: (entry: Record<string, unknown>) => void;
     waitForUrlTimeoutMs?: number;
+    /** Chamado ~2s em ~2s durante a espera — para FSM (waiting_sso) e observabilidade. */
+    onPoll?: (info: SsoPollInfo) => void | Promise<void>;
   },
 ): Promise<boolean> {
-  const { deadlineMs, appendLog, waitForUrlTimeoutMs = 120_000 } = opts;
+  const { deadlineMs, appendLog, waitForUrlTimeoutMs = 120_000, onPoll } = opts;
   const deadline = Date.now() + deadlineMs;
 
   appendLog?.({
     step: 'login_detected',
-    message: 'Fluxo SSO (Microsoft) em curso — a aguardar redirecionamento para o portal LATAM / iFlight',
+    message: 'Fluxo SSO (Microsoft/Google) em curso — a aguardar redirecionamento para o portal LATAM / iFlight',
     url: page.url(),
   });
 
@@ -110,6 +102,26 @@ export async function waitForAuthenticationAfterSso(
   }
 
   while (Date.now() < deadline) {
+    try {
+      const det = await detectCorporateSurface(page);
+      const ssoActive = det.surface === 'microsoft_auth' || det.surface === 'google_auth';
+      await onPoll?.({
+        surface: det.surface,
+        url: det.url,
+        host: det.host,
+        fsmHint: ssoActive ? 'waiting_sso' : 'authenticated_pending',
+      });
+      if (ssoActive) {
+        appendLog?.({
+          step: 'sso_surface_poll',
+          surface: det.surface,
+          url: det.url,
+          title: det.title.slice(0, 120),
+        });
+      }
+    } catch {
+      /* página em transição */
+    }
     if (await expectAuthenticatedHome(page, context)) return true;
     await page.waitForTimeout(2_000);
   }
@@ -250,6 +262,7 @@ export async function gotoIFlightArea(page: Page): Promise<boolean> {
 const CREW_ROSTER_PATTERNS = [
   /CrewRosterReport/i,
   /Crew\s*Roster\s*Report/i,
+  /Roster\s*Report/i,
   /Official\s*Roster/i,
   /Exportar.*PDF/i,
   /Export.*PDF/i,

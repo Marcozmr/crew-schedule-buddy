@@ -34,6 +34,17 @@ export const config = {
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || req('SUPABASE_SERVICE_ROLE_KEY'),
   /** URL inicial do portal corporativo (login). */
   latamPortalLoginUrl: () => process.env.LATAM_PORTAL_LOGIN_URL?.trim() || '',
+  /**
+   * Portal SAB (tile iFlightNeo). Após SSO, navegação explícita reduz dependência do utilizador
+   * abrir manualmente. Observado: portal.latam.com/pt/web/portalsab
+   */
+  latamPortalSabUrl: () =>
+    process.env.LATAM_PORTAL_SAB_URL?.trim() || 'https://portal.latam.com/pt/web/portalsab',
+  /**
+   * Entrada direta opcional no módulo AIMS/eCrew (ex.: deep link após SSO).
+   * Se vazio, o fluxo tenta descobrir um link com path /ecrew/ no portal pós-login.
+   */
+  latamEcredEntryUrl: () => process.env.LATAM_ECREW_ENTRY_URL?.trim() || '',
   dataDir: () => process.env.ROSTER_AUTOMATION_DATA_DIR?.trim() || path.join(process.cwd(), 'data', 'automation'),
   /**
    * Origens permitidas para pedidos do browser (health, /v1/latam/*).
@@ -58,4 +69,18 @@ export const config = {
     return [...new Set([...localDefaults, ...fromEnv])];
   },
   headless: () => process.env.ROSTER_AUTOMATION_HEADLESS !== '0',
+  /**
+   * Quando `1`, se a Rota de Ouro eCrew não gravar HTML/PDF, volta ao pipeline legado SAB → iFlight.
+   */
+  latamRosterFallbackIflight: () => process.env.LATAM_ROSTER_FALLBACK_IFLIGHT === '1',
+  /** GOL e-Component — portal de escala (login CPF/ANAC no browser). */
+  golPortalUrl: () =>
+    process.env.GOL_PORTAL_URL?.trim() || 'https://portal-escala.voegol.com.br',
+  /** GET opcional pós-login (cookies do contexto) para PDF de escala, se a companhia expuser URL fixa. */
+  golRosterPdfUrl: () => process.env.GOL_ROSTER_PDF_URL?.trim() || '',
+  golPortalCpf: () => process.env.GOL_PORTAL_CPF?.trim() || '',
+  golPortalAnac: () => process.env.GOL_PORTAL_ANAC?.trim() || '',
+  /** Azul CAE — base do portal; MonthlySchedule pode ser composto ou sobrescrito. */
+  azulCaeBaseUrl: () => process.env.AZUL_CAE_BASE_URL?.trim() || 'https://cae.voeazul.com.br',
+  azulMonthlyScheduleUrl: () => process.env.AZUL_MONTHLY_SCHEDULE_URL?.trim() || '',
 };

@@ -4,6 +4,8 @@ import { getUserIdFromJwt } from './auth.js';
 import { getServiceClient } from './db.js';
 import { log } from './logger.js';
 import { startConnectFlow, runSyncFlow } from './providers/latam/latamAutomation.js';
+import { startGolConnectFlow } from './providers/gol/golAutomation.js';
+import { startAzulConnectFlow } from './providers/azul/azulAutomation.js';
 
 const app = Fastify({ logger: false });
 
@@ -161,11 +163,14 @@ app.post('/v1/latam/sync', async (req, reply) => {
   return { sessionId, runId };
 });
 
-app.get('/v1/latam/session/:sessionId', async (req, reply) => {
+app.get('/v1/:provider/session/:sessionId', async (req, reply) => {
   const userId = await requireUser(req.headers.authorization);
   if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
 
-  const { sessionId } = req.params as { sessionId: string };
+  const { provider, sessionId } = req.params as { provider: string; sessionId: string };
+  if (!['latam', 'gol', 'azul'].includes(provider)) {
+    return reply.status(404).send({ error: 'provider inválido' });
+  }
   const supabase = getServiceClient();
 
   const { data: session, error: sErr } = await supabase
@@ -173,6 +178,7 @@ app.get('/v1/latam/session/:sessionId', async (req, reply) => {
     .select('*')
     .eq('id', sessionId)
     .eq('user_id', userId)
+    .eq('provider', provider)
     .maybeSingle();
 
   if (sErr || !session) return reply.status(404).send({ error: 'Não encontrado' });
@@ -185,6 +191,128 @@ app.get('/v1/latam/session/:sessionId', async (req, reply) => {
     .limit(5);
 
   return { session, recentRuns: runs ?? [] };
+});
+
+app.post('/v1/gol/connect', async (req, reply) => {
+  const userId = await requireUser(req.headers.authorization);
+  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+
+  const supabase = getServiceClient();
+  const { data: existingSess } = await supabase
+    .from('automation_sessions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('provider', 'gol')
+    .maybeSingle();
+
+  if (existingSess?.id) {
+    const last = await latestRunForSession(supabase, (existingSess as { id: string }).id);
+    if (last && !last.finished_at) {
+      log('api', 'info', 'connect_skipped_in_flight', { sessionId: existingSess.id, runId: last.id, provider: 'gol' });
+      return { sessionId: existingSess.id, runId: last.id, resumed: true as const };
+    }
+  }
+
+  const { data: session, error: se } = await supabase
+    .from('automation_sessions')
+    .upsert(
+      {
+        user_id: userId,
+        provider: 'gol',
+        status: 'portal_connecting',
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,provider' },
+    )
+    .select('id')
+    .single();
+
+  if (se || !session) {
+    return reply.status(500).send({ error: se?.message ?? 'Falha ao criar sessão' });
+  }
+
+  const sessionId = (session as { id: string }).id;
+  await supabase
+    .from('user_roster_connection')
+    .update({ automation_session_id: sessionId, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+
+  const { data: run, error: re } = await supabase
+    .from('automation_runs')
+    .insert({ session_id: sessionId, user_id: userId, status: 'portal_connecting', step_logs: [] })
+    .select('id')
+    .single();
+
+  if (re || !run) return reply.status(500).send({ error: re?.message ?? 'Falha ao criar execução' });
+
+  const runId = (run as { id: string }).id;
+  void startGolConnectFlow({ userId, sessionId, runId }).catch((e) =>
+    log('api', 'error', 'connect_flow_unhandled', { message: e instanceof Error ? e.message : String(e) }),
+  );
+
+  return { sessionId, runId };
+});
+
+app.post('/v1/azul/connect', async (req, reply) => {
+  const userId = await requireUser(req.headers.authorization);
+  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+
+  const supabase = getServiceClient();
+  const { data: existingSess } = await supabase
+    .from('automation_sessions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('provider', 'azul')
+    .maybeSingle();
+
+  if (existingSess?.id) {
+    const last = await latestRunForSession(supabase, (existingSess as { id: string }).id);
+    if (last && !last.finished_at) {
+      log('api', 'info', 'connect_skipped_in_flight', { sessionId: existingSess.id, runId: last.id, provider: 'azul' });
+      return { sessionId: existingSess.id, runId: last.id, resumed: true as const };
+    }
+  }
+
+  const { data: session, error: se } = await supabase
+    .from('automation_sessions')
+    .upsert(
+      {
+        user_id: userId,
+        provider: 'azul',
+        status: 'portal_connecting',
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,provider' },
+    )
+    .select('id')
+    .single();
+
+  if (se || !session) {
+    return reply.status(500).send({ error: se?.message ?? 'Falha ao criar sessão' });
+  }
+
+  const sessionId = (session as { id: string }).id;
+  await supabase
+    .from('user_roster_connection')
+    .update({ automation_session_id: sessionId, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+
+  const { data: run, error: re } = await supabase
+    .from('automation_runs')
+    .insert({ session_id: sessionId, user_id: userId, status: 'portal_connecting', step_logs: [] })
+    .select('id')
+    .single();
+
+  if (re || !run) return reply.status(500).send({ error: re?.message ?? 'Falha ao criar execução' });
+
+  const runId = (run as { id: string }).id;
+  void startAzulConnectFlow({ userId, sessionId, runId }).catch((e) =>
+    log('api', 'error', 'connect_flow_unhandled', { message: e instanceof Error ? e.message : String(e) }),
+  );
+
+  return { sessionId, runId };
 });
 
 app.get('/health', async () => ({ ok: true }));

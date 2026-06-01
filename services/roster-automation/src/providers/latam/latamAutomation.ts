@@ -1,5 +1,6 @@
 /**
- * Orquestração LATAM: portal → SAB → iFlightNeo → CrewRosterReport PDF → importação.
+ * Orquestração LATAM: SSO → eCrew Rota de Ouro (GET RosterReport HTML/PDF) → importação;
+ * fallback opcional SAB→iFlight (`LATAM_ROSTER_FALLBACK_IFLIGHT=1`).
  * MFA / expiração: reconnect_required quando o storageState deixa de ser válido.
  */
 import fs from 'node:fs/promises';
@@ -9,9 +10,12 @@ import { config } from '../../config.js';
 import { getServiceClient, type AutomationStatusRow } from '../../db.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { log } from '../../logger.js';
-import { importDownloadedPdf } from '../../importAdapter.js';
 import { expectAuthenticatedHome, waitForAuthenticationAfterSso } from './navigation.js';
-import { runSabToCrewRosterPdf } from './sab-iflight-pipeline.js';
+import { persistFsmTransition, patchOrchestrationSnapshot } from './corporate-automation-orchestrator.js';
+import { detectCorporateSurface } from './surface-detector.js';
+import { runLatamGoldPathRosterImport } from './latam-production-pipeline.js';
+import type { CorporateFsmState } from './fsm-types.js';
+import { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
 
 const SCOPE = 'latam';
 
@@ -47,7 +51,7 @@ async function setSessionStatus(sessionId: string, status: AutomationStatusRow, 
 async function setRunStatus(
   runId: string,
   status: AutomationStatusRow,
-  extra?: { error_message?: string; imported_roster_id?: string; finished?: boolean },
+  extra?: { error_message?: string; imported_roster_id?: string; finished?: boolean; fsm_state?: CorporateFsmState },
 ): Promise<void> {
   const supabase = getServiceClient();
   const patch: Record<string, unknown> = {
@@ -57,6 +61,7 @@ async function setRunStatus(
   if (extra?.error_message !== undefined) patch.error_message = extra.error_message;
   if (extra?.imported_roster_id !== undefined) patch.imported_roster_id = extra.imported_roster_id;
   if (extra?.finished) patch.finished_at = new Date().toISOString();
+  if (extra?.fsm_state !== undefined) patch.fsm_state = extra.fsm_state;
   await supabase.from('automation_runs').update(patch).eq('id', runId);
 }
 
@@ -73,28 +78,6 @@ async function persistStorage(context: BrowserContext, storePath: string, sessio
       updated_at: new Date().toISOString(),
     })
     .eq('id', sessionId);
-}
-
-async function importPdfBuffer(params: {
-  userId: string;
-  runId: string;
-  fileName: string;
-  buffer: Buffer;
-}): Promise<{ rosterId: string }> {
-  const { userId, runId, fileName, buffer } = params;
-  const supabase = getServiceClient();
-  const pdfBuf = new Uint8Array(buffer).buffer;
-  const imp = await importDownloadedPdf({
-    supabase,
-    userId,
-    fileName,
-    pdfBytes: pdfBuf,
-    automationRunId: runId,
-  });
-  if (!imp.success || !imp.rosterId) {
-    throw new Error(imp.error ?? 'Falha na importação do PDF');
-  }
-  return { rosterId: imp.rosterId };
 }
 
 /**
@@ -128,69 +111,165 @@ export async function startConnectFlow(params: {
   }
 
   await appendRunLog(runId, { step: 'portal_connecting', message: 'A abrir Chromium e navegar ao portal' });
-  await setSessionStatus(sessionId, 'portal_connecting');
-  await setRunStatus(runId, 'portal_connecting');
+  await persistFsmTransition({ runId, sessionId, fsm: 'starting' });
 
   let context: BrowserContext | null = null;
+  let postLoginInstrument: PostLoginNavigationInstrument | null = null;
   try {
     context = await chromium.launchPersistentContext(sessionDir(userId), {
       headless: config.headless(),
       viewport: { width: 1400, height: 900 },
       locale: 'pt-BR',
+      acceptDownloads: true,
     });
     const page = context.pages()[0] ?? (await context.newPage());
     page.setDefaultTimeout(90_000);
 
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await appendRunLog(runId, { step: 'portal_opened', message: 'URL do portal carregada' });
-    await appendRunLog(runId, { step: 'portal_connecting', message: 'À espera de autenticação (incl. SSO Microsoft → LATAM)' });
+    await appendRunLog(runId, { step: 'portal_connecting', message: 'À espera de autenticação (SSO Microsoft/Google → LATAM)' });
+
+    let lastSsoSurface = '';
+    await persistFsmTransition({
+      runId,
+      sessionId,
+      fsm: 'opening_corporate_portal',
+      snapshot: {
+        current_url: page.url(),
+        current_host: new URL(page.url()).hostname,
+      },
+      markSuccess: true,
+    });
 
     const authed = await waitForAuthenticationAfterSso(page, context, {
       deadlineMs: 25 * 60_000,
       waitForUrlTimeoutMs: 120_000,
       appendLog: (e) => appendRunLog(runId, e),
+      onPoll: async (info) => {
+        await patchOrchestrationSnapshot(runId, {
+          current_url: info.url,
+          current_host: info.host,
+          last_surface: info.surface,
+        });
+        if (info.fsmHint !== 'waiting_sso') return;
+        if (info.surface === lastSsoSurface) return;
+        lastSsoSurface = info.surface;
+        await persistFsmTransition({
+          runId,
+          sessionId,
+          fsm: 'waiting_sso',
+          snapshot: {
+            current_url: info.url,
+            current_host: info.host,
+            last_surface: info.surface,
+          },
+        });
+        await appendRunLog(runId, {
+          step: 'fsm_transition',
+          fsm: 'waiting_sso',
+          surface: info.surface,
+          message: 'Superfície SSO detetada — aguardando retorno ao portal LATAM',
+        });
+      },
     });
 
     if (!authed) {
       await appendRunLog(runId, { step: 'session_validated', ok: false, message: 'Timeout — home autenticada não detetada' });
       await appendRunLog(runId, { step: 'error', message: 'Timeout de autenticação (MFA ou login incompleto)' });
       await saveFailureArtifacts(page, failDir, 'portal-auth-timeout');
-      await setRunStatus(runId, 'error', { error_message: 'Timeout de autenticação', finished: true });
-      await setSessionStatus(sessionId, 'reconnect_required', 'Sessão não detetada a tempo');
+      await persistFsmTransition({
+        runId,
+        sessionId,
+        fsm: 'needs_user_interaction',
+        snapshot: { last_surface: 'auth_timeout' },
+        finished: true,
+        lastError: 'Sessão não detetada a tempo — complete o login e use Reconectar',
+      });
+      await getServiceClient()
+        .from('automation_runs')
+        .update({
+          error_message: 'Timeout de autenticação',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', runId);
       return;
     }
 
     await appendRunLog(runId, { step: 'session_validated', ok: true, message: 'Sessão ativa no portal' });
-    await appendRunLog(runId, { step: 'portal_connected', message: 'Sessão portal OK — a iniciar SAB → iFlightNeo → PDF' });
-    await setSessionStatus(sessionId, 'portal_connected');
-    await setRunStatus(runId, 'portal_connected');
+    await persistFsmTransition({
+      runId,
+      sessionId,
+      fsm: 'authenticated',
+      snapshot: {
+        current_url: page.url(),
+        current_host: new URL(page.url()).hostname,
+        last_surface: (await detectCorporateSurface(page)).surface,
+      },
+      markSuccess: true,
+    });
+    await appendRunLog(runId, {
+      step: 'portal_connected',
+      message: 'Autenticação OK — eCrew Rota de Ouro (GET RosterReport HTML/PDF) com fallback UI',
+    });
+
+    postLoginInstrument = new PostLoginNavigationInstrument();
+    postLoginInstrument.attachToBrowserContext(context, (e) => {
+      void appendRunLog(runId, e);
+    });
 
     try {
-      await setRunStatus(runId, 'iflight_detected');
-      await setSessionStatus(sessionId, 'iflight_detected');
-      await appendRunLog(runId, { step: 'iflight_accessed', message: 'Pipeline SAB → iFlightNeo em execução' });
+      const onFsmPhase = async (phase: CorporateFsmState) => {
+        const det = await detectCorporateSurface(page).catch(() => null);
+        await persistFsmTransition({
+          runId,
+          sessionId,
+          fsm: phase,
+          snapshot: {
+            current_url: page.url(),
+            current_host: new URL(page.url()).hostname,
+            last_surface: det?.surface ?? phase,
+          },
+          markSuccess: true,
+        });
+        await appendRunLog(runId, { step: 'fsm_transition', fsm: phase });
+      };
 
-      const { buffer, fileName } = await runSabToCrewRosterPdf({
+      const { rosterId, mode } = await runLatamGoldPathRosterImport({
         context,
         page,
         userId,
         runId,
-        failDir,
+        sessionUserDir: sessionDir(userId),
         appendLog: (e) => appendRunLog(runId, e),
+        onFsmPhase,
+        instrument: postLoginInstrument ?? undefined,
+        persistNavigationDebug: async (payload) => {
+          await patchOrchestrationSnapshot(runId, {
+            navigation_debug: payload as unknown as Record<string, unknown>,
+          });
+        },
       });
 
-      await appendRunLog(runId, { step: 'roster_detected', message: 'CrewRosterReport localizado (SAB / iFlight)' });
-      await appendRunLog(runId, { step: 'pdf_downloaded', fileName, bytes: buffer.length });
+      await appendRunLog(runId, {
+        step: 'roster_detected',
+        message:
+          mode === 'ecrew'
+            ? 'RosterReport obtido via eCrew (GET / fallback UI)'
+            : 'RosterReport via fallback SAB/iFlight (LATAM_ROSTER_FALLBACK_IFLIGHT)',
+        mode,
+      });
 
-      await appendRunLog(runId, { step: 'roster_importing', message: 'A importar PDF no EscalaX' });
-      await setRunStatus(runId, 'roster_importing');
-      await setSessionStatus(sessionId, 'roster_importing');
-
-      const { rosterId } = await importPdfBuffer({ userId, runId, fileName, buffer });
+      await appendRunLog(runId, { step: 'roster_importing', message: 'Importação concluída no EscalaX' });
+      await persistFsmTransition({ runId, sessionId, fsm: 'importing_report' });
 
       await getServiceClient().from('automation_runs').update({ imported_roster_id: rosterId }).eq('id', runId);
-      await setRunStatus(runId, 'roster_connected', { imported_roster_id: rosterId, finished: true });
-      await setSessionStatus(sessionId, 'roster_connected');
+      await persistFsmTransition({
+        runId,
+        sessionId,
+        fsm: 'completed',
+        markSuccess: true,
+        finished: true,
+      });
       await appendRunLog(runId, { step: 'roster_imported', rosterId });
       await appendRunLog(runId, { step: 'completed', message: 'Importação e ativação concluídas' });
       await appendRunLog(runId, { step: 'roster_connected', rosterId });
@@ -199,7 +278,19 @@ export async function startConnectFlow(params: {
       const msg = e instanceof Error ? e.message : String(e);
       await appendRunLog(runId, { step: 'pipeline_partial', message: msg, note: 'Sessão será gravada para nova tentativa (Sincronizar)' });
       await saveFailureArtifacts(page, failDir, 'connect-pipeline-partial');
-      await setRunStatus(runId, 'portal_connected', { error_message: msg, finished: true });
+      const snapRow = await getServiceClient().from('automation_runs').select('orchestration_snapshot').eq('id', runId).single();
+      const prevSnap = (snapRow.data as { orchestration_snapshot?: Record<string, unknown> } | null)?.orchestration_snapshot ?? {};
+      await getServiceClient()
+        .from('automation_runs')
+        .update({
+          status: 'portal_connected',
+          fsm_state: 'authenticated',
+          error_message: msg,
+          finished_at: new Date().toISOString(),
+          orchestration_snapshot: { ...prevSnap, last_surface: 'pipeline_partial' },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', runId);
       await setSessionStatus(sessionId, 'portal_connected', msg);
       log(SCOPE, 'warn', 'connect_pipeline_incomplete', { message: msg });
     }
@@ -209,9 +300,20 @@ export async function startConnectFlow(params: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log(SCOPE, 'error', 'connect_fail', { message: msg });
-    await setRunStatus(runId, 'error', { error_message: msg, finished: true });
+    await persistFsmTransition({
+      runId,
+      sessionId,
+      fsm: 'failed',
+      finished: true,
+      lastError: msg,
+    });
+    await getServiceClient()
+      .from('automation_runs')
+      .update({ error_message: msg, updated_at: new Date().toISOString() })
+      .eq('id', runId);
     await setSessionStatus(sessionId, 'error', msg);
   } finally {
+    postLoginInstrument?.dispose();
     await context?.close();
   }
 }
@@ -224,9 +326,9 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
   const storePath = storageStatePath(userId);
   const failDir = path.join(sessionDir(userId), 'failures');
 
-  let raw: Buffer | null = null;
   let context: BrowserContext | null = null;
   let browser: Browser | null = null;
+  let syncInstrument: PostLoginNavigationInstrument | null = null;
 
   try {
     await fs.access(storePath);
@@ -241,8 +343,7 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
   }
 
   await appendRunLog(runId, { step: 'sync_start', message: 'Sincronização com storageState restaurado' });
-  await setRunStatus(runId, 'roster_downloading');
-  await setSessionStatus(sessionId, 'roster_downloading');
+  await persistFsmTransition({ runId, sessionId, fsm: 'starting' });
 
   browser = await chromium.launch({ headless: config.headless() });
 
@@ -251,6 +352,7 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
       storageState: storePath,
       viewport: { width: 1400, height: 900 },
       locale: 'pt-BR',
+      acceptDownloads: true,
     });
     const page = await context.newPage();
     page.setDefaultTimeout(90_000);
@@ -263,8 +365,17 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
       await appendRunLog(runId, { step: 'session_validated', ok: false, message: 'Sessão inválida ou expirada' });
       await appendRunLog(runId, { step: 'reconnect_required', message: 'Sessão expirada ou MFA necessário' });
       await saveFailureArtifacts(page, failDir, 'session-expired');
-      await setRunStatus(runId, 'reconnect_required', { error_message: 'Sessão inválida', finished: true });
-      await setSessionStatus(sessionId, 'reconnect_required', 'Reautenticar no portal');
+      await persistFsmTransition({
+        runId,
+        sessionId,
+        fsm: 'needs_user_interaction',
+        finished: true,
+        lastError: 'Reautenticar no portal',
+      });
+      await getServiceClient()
+        .from('automation_runs')
+        .update({ error_message: 'Sessão inválida', updated_at: new Date().toISOString() })
+        .eq('id', runId);
       await context.close();
       context = null;
       await browser.close();
@@ -273,34 +384,67 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
     }
 
     await appendRunLog(runId, { step: 'session_validated', ok: true, message: 'Sessão ativa no portal' });
+    await persistFsmTransition({
+      runId,
+      sessionId,
+      fsm: 'authenticated',
+      snapshot: {
+        current_url: page.url(),
+        current_host: new URL(page.url()).hostname,
+        last_surface: (await detectCorporateSurface(page)).surface,
+      },
+      markSuccess: true,
+    });
 
-    await setRunStatus(runId, 'iflight_detected');
-    await setSessionStatus(sessionId, 'iflight_detected');
-    await appendRunLog(runId, { step: 'iflight_accessed', message: 'Pipeline SAB → iFlightNeo em execução' });
+    syncInstrument = new PostLoginNavigationInstrument();
+    syncInstrument.attachToBrowserContext(context, (e) => {
+      void appendRunLog(runId, e);
+    });
 
-    const { buffer, fileName } = await runSabToCrewRosterPdf({
+    const onFsmPhase = async (phase: CorporateFsmState) => {
+      const det = await detectCorporateSurface(page).catch(() => null);
+      await persistFsmTransition({
+        runId,
+        sessionId,
+        fsm: phase,
+        snapshot: {
+          current_url: page.url(),
+          current_host: new URL(page.url()).hostname,
+          last_surface: det?.surface ?? phase,
+        },
+        markSuccess: true,
+      });
+      await appendRunLog(runId, { step: 'fsm_transition', fsm: phase });
+    };
+
+    const { rosterId } = await runLatamGoldPathRosterImport({
       context,
       page,
       userId,
       runId,
-      failDir,
+      sessionUserDir: sessionDir(userId),
       appendLog: (e) => appendRunLog(runId, e),
+      onFsmPhase,
+      instrument: syncInstrument ?? undefined,
+      persistNavigationDebug: async (payload) => {
+        await patchOrchestrationSnapshot(runId, {
+          navigation_debug: payload as unknown as Record<string, unknown>,
+        });
+      },
     });
-    raw = buffer;
 
-    await appendRunLog(runId, { step: 'roster_detected', message: 'CrewRosterReport localizado (SAB / iFlight)' });
-    await appendRunLog(runId, { step: 'pdf_downloaded', fileName, bytes: raw.length });
-
-    await appendRunLog(runId, { step: 'roster_importing', message: 'A importar PDF no EscalaX' });
-    await setRunStatus(runId, 'roster_importing');
-    await setSessionStatus(sessionId, 'roster_importing');
-
-    const { rosterId } = await importPdfBuffer({ userId, runId, fileName, buffer: raw });
+    await appendRunLog(runId, { step: 'roster_importing', message: 'Importação concluída no EscalaX' });
+    await persistFsmTransition({ runId, sessionId, fsm: 'importing_report' });
 
     await getServiceClient().from('automation_runs').update({ imported_roster_id: rosterId }).eq('id', runId);
 
-    await setRunStatus(runId, 'roster_connected', { imported_roster_id: rosterId, finished: true });
-    await setSessionStatus(sessionId, 'roster_connected');
+    await persistFsmTransition({
+      runId,
+      sessionId,
+      fsm: 'completed',
+      markSuccess: true,
+      finished: true,
+    });
     await appendRunLog(runId, { step: 'roster_imported', rosterId });
     await appendRunLog(runId, { step: 'completed', message: 'Sincronização concluída' });
     await appendRunLog(runId, { step: 'roster_connected', rosterId });
@@ -313,10 +457,15 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
         await saveFailureArtifacts(p, failDir, 'sync-error');
       }
     }
-    await setRunStatus(runId, 'error', { error_message: msg, finished: true });
+    await persistFsmTransition({ runId, sessionId, fsm: 'failed', finished: true, lastError: msg });
+    await getServiceClient()
+      .from('automation_runs')
+      .update({ error_message: msg, updated_at: new Date().toISOString() })
+      .eq('id', runId);
     await setSessionStatus(sessionId, 'error', msg);
     log(SCOPE, 'error', 'sync_fail', { message: msg });
   } finally {
+    syncInstrument?.dispose();
     await context?.close();
     if (browser) await browser.close();
   }

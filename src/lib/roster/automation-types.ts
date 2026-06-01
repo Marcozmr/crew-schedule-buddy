@@ -26,6 +26,22 @@ export interface AutomationSessionRow {
   updated_at: string;
 }
 
+/** Estados FSM da orquestração corporativa (worker Playwright). Opcional até migração aplicada. */
+export type CorporateFsmStateUi =
+  | 'idle'
+  | 'starting'
+  | 'opening_corporate_portal'
+  | 'waiting_sso'
+  | 'authenticated'
+  | 'opening_portal_sab'
+  | 'opening_iflight'
+  | 'locating_roster'
+  | 'downloading_report'
+  | 'importing_report'
+  | 'completed'
+  | 'needs_user_interaction'
+  | 'failed';
+
 export interface AutomationRunRow {
   id: string;
   session_id: string;
@@ -39,4 +55,14 @@ export interface AutomationRunRow {
   finished_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Migração `corporate_automation_fsm` — estado fino para copy e diagnóstico. */
+  fsm_state?: CorporateFsmStateUi | string | null;
+  last_success_fsm_state?: string | null;
+  orchestration_snapshot?: {
+    current_url?: string;
+    current_host?: string;
+    attempt_count?: number;
+    last_surface?: string;
+    last_title?: string;
+  } | null;
 }

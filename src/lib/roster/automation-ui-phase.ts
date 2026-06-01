@@ -5,6 +5,7 @@ import {
   type AutomationConnectionState,
 } from './automation-connection-state';
 import { decideLatamAutomationKick, isAutomationRunInFlight, isSessionBusy } from './automation-orchestration';
+import { labelForFsm } from './automation-fsm-ui';
 
 /** Re-export para consumidores que importavam apenas de `automation-ui-phase`. */
 export {
@@ -54,6 +55,26 @@ export function mapAutomationToUiPhase(
   }
 
   if (runBusy || isSessionBusy(st)) {
+    const fsm = latestRun?.fsm_state;
+    if (fsm && typeof fsm === 'string') {
+      const L = labelForFsm(fsm);
+      if (L?.title) {
+        if (fsm === 'importing_report') {
+          return { phase: 'importing', title: L.title, detail: L.detail };
+        }
+        if (fsm === 'waiting_sso' || fsm === 'opening_corporate_portal' || fsm === 'starting') {
+          return { phase: 'connecting', title: L.title, detail: L.detail };
+        }
+        if (fsm === 'failed' || fsm === 'needs_user_interaction') {
+          return {
+            phase: 'recoverable',
+            title: L.title,
+            detail: session?.last_error?.trim() || L.detail,
+          };
+        }
+        return { phase: 'searching', title: L.title, detail: L.detail };
+      }
+    }
     if (st === 'roster_importing' || latestRun?.status === 'roster_importing') {
       return {
         phase: 'importing',

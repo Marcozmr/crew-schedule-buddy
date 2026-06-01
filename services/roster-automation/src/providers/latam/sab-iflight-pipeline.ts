@@ -2,14 +2,17 @@
  * SAB → contexto tripulante → iFlightNeo (com fallbacks) → escala → CrewRosterReport (PDF).
  */
 import path from 'node:path';
-import type { BrowserContext, Download, Frame, Page } from 'playwright';
+import type { BrowserContext, Frame, Page } from 'playwright';
 import { log } from '../../logger.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { withRetries } from '../../retry.js';
-import { pickDownloadTimeoutMs, triggerCrewRosterDownload, waitForSabPortalSurface } from './navigation.js';
+import { waitForSabPortalSurface } from './navigation.js';
 import { clickSabCrewHeaderContext } from './sab-crew-header.js';
 import { openIFlightNeoWithFallbacks } from './iflight-launcher.js';
 import type { LocatorRoot } from './latam-shared-dom.js';
+import type { CorporateFsmState } from './fsm-types.js';
+import type { PostLoginNavigationInstrument, NavigationDebugPayload } from './post-login-navigation-instrumentation.js';
+import { capturePdfDownloadOrResponse } from './pdf-capture-hybrid.js';
 
 export type { LocatorRoot } from './latam-shared-dom.js';
 export { IFIGHT_NEO_TEXT_PATTERNS, findIFlightNeoTile, pickIFlightFrame, pickRosterRoot } from './latam-shared-dom.js';
@@ -46,41 +49,15 @@ export async function waitForRosterShell(root: LocatorRoot, appendLog: PipelineL
   throw new Error('Timeout: ecrã da escala não identificado no iFlight');
 }
 
+/** @deprecated usar capturePdfDownloadOrResponse — mantido para testes diretos */
 export async function downloadCrewRosterPdfFromRoot(
   workPage: Page,
   root: LocatorRoot,
   appendLog: PipelineLogFn,
-): Promise<{ buffer: Buffer; suggestedName: string; download: Download }> {
-  const dlTimeout = pickDownloadTimeoutMs();
-  const downloadPromise = workPage.waitForEvent('download', { timeout: dlTimeout });
-
-  const clicked = await triggerCrewRosterDownload(root);
-  if (!clicked) {
-    await appendLog({ step: 'crewroster_click', ok: false });
-    throw new Error('Não foi possível acionar CrewRosterReport / exportar PDF');
-  }
-
-  await appendLog({ step: 'crewroster_click', ok: true });
-
-  let download: Download;
-  try {
-    download = await downloadPromise;
-  } catch (e) {
-    await appendLog({
-      step: 'download_wait',
-      ok: false,
-      message: e instanceof Error ? e.message : String(e),
-    });
-    throw new Error('Nenhum download iniciado após o clique — verifique menu/exportação no iFlight');
-  }
-
-  const p = await download.path();
-  if (!p) throw new Error('Download sem caminho temporário');
-  const fs = await import('node:fs/promises');
-  const buffer = await fs.readFile(p);
-  const suggestedName = download.suggestedFilename() || `CrewRosterReport-${Date.now()}.pdf`;
-  await appendLog({ step: 'pdf_download', ok: true, bytes: buffer.length, suggestedName });
-  return { buffer, suggestedName, download };
+  failDir: string,
+  instrument?: PostLoginNavigationInstrument,
+): Promise<{ buffer: Buffer; suggestedName: string }> {
+  return capturePdfDownloadOrResponse(workPage, root, appendLog, failDir, instrument);
 }
 
 export type SabPipelineResult = { buffer: Buffer; fileName: string };
@@ -92,17 +69,28 @@ export async function runSabToCrewRosterPdf(params: {
   runId: string;
   failDir: string;
   appendLog: PipelineLogFn;
+  /** Sincroniza FSM com marcos do pipeline (SAB → iFlight → roster → PDF). */
+  onFsmPhase?: (phase: CorporateFsmState) => void | Promise<void>;
+  instrument?: PostLoginNavigationInstrument;
+  /** Persiste snapshot técnico em `orchestration_snapshot.navigation_debug`. */
+  persistNavigationDebug?: (payload: NavigationDebugPayload) => Promise<void>;
 }): Promise<SabPipelineResult> {
-  const { context, page, runId, failDir, appendLog } = params;
+  const { context, page, runId, failDir, appendLog, onFsmPhase, instrument, persistNavigationDebug } = params;
 
   await appendLog({ step: 'pipeline_start', runId, phase: 'sab_iflight_crewroster' });
 
+  await onFsmPhase?.('opening_portal_sab');
   await withRetries('wait_sab', 5, 3_000, async () => {
     const ok = await waitForSabPortalSurface(page);
     if (!ok) throw new Error('SAB / tile iFlightNeo ainda não visível');
   });
-  await appendLog({ step: 'sab_surface', ok: true, url: page.url() });
+  await appendLog({ step: 'sab_surface', ok: true, url: page.url(), step_tag: 'sab_entry_detected' });
+  if (instrument) {
+    const dbg = await instrument.buildTechnicalSnapshot(page, 'sab_entry_detected', appendLog);
+    await persistNavigationDebug?.(dbg);
+  }
 
+  await onFsmPhase?.('opening_iflight');
   await clickSabCrewHeaderContext(page, appendLog);
 
   let workPage: Page = page;
@@ -115,23 +103,44 @@ export async function runSabToCrewRosterPdf(params: {
       step: 'iflight_resolved',
       resolution: opened.resolution,
       workUrl: workPage.url(),
+      step_tag: 'iflight_entry_detected',
     });
+    if (instrument) {
+      const dbg = await instrument.buildTechnicalSnapshot(workPage, 'iflight_entry_detected', appendLog);
+      await persistNavigationDebug?.(dbg);
+    }
   } catch (e) {
+    if (instrument) await instrument.emitStuckEvidence(page, failDir, 'iflight-open', appendLog);
     await artifact(page, failDir, 'iflight-open', appendLog);
     throw e;
   }
 
   try {
+    await onFsmPhase?.('locating_roster');
     await waitForRosterShell(root, appendLog);
+    await appendLog({ step: 'roster_report_candidate', ok: true, note: 'shell_text_matched' });
+    if (instrument) {
+      const dbg = await instrument.buildTechnicalSnapshot(workPage, 'roster_area_ready', appendLog);
+      await persistNavigationDebug?.(dbg);
+    }
   } catch (e) {
+    if (instrument) await instrument.emitStuckEvidence(workPage, failDir, 'roster-screen', appendLog);
     await artifact(workPage, failDir, 'roster-screen', appendLog);
     throw e;
   }
 
   try {
-    const { buffer, suggestedName } = await downloadCrewRosterPdfFromRoot(workPage, root, appendLog);
+    await onFsmPhase?.('downloading_report');
+    const { buffer, suggestedName } = await capturePdfDownloadOrResponse(
+      workPage,
+      root,
+      appendLog,
+      failDir,
+      instrument,
+    );
     return { buffer, fileName: suggestedName };
   } catch (e) {
+    if (instrument) await instrument.emitStuckEvidence(workPage, failDir, 'crewroster-download', appendLog);
     await artifact(workPage, failDir, 'crewroster-download', appendLog);
     throw e;
   }
