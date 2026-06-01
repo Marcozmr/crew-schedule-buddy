@@ -283,6 +283,11 @@ export type PdfImportRunOptions = {
   supabaseClient: SupabaseClient;
   fileName: string;
   arrayBuffer: ArrayBuffer;
+  /**
+   * Texto já extraído (ex.: relatório HTML Crew Roster convertido a texto no worker).
+   * Quando definido, ignora `extractTextFromPdf` e usa este texto no parser LATAM.
+   */
+  extractedTextOverride?: string;
   /** user_id alvo (obrigatório em modo serviço). */
   userId: string;
   /**
@@ -293,10 +298,14 @@ export type PdfImportRunOptions = {
   /** Emitir evento de roster atualizado (apenas browser). */
   emitRosterEvent: boolean;
   /** Origem gravada em imported_rosters / metadados. */
-  importOrigin: 'manual' | 'latam_automation';
+  importOrigin: 'manual' | 'latam_automation' | 'gol_automation' | 'azul_automation';
   /** Quando a importação vem do worker Playwright (coluna `automation_run_id`). */
   automationRunId?: string | null;
 };
+
+function isAutomationWorkerImport(importOrigin: PdfImportRunOptions['importOrigin']): boolean {
+  return importOrigin === 'latam_automation' || importOrigin === 'gol_automation' || importOrigin === 'azul_automation';
+}
 
 /**
  * Importa PDF com cliente Supabase injetado — usado pelo serviço Node `roster-automation` (service role).
@@ -333,6 +342,7 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     supabaseClient,
     fileName,
     arrayBuffer,
+    extractedTextOverride,
     userId,
     useSessionUser,
     emitRosterEvent,
@@ -382,18 +392,24 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     }
 
     const storagePath = `${effectiveUserId}/${Date.now()}-${fileName}`;
-    const blob = new Blob([new Uint8Array(arrayBuffer)], { type: 'application/pdf' });
-    await supabaseClient.storage.from('crew-rosters').upload(storagePath, blob, { contentType: 'application/pdf', upsert: true });
+    const isHtmlSource = Boolean(extractedTextOverride) || /\.html?$/i.test(fileName);
+    const uploadType = isHtmlSource ? 'text/html' : 'application/pdf';
+    const blob = new Blob([new Uint8Array(arrayBuffer)], { type: uploadType });
+    await supabaseClient.storage.from('crew-rosters').upload(storagePath, blob, { contentType: uploadType, upsert: true });
 
     let extractedText: string;
-    try {
-      extractedText = await extractTextFromPdf(arrayBuffer);
-    } catch (err) {
-      return emptyResult(`Falha ao extrair texto do PDF: ${err instanceof Error ? err.message : 'erro'}`);
+    if (extractedTextOverride !== undefined && extractedTextOverride.trim().length > 0) {
+      extractedText = extractedTextOverride;
+    } else {
+      try {
+        extractedText = await extractTextFromPdf(arrayBuffer);
+      } catch (err) {
+        return emptyResult(`Falha ao extrair texto do PDF: ${err instanceof Error ? err.message : 'erro'}`);
+      }
     }
 
     if (!extractedText.trim()) {
-      return emptyResult('O PDF não contém texto extraível.');
+      return emptyResult(isHtmlSource ? 'O HTML/texto extraído está vazio.' : 'O PDF não contém texto extraível.');
     }
 
     const header = parseHeader(extractedText);
@@ -458,11 +474,10 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     const deactivatedRosterIds = ((deactivatedRows as Array<{ id: string }> | null) ?? []).map((r) => r.id);
 
     // Create new roster
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sourceMsg =
-      importOrigin === 'latam_automation'
-        ? `latam-automation-${Date.now()}`
-        : `manual-upload-${Date.now()}`;
+    const sourceMsg = isAutomationWorkerImport(importOrigin)
+      ? `corp-automation-${importOrigin}-${Date.now()}`
+      : `manual-upload-${Date.now()}`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- automation_run_id ainda não está nos tipos gerados
     const { data: rosterRow, error: rosterError } = await (supabaseClient.from('imported_rosters') as any).insert({
       user_id: effectiveUserId,
       file_name: fileName,
@@ -482,7 +497,7 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
       raw_text_excerpt: extractedText.substring(0, 2000),
       parser_version: PARSER_VERSION,
       import_origin: importOrigin,
-      roster_provider: importOrigin === 'latam_automation' ? 'corporate_portal' : 'pdf',
+      roster_provider: isAutomationWorkerImport(importOrigin) ? 'corporate_portal' : 'pdf',
       source_type: isOfficialPdf ? 'official_pdf' : 'pdf',
       import_status: 'processing',
       parsed_count: entries.length,
@@ -497,7 +512,7 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     if (rosterId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: metaErr } = await (supabaseClient.from('imported_rosters') as any).update({
-        roster_source: importOrigin === 'latam_automation' ? 'corporate_portal' : 'manual',
+        roster_source: isAutomationWorkerImport(importOrigin) ? 'corporate_portal' : 'manual',
         roster_status: 'active',
       }).eq('id', rosterId);
       if (metaErr) {
@@ -608,12 +623,11 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
       await supabaseClient.from('profiles').update(updates).eq('user_id', effectiveUserId);
     }
 
-    const connectionType: UserRosterConnectionType =
-      importOrigin === 'latam_automation'
-        ? 'corporate_pdf'
-        : isOfficialPdf
-          ? 'official_pdf'
-          : 'corporate_pdf';
+    const connectionType: UserRosterConnectionType = isAutomationWorkerImport(importOrigin)
+      ? 'corporate_pdf'
+      : isOfficialPdf
+        ? 'official_pdf'
+        : 'corporate_pdf';
     if (rosterId && insertedCount > 0) {
       const nowIso = new Date().toISOString();
       const { data: existingConn } = await supabaseClient

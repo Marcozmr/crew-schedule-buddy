@@ -145,6 +145,7 @@ describe("AuthCallbackPage", () => {
   });
 
   it("recovery sem sessão mostra erro dedicado em português", async () => {
+    window.history.replaceState({}, "", "/auth/callback#type=recovery");
     establish.mockResolvedValue({
       ok: true,
       session: null,

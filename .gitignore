@@ -14,6 +14,10 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+# Nunca colocar segredos em public/ — o Vite copia tudo para dist/
+public/.env
+.playwright/
+data/
 
 # Editor directories and files
 .vscode/*

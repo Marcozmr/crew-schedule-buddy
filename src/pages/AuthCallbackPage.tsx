@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { establishSessionFromCurrentUrl } from "@/lib/auth/establishSession";
@@ -21,15 +21,13 @@ import { Button } from "@/components/ui/button";
  */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
-  const ran = useRef(false);
   const [showError, setShowError] = useState(false);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [hint, setHint] = useState<string | undefined>();
 
   useLayoutEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
+    let cancelled = false;
 
     void (async () => {
       try {
@@ -44,6 +42,7 @@ export default function AuthCallbackPage() {
       if (getParam(parts, "error")) {
         logAuthAuditEvent("auth_callback_error", { phase: "hash_error" });
         const m = mapAuthCallbackErrorToUserMessage(parts);
+        if (cancelled) return;
         setTitle(m.title);
         setMessage(m.message);
         setHint(m.hint);
@@ -53,12 +52,14 @@ export default function AuthCallbackPage() {
       }
 
       const result = await establishSessionFromCurrentUrl(supabase, href);
+      if (cancelled) return;
       if (!result.ok) {
         logAuthAuditEvent("auth_callback_error", { phase: "establish_session" });
         reportAuthFlowFailure("auth_callback_establish_session", result.error);
         if (import.meta.env.DEV) {
           console.warn("[AuthCallback] establishSession failed", result.error);
         }
+        if (cancelled) return;
         setTitle("Não foi possível concluir");
         setMessage(formatAuthErrorForUser(result.error));
         setShowError(true);
@@ -82,6 +83,7 @@ export default function AuthCallbackPage() {
       switch (decision.action) {
         case "error": {
           logAuthAuditEvent("auth_callback_error", { phase: "post_session" });
+          if (cancelled) return;
           setTitle(decision.error.title);
           setMessage(decision.error.message);
           setHint(decision.error.hint);
@@ -89,9 +91,11 @@ export default function AuthCallbackPage() {
           return;
         }
         case "goto_update_password":
+          if (cancelled) return;
           navigate(AUTH_UPDATE_PASSWORD_PATH, { replace: true });
           return;
         case "goto_home_flash":
+          if (cancelled) return;
           if (decision.flash === "email_confirmed") {
             logAuthAuditEvent("email_confirmed");
           }
@@ -99,9 +103,11 @@ export default function AuthCallbackPage() {
           navigate("/home", { replace: true });
           return;
         case "goto_home":
+          if (cancelled) return;
           navigate("/home", { replace: true });
           return;
         case "goto_login_needs_signin":
+          if (cancelled) return;
           setAuthFlash("session_missing");
           navigate("/login", { replace: true });
           return;
@@ -112,12 +118,17 @@ export default function AuthCallbackPage() {
       }
       } catch (e: unknown) {
         reportUnexpectedError(e, { flow: "auth_callback" });
+        if (cancelled) return;
         setTitle("Erro");
         setMessage("Não foi possível concluir a autenticação. Tente novamente.");
         setHint(undefined);
         setShowError(true);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   if (showError) {
