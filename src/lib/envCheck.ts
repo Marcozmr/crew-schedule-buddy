@@ -3,6 +3,8 @@
  * O cliente Supabase usa fallbacks para não derrubar a app; estes logs explicam o que falta no deploy.
  */
 
+import { getConfiguredAppOrigin } from "@/lib/auth/appUrl";
+
 export function hasRequiredSupabaseEnv(): boolean {
   const url = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim();
   const key =
@@ -27,5 +29,15 @@ export function logEnvValidationOnBoot(): void {
       '[EscalaX] VITE_SUPABASE_ANON_KEY (ou VITE_SUPABASE_PUBLISHABLE_KEY) está ausente. Defina no painel de build. A app inicia com chave de fallback até corrigir.',
     );
   }
+
+  const appOrigin = getConfiguredAppOrigin();
+  if (import.meta.env.PROD && !appOrigin) {
+    console.warn(
+      '[EscalaX] VITE_APP_URL ausente em produção. Links de confirmação/recuperação de email podem usar apenas window.location.origin; defina https://www.escalax.app.br no host de deploy e no Supabase (Site URL + Redirect URLs).',
+    );
+  } else if (import.meta.env.DEV && appOrigin) {
+    console.info('[EscalaX boot] VITE_APP_URL (dev override):', appOrigin);
+  }
+
   console.log('[EscalaX boot] env ok');
 }

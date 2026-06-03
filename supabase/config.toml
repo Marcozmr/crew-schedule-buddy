@@ -3,6 +3,12 @@
 # Deploy: npm run deploy:flight-status ou npm run deploy:functions
 project_id = "fbryqzwykdhnmskfectg"
 
+# Produção (Dashboard → Authentication → URL Configuration) — NÃO deixar localhost:
+#   Site URL: https://www.escalax.app.br
+#   Redirect URLs: https://www.escalax.app.br/**, https://escalax.app.br/**,
+#                  http://localhost:5173/**, http://127.0.0.1:5173/**
+# Frontend produção: VITE_APP_URL=https://www.escalax.app.br (Vercel)
+
 # Validação JWT no handler (getUser) — evita 401 no gateway antes do worker e respostas opacas no cliente.
 [functions.send-support-email]
 verify_jwt = false

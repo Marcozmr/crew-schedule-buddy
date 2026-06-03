@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getAuthCallbackUrl } from '@/lib/auth/authRedirect';
+import { getAppOrigin } from '@/lib/auth/appUrl';
 import { deriveAuthAccessState, isEmailConfirmed, type AuthAccessState } from '@/lib/auth/authAccess';
 import { AuthFlowError, AUTH_FLOW_CODES } from '@/lib/auth/authErrors';
 import { assertAuthRateLimitAllowed } from '@/lib/auth/authRateLimitClient';
@@ -241,12 +242,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedEmail = normalizeEmail(email);
     await assertAuthRateLimitAllowed('signup', normalizedEmail);
     logAuthAuditEvent('signup_requested', { domain: emailDomainOnly(normalizedEmail) });
+    const emailRedirectTo = getAuthCallbackUrl();
+    if (import.meta.env.DEV) {
+      console.info('[auth/signUp] emailRedirectTo', emailRedirectTo, 'appOrigin', getAppOrigin());
+    }
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
         data: { name },
-        emailRedirectTo: getAuthCallbackUrl(),
+        emailRedirectTo,
       },
     });
     if (error) throw error;

@@ -17,6 +17,11 @@ interface ImportMetaEnv {
   readonly VITE_SYSTEM_HEALTH_INDICATOR?: string;
   /** URL base do serviço Node Playwright (`services/roster-automation`), ex. http://127.0.0.1:8790 */
   readonly VITE_ROSTER_AUTOMATION_URL?: string;
+  /**
+   * URL pública do EscalaX (origem, sem path). Obrigatória no deploy de produção (Vercel).
+   * Usada em emailRedirectTo / redirectTo do Supabase Auth. Ex.: https://www.escalax.app.br
+   */
+  readonly VITE_APP_URL?: string;
 }
 
 declare const __ESCALAX_BUILD_ID__: string;
