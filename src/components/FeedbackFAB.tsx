@@ -14,7 +14,7 @@ const TYPES = [
   { value: 'contact' as const, label: 'Entrar em contato', icon: Mail, color: 'text-primary' },
 ];
 
-const SUPPORT_EMAIL = 'support@escalax.app.br';
+const SUPPORT_EMAIL = 'contato@escalax.app.br';
 
 const devLog = (...args: unknown[]) => {
   if (import.meta.env.DEV) console.log('[FeedbackFAB]', ...args);

@@ -6,7 +6,7 @@
  * Secrets (Supabase → Edge Functions → Secrets):
  *   RESEND_API_KEY   — obrigatório (ex.: re_…)
  *   RESEND_FROM      — obrigatório — remetente verificado na Resend (ex.: "EscalaX <noreply@seudominio.com>")
- *   SUPPORT_TO_EMAIL — obrigatório — inbox de suporte (ex.: support@escalax.app.br)
+ *   SUPPORT_TO_EMAIL — inbox de suporte (default: contato@escalax.app.br)
  *
  * Runtime: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
  */
@@ -14,6 +14,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend";
+
+/** Fallback quando SUPPORT_TO_EMAIL não está nos secrets (evita destino legado support@). */
+const DEFAULT_SUPPORT_TO_EMAIL = "contato@escalax.app.br";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -352,7 +355,9 @@ serve(async (req) => {
 
     const apiKeyRaw = Deno.env.get("RESEND_API_KEY");
     const apiKey = apiKeyRaw?.trim() ?? "";
-    const supportToRaw = Deno.env.get("SUPPORT_TO_EMAIL")?.trim();
+    const supportToFromSecret = Deno.env.get("SUPPORT_TO_EMAIL")?.trim() ?? "";
+    const supportToRaw = supportToFromSecret || DEFAULT_SUPPORT_TO_EMAIL;
+    const supportToSource = supportToFromSecret ? "secret" : "default";
     const fromRaw = Deno.env.get("RESEND_FROM")?.trim();
 
     logStructured({
@@ -360,14 +365,15 @@ serve(async (req) => {
       hasResendKey: apiKey.length > 0,
       resendKeyPrefix: apiKey ? `${apiKey.slice(0, 3)}…` : "(empty)",
       hasSupportTo: !!supportToRaw,
+      supportToSource,
+      supportTo: supportToRaw,
       hasResendFrom: !!fromRaw,
     });
 
-    if (!apiKey || !fromRaw || !supportToRaw) {
+    if (!apiKey || !fromRaw) {
       const missing = [
         !apiKey && "RESEND_API_KEY",
         !fromRaw && "RESEND_FROM",
-        !supportToRaw && "SUPPORT_TO_EMAIL",
       ].filter(Boolean).join(", ");
       logStructured({ step: "resend.config.missing", detail: missing });
       await serviceClient.from("feedback_messages").update({ status: "stored_no_email" }).eq("id", feedback.id);
@@ -523,7 +529,7 @@ serve(async (req) => {
         stored: false,
         transport: "resend",
         error:
-          "Erro interno ao processar seu pedido. Tente novamente em instantes. Se persistir, contacte support@escalax.app.br.",
+          `Erro interno ao processar seu pedido. Tente novamente em instantes. Se persistir, contacte ${DEFAULT_SUPPORT_TO_EMAIL}.`,
       },
       200,
     );
