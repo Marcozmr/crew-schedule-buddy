@@ -41,7 +41,7 @@ async function importPdfBuffer(params: {
   }
   // Duplicata é sucesso legítimo — mesma escala já importada anteriormente
   if (imp.insertedCount === 0 && !imp.duplicate) {
-    throw new Error('Login realizado, mas nenhuma escala foi importada.');
+    throw new Error('iFlight Neo acessado, mas nenhuma escala foi importada.');
   }
   return { rosterId: imp.rosterId };
 }

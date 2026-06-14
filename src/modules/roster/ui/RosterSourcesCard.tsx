@@ -31,7 +31,7 @@ import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
-import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
+import { isRosterAutomationConfigured, postLatamConnect } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 
 interface RosterSourcesCardProps {
@@ -48,7 +48,10 @@ const PORTAL_BADGE: Record<string, string> = {
 
 export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session: authSession } = useAuth();
+  const getAccessToken = useCallback(async () => authSession?.access_token ?? null, [authSession?.access_token]);
+  // ENV estático — determina se o worker Playwright está disponível
+  const automationConfigured = isRosterAutomationConfigured() && corporatePortalConfig.isEnabled;
   const { connection, activeRosterMeta, refresh: refreshConnection } = useUserRosterConnection();
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [portalStatus, setPortalStatus] = useState<ProviderStatus | null>(null);
@@ -107,16 +110,22 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const bump = useCallback(() => setRefreshTrigger((t) => t + 1), []);
 
   const handleConnectPortal = useCallback(async () => {
-    const provider = RosterSyncService.getProviderById('corporate_portal');
     setPortalConnecting(true);
     try {
-      await provider.connect();
+      if (automationConfigured) {
+        await postLatamConnect(getAccessToken);
+      } else {
+        const provider = RosterSyncService.getProviderById('corporate_portal');
+        await provider.connect();
+      }
+    } catch {
+      // erros de automação aparecem no AutomationStatusCard via Supabase realtime
     } finally {
       setPortalConnecting(false);
       bump();
       void refreshConnection();
     }
-  }, [bump, refreshConnection]);
+  }, [automationConfigured, bump, getAccessToken, refreshConnection]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
@@ -128,7 +137,21 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
     void refreshConnection();
   }, [bump, user, refreshConnection]);
 
-  const handleManualPortalConfirm = useCallback(() => {
+  const handleManualPortalConfirm = useCallback(async () => {
+    if (automationConfigured) {
+      // Automação: disparar o worker Playwright (não marca popup como "conectado")
+      setPortalConnecting(true);
+      try {
+        await postLatamConnect(getAccessToken);
+      } catch {
+        // erros visíveis no AutomationStatusCard via Supabase realtime
+      } finally {
+        setPortalConnecting(false);
+        bump();
+      }
+      return;
+    }
+    // Fluxo manual legado
     SessionManager.setCorporatePortalConnected();
     if (user) {
       void UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id).then(() => {
@@ -141,7 +164,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       });
     }
     bump();
-  }, [bump, user, refreshConnection]);
+  }, [automationConfigured, bump, getAccessToken, user, refreshConnection]);
 
   const handleOpenedIFlight = useCallback(() => {
     if (!user) return;
@@ -237,8 +260,8 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 <p className="font-medium text-foreground break-words">Portal corporativo LATAM</p>
                 {isLoginUrlConfigured() ? (
                   <p className="text-xs text-muted-foreground break-words">
-                    {automationAsPrimary
-                      ? 'A sincronização oficial corre no servidor (login seguro na janela do automatizador). Opcionalmente pode abrir o portal aqui só para consulta — não é necessário para importar a escala.'
+                    {automationConfigured
+                      ? 'A sincronização oficial corre no servidor (login seguro na janela do automatizador). Clique em Conectar para iniciar — o worker abrirá o portal LATAM automaticamente.'
                       : 'Toque em Conectar para abrir o portal. Depois volte ao EscalaX e siga os passos indicados — SAB, iFlight e importação do CrewRosterReport (o app não fecha o portal automaticamente).'}
                   </p>
                 ) : (
@@ -290,12 +313,12 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
               )}
             </div>
           </div>
-          {portalIsConfigured && !portalIsConnected && !isRosterAutomationConfigured() && (
+          {portalIsConfigured && !portalIsConnected && (
             <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border/60">
-              <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleManualPortalConfirm}>
-                Concluí o login no portal
+              <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => void handleManualPortalConfirm()}>
+                {automationConfigured ? 'Iniciar sincronização' : 'Concluí o login no portal'}
               </Button>
-              {import.meta.env.DEV && (
+              {import.meta.env.DEV && !automationConfigured && (
                 <Button type="button" variant="secondary" size="sm" className="w-full sm:w-auto" onClick={handleDevMarkConnected}>
                   Marcar como conectado (teste)
                 </Button>
@@ -303,7 +326,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             </div>
           )}
 
-          {automationAsPrimary && (
+          {automationConfigured && (
             <AutomationStatusCard
               active
               onRosterActivated={() => {
@@ -392,7 +415,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         </div>
       )}
 
-      {iflightSource && corporatePortalConfig.iflightEnabled && automationAsPrimary && (
+      {iflightSource && corporatePortalConfig.iflightEnabled && automationConfigured && (
         <div className="flex flex-col gap-2 p-4 rounded-xl border border-border/60 bg-muted/20 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <Plane className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -404,7 +427,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         </div>
       )}
 
-      {iflightSource && corporatePortalConfig.iflightEnabled && !automationAsPrimary && (
+      {iflightSource && corporatePortalConfig.iflightEnabled && !automationConfigured && (
         <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-muted/30 min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
