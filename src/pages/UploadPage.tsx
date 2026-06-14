@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
-import { Upload, FileText, CheckCircle, AlertCircle, Plane, Zap } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
@@ -11,7 +11,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
-import { AutoImportModal } from '@/components/roster/AutoImportModal';
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -20,7 +19,6 @@ export default function UploadPage() {
   const [fileName, setFileName] = useState('');
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<{ count: number; airline: string } | null>(null);
-  const [autoImportOpen, setAutoImportOpen] = useState(false);
 
   const processText = useCallback(async (text: string) => {
     if (!user) return;
@@ -178,37 +176,11 @@ export default function UploadPage() {
 
   return (
     <AppLayout>
-      <AutoImportModal
-        open={autoImportOpen}
-        onClose={() => setAutoImportOpen(false)}
-        onImportComplete={() => {
-          setAutoImportOpen(false);
-          setTimeout(() => navigate('/download-roster'), 800);
-        }}
-      />
-
       <div className="max-w-4xl mx-auto min-w-0 space-y-6">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground mb-2 break-words">Importar escala</h1>
           <p className="text-muted-foreground break-words">Envie sua escala em formato texto, PDF ou planilha.</p>
         </div>
-
-        {/* Auto Import CTA */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass border border-primary/20 p-4 sm:p-5 rounded-xl min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <Zap className="w-4 h-4 text-primary shrink-0" />
-                <p className="font-semibold text-foreground">Importação automática</p>
-              </div>
-              <p className="text-sm text-muted-foreground break-words">Importe direto do portal da companhia ou via PDF sem copiar e colar.</p>
-            </div>
-            <Button onClick={() => setAutoImportOpen(true)} className="shrink-0 w-full sm:w-auto">
-              <Zap className="mr-2 h-4 w-4" />
-              Importar automaticamente
-            </Button>
-          </div>
-        </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass p-5 sm:p-8 min-w-0">
           <label htmlFor="file-upload" className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-6 sm:p-10 cursor-pointer hover:border-primary/50 transition-colors text-center min-w-0">

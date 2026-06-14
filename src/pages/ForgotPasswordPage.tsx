@@ -15,6 +15,7 @@ import { AuthRateLimitError } from '@/lib/auth/authRateLimitError';
 import { reportAuthFlowFailure, reportOperationalEvent } from '@/lib/monitoring/errorReporting';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import airplaneBg from '@/assets/airplane-bg.jpg';
 
 /** Texto neutro: o Supabase não revela se o email existe (anti-enumeração). */
 export const FORGOT_PASSWORD_SUCCESS_COPY = {
@@ -126,8 +127,9 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1f3c 40%, #1a3a5c 70%, #0a1628 100%)' }}>
-      <div className="absolute inset-0 bg-black/35" />
+    <div className="min-h-screen relative flex items-center justify-center overflow-hidden">
+      <img src={airplaneBg} alt="" className="absolute inset-0 w-full h-full object-cover scale-105" />
+      <div className="absolute inset-0 bg-black/45" />
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.97 }}

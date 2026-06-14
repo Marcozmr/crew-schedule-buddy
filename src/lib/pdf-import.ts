@@ -724,6 +724,3 @@ export async function importPdfFile(file: File, userId: string): Promise<PdfImpo
   const arrayBuffer = await file.arrayBuffer();
   return importPdfArrayBuffer(file.name, arrayBuffer, userId);
 }
-
-export { parseHeader, mapParsedToRosterEntry };
-export { extractTextFromPdf as extractTextFromPdfBuffer };

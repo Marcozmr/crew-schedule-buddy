@@ -15,6 +15,7 @@ import {
 import { checkRateLimit, getRateLimitMessage } from "@/lib/rate-limit";
 import { reportAuthFlowFailure } from "@/lib/monitoring/errorReporting";
 import { toast } from "sonner";
+import airplaneBg from "@/assets/airplane-bg.jpg";
 
 const RESEND_RATE_KEY = "resend-confirmation";
 
@@ -83,8 +84,13 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1f3c 40%, #1a3a5c 70%, #0a1628 100%)' }}>
-      <div className="absolute inset-0 bg-black/30" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+      <img
+        src={airplaneBg}
+        alt=""
+        className="absolute inset-0 h-full w-full scale-105 object-cover"
+      />
+      <div className="absolute inset-0 bg-black/40" />
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.97 }}

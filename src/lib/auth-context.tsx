@@ -325,9 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.log('[EscalaX boot] auth init ok');
-    }
+    console.log('[EscalaX boot] auth init ok');
   }, []);
 
   return (
