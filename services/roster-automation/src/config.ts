@@ -70,9 +70,17 @@ export const config = {
   },
   headless: () => process.env.ROSTER_AUTOMATION_HEADLESS !== '0',
   /**
-   * Quando `1`, se a Rota de Ouro eCrew não gravar HTML/PDF, volta ao pipeline legado SAB → iFlight.
+   * Quando `0`, desativa o fallback SAB→iFlight (por defeito está ativo).
+   * Se a Rota de Ouro eCrew não gravar HTML/PDF, cai automaticamente no pipeline SAB→iFlight.
    */
-  latamRosterFallbackIflight: () => process.env.LATAM_ROSTER_FALLBACK_IFLIGHT === '1',
+  latamRosterFallbackIflight: () => process.env.LATAM_ROSTER_FALLBACK_IFLIGHT !== '0',
+  /**
+   * Deep link direto para o iFlight Neo (usado como fallback quando o tile SAB falha/SAML 403).
+   * Pode ser sobrescrito via `LATAM_IFLIGHT_DEEP_LINK_URL`.
+   */
+  iflightDeepLinkUrl: () =>
+    process.env.LATAM_IFLIGHT_DEEP_LINK_URL?.trim() ||
+    'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage',
   /** GOL e-Component — portal de escala (login CPF/ANAC no browser). */
   golPortalUrl: () =>
     process.env.GOL_PORTAL_URL?.trim() || 'https://portal-escala.voegol.com.br',

@@ -1,6 +1,6 @@
 /**
- * Orquestração LATAM: SSO → eCrew Rota de Ouro (GET RosterReport HTML/PDF) → importação;
- * fallback opcional SAB→iFlight (`LATAM_ROSTER_FALLBACK_IFLIGHT=1`).
+ * Orquestração LATAM: SSO → SAB → iFlight Neo → CrewRosterReport (PDF) → importação.
+ * eCrew é opcional — só usado se `LATAM_ECREW_ENTRY_URL` estiver definida.
  * MFA / expiração: reconnect_required quando o storageState deixa de ser válido.
  */
 import fs from 'node:fs/promises';
@@ -209,7 +209,7 @@ export async function startConnectFlow(params: {
     });
     await appendRunLog(runId, {
       step: 'portal_connected',
-      message: 'Autenticação OK — eCrew Rota de Ouro (GET RosterReport HTML/PDF) com fallback UI',
+      message: 'Login confirmado — navegando ao SAB → iFlight Neo',
     });
 
     postLoginInstrument = new PostLoginNavigationInstrument();

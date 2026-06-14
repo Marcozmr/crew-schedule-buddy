@@ -35,6 +35,7 @@ export type CorporateFsmStateUi =
   | 'authenticated'
   | 'opening_portal_sab'
   | 'opening_iflight'
+  | 'iflight_loaded'          // iFlight Neo carregado — localizando escala
   | 'locating_roster'
   | 'downloading_report'
   | 'importing_report'

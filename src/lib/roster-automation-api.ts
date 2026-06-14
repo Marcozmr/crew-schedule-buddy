@@ -75,13 +75,13 @@ export async function getLatamSession(
 /** Rótulos em português para os estados persistidos pelo worker (UI secundária / diagnóstico). */
 export function automationStatusLabelPt(status: string | undefined): string {
   const map: Record<string, string> = {
-    disconnected: 'Desligado',
-    portal_connecting: 'Conexão em andamento',
-    portal_connected: 'Portal conectado',
-    iflight_detected: 'Buscando sua escala mais recente',
-    roster_downloading: 'Buscando sua escala mais recente',
+    disconnected: 'Desconectado',
+    portal_connecting: 'Aguardando login LATAM',
+    portal_connected: 'Abrindo iFlight Neo',
+    iflight_detected: 'iFlight Neo carregado',
+    roster_downloading: 'Baixando escala',
     roster_importing: 'Importando escala',
-    roster_connected: 'Escala ativada',
+    roster_connected: 'Concluído',
     reconnect_required: 'É necessário conectar novamente ao portal',
     error: 'Não foi possível concluir automaticamente',
   };

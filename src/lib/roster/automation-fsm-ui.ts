@@ -26,15 +26,19 @@ export const AUTOMATION_FSM_LABELS: Record<
     detail: 'Abrindo o hub de aplicações (incl. iFlightNeo).',
   },
   opening_iflight: {
-    title: 'Acessando iFlight Neo',
+    title: 'Abrindo iFlight Neo',
     detail: 'Abrindo o ambiente de escala autorizado.',
+  },
+  iflight_loaded: {
+    title: 'iFlight Neo carregado',
+    detail: 'Localizando a escala no ambiente iFlight.',
   },
   locating_roster: {
     title: 'Localizando escala',
     detail: 'À espera do ecrã de roster/calendário no iFlight.',
   },
   downloading_report: {
-    title: 'Baixando CrewRosterReport',
+    title: 'Baixando escala',
     detail: 'A iniciar o download do PDF oficial.',
   },
   importing_report: {

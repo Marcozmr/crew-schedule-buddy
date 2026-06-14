@@ -1,9 +1,11 @@
 /**
  * Abertura do iFlight com diagnóstico (href, redirects, 403 Google SAML) e fallbacks no SAB.
+ * Ordem de tentativa: tile SAB → deep link direto → hrefs alternativos.
  */
 import type { BrowserContext, Frame, Locator, Page } from 'playwright';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { log } from '../../logger.js';
+import { config } from '../../config.js';
 import { findIFlightNeoTile, pickIFlightFrame, pickRosterRoot, type LocatorRoot } from './latam-shared-dom.js';
 
 const SCOPE = 'iflight-launcher';
@@ -282,7 +284,68 @@ export async function tryAlternativeIFlightLinks(
 }
 
 /**
- * Fecha separador 403 SAML e tenta hrefs alternativos no SAB.
+ * Tenta aceder ao iFlight Neo via deep link direto (iflightla.ibsplc.aero).
+ * Útil quando o tile SAB não é encontrado ou falha com SAML 403.
+ */
+export async function tryIFlightDirectDeepLink(
+  context: BrowserContext,
+  appendLog: PipelineLogFn,
+  deepLinkUrl: string,
+): Promise<{ workPage: Page; root: LocatorRoot } | null> {
+  await appendLog({ step: 'iflight_deep_link', phase: 'try', url: deepLinkUrl });
+  const tab = await context.newPage();
+  const telemetry: NavTelemetry[] = [];
+  const detach = attachPageTelemetry(tab, telemetry);
+  try {
+    await tab.goto(deepLinkUrl, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await tab.waitForTimeout(3_000);
+    const finalUrl = tab.url();
+    const body = await tab.locator('body').innerText({ timeout: 12_000 }).catch(() => '');
+    await appendLog({
+      step: 'iflight_deep_link',
+      phase: 'after_goto',
+      finalUrl,
+      bodySample: body.slice(0, 300),
+      telemetry: telemetry.slice(-20),
+    });
+    if (isGoogleSamlForbidden(finalUrl, body)) {
+      await appendLog({ step: 'iflight_deep_link', phase: 'google_saml_403', finalUrl });
+      detach();
+      await tab.close().catch(() => {});
+      return null;
+    }
+    if (looksLikeIFlightApp(body, finalUrl)) {
+      await appendLog({ step: 'iflight_deep_link', phase: 'success', finalUrl });
+      detach();
+      const root = await pickRosterRoot(tab);
+      return { workPage: tab, root };
+    }
+    await appendLog({
+      step: 'iflight_deep_link',
+      phase: 'not_recognized',
+      finalUrl,
+      hint: 'Não parece iFlight — possível redirecionamento para login',
+    });
+    detach();
+    await tab.close().catch(() => {});
+    return null;
+  } catch (e) {
+    await appendLog({
+      step: 'iflight_deep_link',
+      phase: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    });
+    detach();
+    await tab.close().catch(() => {});
+    return null;
+  }
+}
+
+/**
+ * Fluxo de abertura do iFlight Neo em 3 tentativas:
+ * 1. Clicar no tile SAB (iFlightNeo / iFlight / eCrew)
+ * 2. Deep link direto (iflightla.ibsplc.aero/iflight-crew/web/getMainPage)
+ * 3. Hrefs alternativos encontrados na página SAB
  */
 export async function openIFlightNeoWithFallbacks(
   context: BrowserContext,
@@ -290,32 +353,59 @@ export async function openIFlightNeoWithFallbacks(
   appendLog: PipelineLogFn,
   failDir: string,
 ): Promise<{ workPage: Page; root: LocatorRoot; resolution: string }> {
-  const primary = await clickPrimaryIFlightNeoTile(context, sabPage, appendLog, failDir);
+  let hadSamlError = false;
+  let badSamlPage: Page | null = null;
 
-  if (primary.ok) {
-    return {
-      workPage: primary.workPage,
-      root: primary.root,
-      resolution: primary.resolution,
-    };
+  // ── Tentativa 1: clicar no tile iFlight Neo / eCrew no SAB ──────────────
+  try {
+    const primary = await clickPrimaryIFlightNeoTile(context, sabPage, appendLog, failDir);
+    if (primary.ok) {
+      return { workPage: primary.workPage, root: primary.root, resolution: primary.resolution };
+    }
+    hadSamlError = primary.badSaml;
+    if (primary.badSaml && primary.badPage !== primary.sabPage) {
+      badSamlPage = primary.badPage;
+    }
+  } catch (tileErr) {
+    await appendLog({
+      step: 'iflight_tile_error',
+      message: tileErr instanceof Error ? tileErr.message : String(tileErr),
+      hint: 'tile_not_found_or_click_failed — passando para deep link',
+    });
   }
 
-  if (primary.badSaml && primary.badPage !== primary.sabPage) {
-    await appendLog({ step: 'iflight_close_bad_tab', url: primary.badPage.url() });
-    await primary.badPage.close().catch(() => {});
+  if (badSamlPage) {
+    await appendLog({ step: 'iflight_close_bad_tab', url: badSamlPage.url() });
+    await badSamlPage.close().catch(() => {});
   }
 
+  // ── Tentativa 2: deep link direto ───────────────────────────────────────
+  const deepLinkUrl = config.iflightDeepLinkUrl();
+  if (deepLinkUrl) {
+    await appendLog({
+      step: 'iflight_fallback_deep_link',
+      message: 'Tile inacessível — tentando deep link direto para o iFlight Neo',
+      deepLinkUrl,
+    });
+    const deepResult = await tryIFlightDirectDeepLink(context, appendLog, deepLinkUrl);
+    if (deepResult) {
+      return { workPage: deepResult.workPage, root: deepResult.root, resolution: 'deep_link' };
+    }
+  }
+
+  // ── Tentativa 3: hrefs alternativos descobertos no DOM do SAB ───────────
   await appendLog({
-    step: 'iflight_primary_failed_saml',
-    message: 'A tentar caminhos alternativos no SAB (hrefs sem OAuth Google)',
+    step: 'iflight_fallback_hrefs',
+    message: 'Deep link inválido — tentando hrefs alternativos no SAB',
   });
-
   const alt = await tryAlternativeIFlightLinks(context, sabPage, appendLog, failDir);
   if (alt) {
     return { workPage: alt.workPage, root: alt.root, resolution: 'fallback_href' };
   }
 
   throw new Error(
-    'iFlight inacessível: tile iFlightNeo abre SAML Google 403 e não há link alternativo válido no SAB',
+    hadSamlError
+      ? 'iFlight inacessível: SAML Google 403, deep link falhou e nenhum href alternativo válido no SAB'
+      : 'iFlight inacessível: tile não encontrado, deep link falhou e nenhum href alternativo válido no SAB',
   );
 }

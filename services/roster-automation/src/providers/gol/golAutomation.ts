@@ -104,6 +104,9 @@ export async function startGolConnectFlow(params: { userId: string; sessionId: s
     if (!imp.success || !imp.rosterId) {
       throw new Error(imp.error ?? 'Importação GOL falhou');
     }
+    if (imp.insertedCount === 0 && !imp.duplicate) {
+      throw new Error('Login realizado, mas nenhuma escala foi importada.');
+    }
 
     await getServiceClient().from('automation_runs').update({ imported_roster_id: imp.rosterId }).eq('id', runId);
     await persistFsmTransition({ runId, sessionId, fsm: 'completed', markSuccess: true, finished: true });

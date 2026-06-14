@@ -29,7 +29,7 @@ export async function importDownloadedPdf(params: {
   pdfBytes: ArrayBuffer;
   automationRunId: string;
   importOrigin?: CorporateAutomationImportOrigin;
-}): Promise<{ success: boolean; rosterId: string | null; error: string | null }> {
+}): Promise<{ success: boolean; rosterId: string | null; insertedCount: number; duplicate: boolean; error: string | null }> {
   const { supabase, userId, fileName, pdfBytes, automationRunId } = params;
   const importOrigin = params.importOrigin ?? 'latam_automation';
   log('importAdapter', 'info', 'import_start', { userId, fileName, bytes: pdfBytes.byteLength, importOrigin });
@@ -45,13 +45,19 @@ export async function importDownloadedPdf(params: {
       automationRunId,
     });
     if (!result.success) {
-      return { success: false, rosterId: null, error: result.error ?? 'Importação falhou' };
+      return { success: false, rosterId: null, insertedCount: 0, duplicate: false, error: result.error ?? 'Importação falhou' };
     }
-    return { success: true, rosterId: result.rosterId, error: null };
+    return {
+      success: true,
+      rosterId: result.rosterId,
+      insertedCount: result.insertedCount,
+      duplicate: result.duplicate === true,
+      error: null,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log('importAdapter', 'error', 'import_exception', { message: msg });
-    return { success: false, rosterId: null, error: msg };
+    return { success: false, rosterId: null, insertedCount: 0, duplicate: false, error: msg };
   }
 }
 
@@ -66,7 +72,7 @@ export async function importLatamHtmlReportBuffer(params: {
   automationRunId: string;
   /** Parser Crew Roster LATAM; outras companhias gravam a mesma origem de automação. */
   importOrigin?: CorporateAutomationImportOrigin;
-}): Promise<{ success: boolean; rosterId: string | null; error: string | null }> {
+}): Promise<{ success: boolean; rosterId: string | null; insertedCount: number; duplicate: boolean; error: string | null }> {
   const importOrigin = params.importOrigin ?? 'latam_automation';
   const text = htmlReportToPlainText(params.htmlUtf8.toString('utf8'));
   const ab = params.htmlUtf8.buffer.slice(
@@ -92,13 +98,19 @@ export async function importLatamHtmlReportBuffer(params: {
       automationRunId: params.automationRunId,
     });
     if (!result.success) {
-      return { success: false, rosterId: null, error: result.error ?? 'Importação HTML falhou' };
+      return { success: false, rosterId: null, insertedCount: 0, duplicate: false, error: result.error ?? 'Importação HTML falhou' };
     }
-    return { success: true, rosterId: result.rosterId, error: null };
+    return {
+      success: true,
+      rosterId: result.rosterId,
+      insertedCount: result.insertedCount,
+      duplicate: result.duplicate === true,
+      error: null,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log('importAdapter', 'error', 'import_html_exception', { message: msg });
-    return { success: false, rosterId: null, error: msg };
+    return { success: false, rosterId: null, insertedCount: 0, duplicate: false, error: msg };
   }
 }
 
@@ -127,6 +139,9 @@ export async function importLatamEcrewCaptureFiles(params: {
     if (!r.success || !r.rosterId) {
       throw new Error(r.error ?? 'Falha ao importar PDF eCrew');
     }
+    if (r.insertedCount === 0 && !r.duplicate) {
+      throw new Error('Login realizado, mas nenhuma escala foi importada.');
+    }
     return { rosterId: r.rosterId, used: 'pdf' };
   }
   if (params.htmlPath) {
@@ -140,6 +155,9 @@ export async function importLatamEcrewCaptureFiles(params: {
     });
     if (!r.success || !r.rosterId) {
       throw new Error(r.error ?? 'Falha ao importar HTML eCrew');
+    }
+    if ((r.insertedCount ?? 0) === 0 && !r.duplicate) {
+      throw new Error('Login realizado, mas nenhuma escala foi importada.');
     }
     return { rosterId: r.rosterId, used: 'html' };
   }

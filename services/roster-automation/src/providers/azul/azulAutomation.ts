@@ -102,6 +102,7 @@ export async function startAzulConnectFlow(params: { userId: string; sessionId: 
         importOrigin: 'azul_automation',
       });
       if (!imp.success || !imp.rosterId) throw new Error(imp.error ?? 'Importação PDF Azul falhou');
+      if (imp.insertedCount === 0 && !imp.duplicate) throw new Error('Login realizado, mas nenhuma escala foi importada.');
       rosterId = imp.rosterId;
     } else if (htmlPath) {
       const htmlUtf8 = await fs.readFile(htmlPath);
@@ -114,6 +115,7 @@ export async function startAzulConnectFlow(params: { userId: string; sessionId: 
         importOrigin: 'azul_automation',
       });
       if (!imp.success || !imp.rosterId) throw new Error(imp.error ?? 'Importação HTML Azul falhou');
+      if (imp.insertedCount === 0 && !imp.duplicate) throw new Error('Login realizado, mas nenhuma escala foi importada.');
       rosterId = imp.rosterId;
     } else {
       await saveFailureArtifacts(page, failDir, 'azul-no-artifact');
