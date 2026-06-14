@@ -243,12 +243,14 @@ async function invokeSendSupportEmail(body: Record<string, unknown>): Promise<{
   json: Record<string, unknown> | null;
 }> {
   const expectedUrl = resolveSupportFunctionPostUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
-  console.log('[support-service] expected function URL:', expectedUrl);
-  console.log('[support-service] payload:', {
-    ...body,
-    message: typeof body.message === 'string' ? `${body.message.slice(0, 160)}…` : body.message,
-  });
-  console.log('[support-service] fetch start');
+  if (import.meta.env.DEV) {
+    console.log('[support-service] expected function URL:', expectedUrl);
+    console.log('[support-service] payload:', {
+      ...body,
+      message: typeof body.message === 'string' ? `${body.message.slice(0, 160)}…` : body.message,
+    });
+    console.log('[support-service] fetch start');
+  }
 
   const { data, error } = await supabase.functions.invoke('send-support-email', { body });
 
@@ -265,9 +267,11 @@ async function invokeSendSupportEmail(body: Record<string, unknown>): Promise<{
       } catch {
         /* ignore */
       }
-      console.log('[support-service] fetch resolved');
-      console.log('[support-service] HTTP status:', status);
-      console.log('[support-service] response body:', json ?? (text.length > 4000 ? `${text.slice(0, 4000)}…` : text));
+      if (import.meta.env.DEV) {
+        console.log('[support-service] fetch resolved');
+        console.log('[support-service] HTTP status:', status);
+        console.log('[support-service] response body:', json ?? (text.length > 4000 ? `${text.slice(0, 4000)}…` : text));
+      }
       return { status, text, json };
     }
     console.error('[support-service] caught error:', error);
@@ -277,9 +281,11 @@ async function invokeSendSupportEmail(body: Record<string, unknown>): Promise<{
   const json =
     data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
   const text = json ? JSON.stringify(data) : String(data ?? '');
-  console.log('[support-service] fetch resolved');
-  console.log('[support-service] HTTP status:', 200);
-  console.log('[support-service] response body:', json ?? text);
+  if (import.meta.env.DEV) {
+    console.log('[support-service] fetch resolved');
+    console.log('[support-service] HTTP status:', 200);
+    console.log('[support-service] response body:', json ?? text);
+  }
   return { status: 200, text, json };
 }
 
@@ -371,12 +377,14 @@ async function resolveAccessTokenForSupport(): Promise<
   }
 
   const token = session?.access_token?.trim() ? session.access_token : undefined;
-  console.log('[support-service] session exists:', !!session);
-  console.log('[support-service] user exists:', !!session?.user);
-  console.log('[support-service] JWT presente:', !!token);
-  console.log('[support-service] token length:', token?.length ?? 0);
-  if (session?.expires_at != null) {
-    console.log('[support-service] expires_at (unix s):', session.expires_at);
+  if (import.meta.env.DEV) {
+    console.log('[support-service] session exists:', !!session);
+    console.log('[support-service] user exists:', !!session?.user);
+    console.log('[support-service] JWT presente:', !!token);
+    console.log('[support-service] token length:', token?.length ?? 0);
+    if (session?.expires_at != null) {
+      console.log('[support-service] expires_at (unix s):', session.expires_at);
+    }
   }
 
   if (!token) {
@@ -429,9 +437,11 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
   const projectRef = extractProjectRefFromSupabaseUrl(baseUrl!);
   const endpointUrl = resolveSupportFunctionPostUrl(baseUrl);
 
-  console.log('[support-service] --- submitSupport ---');
-  console.log('[support-service] VITE_SUPABASE_URL ref:', projectRef ?? '(inválido)');
-  console.log('[support-service] POST URL (mesmo projeto que a sessão):', endpointUrl);
+  if (import.meta.env.DEV) {
+    console.log('[support-service] --- submitSupport ---');
+    console.log('[support-service] VITE_SUPABASE_URL ref:', projectRef ?? '(inválido)');
+    console.log('[support-service] POST URL (mesmo projeto que a sessão):', endpointUrl);
+  }
   if (projectRef && projectRef !== ESCALAX_SUPABASE_PROJECT_REF) {
     console.warn(
       '[support-service] Ambiente não é o projeto EscalaX esperado — ok para dev; JWT e apikey devem ser do mesmo projeto que esta URL.',
@@ -455,7 +465,9 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
 
   const resolved = await resolveAccessTokenForSupport();
   if (!resolved.ok) {
-    console.log('[support-service] final interpreted outcome:', resolved.result.outcome, resolved.result.userMessage);
+    if (import.meta.env.DEV) {
+      console.log('[support-service] final interpreted outcome:', resolved.result.outcome, resolved.result.userMessage);
+    }
     return resolved.result;
   }
 
@@ -493,9 +505,13 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
     let { status, text, json } = await invokeSendSupportEmail(body);
 
     if (status === 401) {
-      console.warn('[support-service] HTTP 401 — refreshSession + getSession e nova tentativa invoke');
+      if (import.meta.env.DEV) {
+        console.warn('[support-service] HTTP 401 — refreshSession + getSession e nova tentativa invoke');
+      }
       const { data: ref, error: refErr } = await supabase.auth.refreshSession();
-      console.log('[support-service] retry refresh result:', refErr?.message ?? 'ok', !!ref.session);
+      if (import.meta.env.DEV) {
+        console.log('[support-service] retry refresh result:', refErr?.message ?? 'ok', !!ref.session);
+      }
       await supabase.auth.getSession();
       const second = await invokeSendSupportEmail(body);
       status = second.status;
@@ -513,7 +529,7 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
           pickServerUserMessage(d ?? {}) ??
           'Sessão não aceite pelo servidor. Saia da conta, entre de novo e tente enviar outra vez.',
       };
-      console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage);
+      if (import.meta.env.DEV) { console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage); }
       return r;
     }
 
@@ -522,7 +538,7 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
     if (d) {
       warnIfNotResendTransport(d, 'POST response');
       const r = buildSupportResultLoose(d, text);
-      console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage);
+      if (import.meta.env.DEV) { console.log('[support-service] final interpreted outcome:', r.outcome, r.userMessage); }
       return r;
     }
 

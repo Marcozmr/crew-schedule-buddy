@@ -95,7 +95,9 @@ try {
 
 export const supabase = supabaseInstance;
 
-console.log('[EscalaX boot] supabase client init ok');
+if (import.meta.env.DEV) {
+  console.log('[EscalaX boot] supabase client init ok');
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

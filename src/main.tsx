@@ -14,7 +14,9 @@ import { logEnvValidationOnBoot } from "./lib/envCheck";
 
 initSentry();
 registerAppRecoveryHandlers();
-console.log("[EscalaX boot] build id:", getEscalaxBuildId());
+if (import.meta.env.DEV) {
+  console.log("[EscalaX boot] build id:", getEscalaxBuildId());
+}
 logEnvValidationOnBoot();
 runStorageMigrationOnBoot();
 

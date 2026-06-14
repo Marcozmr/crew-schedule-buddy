@@ -74,7 +74,9 @@ const Loading = () => (
 /** Log de router após BrowserRouter montar (evita referência órfã — BootTrace tem de existir). */
 function BootTrace() {
   useEffect(() => {
-    console.log("[EscalaX boot] router init ok");
+    if (import.meta.env.DEV) {
+      console.log("[EscalaX boot] router init ok");
+    }
   }, []);
   return null;
 }
@@ -322,7 +324,9 @@ export function AppAuthShell() {
 const App = () => {
   useEffect(() => {
     clearRecoverySessionFlag();
-    console.log("[EscalaX boot] app mount ok");
+    if (import.meta.env.DEV) {
+      console.log("[EscalaX boot] app mount ok");
+    }
   }, []);
   return (
     <QueryClientProvider client={queryClient}>
