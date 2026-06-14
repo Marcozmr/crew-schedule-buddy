@@ -1,0 +1,17 @@
+{
+  "name": "EscalaX",
+  "short_name": "EscalaX",
+  "description": "EscalaX",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B5ED7",
+  "theme_color": "#0B5ED7",
+  "icons": [
+    {
+      "src": "/escalax-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
