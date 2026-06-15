@@ -2,8 +2,14 @@
 #
 # EscalaX — Roster Automation Worker (Node.js + Playwright Chromium)
 #
-# Build:   docker build -t escalax-roster-automation .
-# Run:     docker run --env-file .env -p 8790:8790 escalax-roster-automation
+# IMPORTANTE: o contexto de build é a RAIZ do repositório (comportamento padrão
+# do Render/Railway quando o Dockerfile está em um subdiretório).
+# Todos os COPY usam o prefixo services/roster-automation/.
+#
+# Build manual:
+#   docker build -f services/roster-automation/Dockerfile -t escalax-roster-automation .
+# Run:
+#   docker run --env-file services/roster-automation/.env -p 8790:8790 escalax-roster-automation
 
 FROM node:20-slim
 
@@ -15,21 +21,25 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
-# 1. Dependências npm (prod + dev — tsup é devDependency, necessário para o build)
-COPY package.json package-lock.json ./
+# 1. Dependências do worker — package.json da raiz do repo é do frontend Vite,
+#    por isso copiamos explicitamente do subdiretório correto.
+COPY services/roster-automation/package.json services/roster-automation/package-lock.json ./
+
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci
 
 # 2. Chromium + dependências de sistema (camada cacheada enquanto package.json não mudar)
 RUN npx playwright install chromium --with-deps
 
-# 3. Código-fonte e compilação TypeScript → dist/
-COPY . .
-RUN npm run build
+# 3. Código-fonte do worker
+COPY services/roster-automation/tsconfig.json services/roster-automation/tsup.config.ts ./
+COPY services/roster-automation/src/ ./src/
 
-# Falha o build explicitamente se dist/index.js não foi gerado
-RUN node -e "require('fs').accessSync('dist/index.js')" \
-  && echo "dist/index.js OK"
+# 4. Compilação TypeScript → dist/
+RUN npm run build && ls -la dist/
+
+# Validação explícita: falha o build se dist/index.js não foi gerado
+RUN node -e "require('fs').accessSync('dist/index.js')" && echo "✓ dist/index.js OK"
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 ENV NODE_ENV=production
