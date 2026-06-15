@@ -1,16 +1,15 @@
 /**
  * SAB → contexto tripulante → iFlightNeo (com fallbacks) → escala → CrewRosterReport (PDF).
- * Ordem de tentativa: (0) deep link direto → (1) tile SAB → (2) hrefs alternativos.
+ * Ordem de tentativa: (1) tile SAB → (2) deep link (com contexto SAB) → (3) hrefs alternativos.
+ * Nota: tentativa 0 (iFlight direto sem SAB) é feita em latam-production-pipeline antes deste passo.
  */
-import path from 'node:path';
 import type { BrowserContext, Frame, Page } from 'playwright';
 import { log } from '../../logger.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { withRetries } from '../../retry.js';
-import { config } from '../../config.js';
 import { waitForSabPortalSurface } from './navigation.js';
 import { clickSabCrewHeaderContext } from './sab-crew-header.js';
-import { openIFlightNeoWithFallbacks, tryIFlightDirectDeepLink } from './iflight-launcher.js';
+import { openIFlightNeoWithFallbacks } from './iflight-launcher.js';
 import type { LocatorRoot } from './latam-shared-dom.js';
 import type { CorporateFsmState } from './fsm-types.js';
 import type { PostLoginNavigationInstrument, NavigationDebugPayload } from './post-login-navigation-instrumentation.js';
@@ -80,50 +79,6 @@ export async function runSabToCrewRosterPdf(params: {
   const { context, page, runId, failDir, appendLog, onFsmPhase, instrument, persistNavigationDebug } = params;
 
   await appendLog({ step: 'pipeline_start', runId, phase: 'sab_iflight_crewroster' });
-
-  // ── Tentativa 0: deep link direto (caminho mais rápido — bypassa tile SAB) ──
-  const deepLinkUrl = config.iflightDeepLinkUrl();
-  if (deepLinkUrl) {
-    await appendLog({ step: 'iflight_deep_link_shortcut', phase: 'try', deepLinkUrl });
-    const direct = await tryIFlightDirectDeepLink(context, appendLog, deepLinkUrl);
-    if (direct) {
-      await appendLog({ step: 'iflight_deep_link_shortcut', phase: 'ok', url: direct.workPage.url() });
-      await onFsmPhase?.('opening_iflight');
-      await onFsmPhase?.('iflight_loaded');
-      if (instrument) {
-        const dbg = await instrument.buildTechnicalSnapshot(direct.workPage, 'iflight_entry_deeplink', appendLog);
-        await persistNavigationDebug?.(dbg);
-      }
-      try {
-        await onFsmPhase?.('locating_roster');
-        await waitForRosterShell(direct.root, appendLog);
-        await appendLog({ step: 'roster_report_candidate', ok: true, note: 'shell_text_matched_deeplink' });
-        if (instrument) {
-          const dbg = await instrument.buildTechnicalSnapshot(direct.workPage, 'roster_area_ready_deeplink', appendLog);
-          await persistNavigationDebug?.(dbg);
-        }
-        await onFsmPhase?.('downloading_report');
-        const { buffer, suggestedName } = await capturePdfDownloadOrResponse(
-          direct.workPage,
-          direct.root,
-          appendLog,
-          failDir,
-          instrument,
-        );
-        return { buffer, fileName: suggestedName };
-      } catch (e) {
-        await appendLog({
-          step: 'iflight_deep_link_shortcut',
-          phase: 'roster_failed',
-          message: e instanceof Error ? e.message : String(e),
-          note: 'Fallback para SAB → tile iFlight Neo',
-        });
-        await direct.workPage.close().catch(() => {});
-      }
-    } else {
-      await appendLog({ step: 'iflight_deep_link_shortcut', phase: 'not_iflight' });
-    }
-  }
 
   // ── Via SAB: aguardar portal → tile iFlight → roster ─────────────────────
   await onFsmPhase?.('opening_portal_sab');

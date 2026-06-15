@@ -1,8 +1,9 @@
 /**
- * Produção LATAM: pipeline SAB → iFlight Neo → CrewRosterReport (PDF).
- * eCrew (Rota de Ouro) é tentado apenas se `LATAM_ECREW_ENTRY_URL` estiver definida
- * ou se o browser já estiver em /ecrew/. Caso contrário, o fluxo vai diretamente ao SAB.
- * O fallback SAB → iFlight pode ser desativado via `LATAM_ROSTER_FALLBACK_IFLIGHT=0`.
+ * Produção LATAM: pipeline de captura de escala → CrewRosterReport (PDF).
+ * Ordem de tentativa (após SSO):
+ *   0. eCrew — apenas se `LATAM_ECREW_ENTRY_URL` definida ou browser já em /ecrew/
+ *   1. iFlight Neo direto — `LATAM_IFLIGHT_DEEP_LINK_URL` (default: iflightla.ibsplc.aero/iflight)
+ *   2. SAB → tile iFlight → deep link (com contexto SAB) → hrefs alternativos
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -11,7 +12,9 @@ import { config } from '../../config.js';
 import { getServiceClient } from '../../db.js';
 import { importLatamEcrewCaptureFiles, importDownloadedPdf } from '../../importAdapter.js';
 import { ensurePortalSabSurface } from './portal-sab-navigation.js';
-import { runSabToCrewRosterPdf } from './sab-iflight-pipeline.js';
+import { runSabToCrewRosterPdf, waitForRosterShell } from './sab-iflight-pipeline.js';
+import { tryIFlightDirectDeepLink } from './iflight-launcher.js';
+import { capturePdfDownloadOrResponse } from './pdf-capture-hybrid.js';
 import type { CorporateFsmState } from './fsm-types.js';
 import type { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
 import type { NavigationDebugPayload } from './post-login-navigation-instrumentation.js';
@@ -124,7 +127,49 @@ export async function runLatamGoldPathRosterImport(params: {
     });
   }
 
-  // ── SAB → iFlight Neo (rota principal) ───────────────────────────────────────
+  // ── Tentativa 0: acesso direto ao iFlight Neo (sem SAB) ──────────────────────
+  // Tenta as duas URLs conhecidas em ordem antes de ir ao SAB.
+  const iflightDirectUrls = [
+    config.iflightDeepLinkUrl(),                         // primária (env ou getMainPage)
+    'https://iflightla.ibsplc.aero/iflight',             // fallback simples
+  ].filter((u, i, arr) => u && arr.indexOf(u) === i);   // remove duplicatas / vazios
+
+  for (const iflightDirectUrl of iflightDirectUrls) {
+    await appendLog({ step: 'iflight_direct_attempt', url: iflightDirectUrl });
+    const direct = await tryIFlightDirectDeepLink(context, appendLog, iflightDirectUrl);
+    if (!direct) {
+      await appendLog({ step: 'iflight_direct_attempt', phase: 'not_iflight', url: iflightDirectUrl });
+      continue;
+    }
+    await onFsmPhase?.('opening_iflight');
+    await onFsmPhase?.('iflight_loaded');
+    try {
+      await onFsmPhase?.('locating_roster');
+      await waitForRosterShell(direct.root, appendLog, 30_000);
+      await onFsmPhase?.('downloading_report');
+      const { buffer: directBuf, suggestedName: directName } = await capturePdfDownloadOrResponse(
+        direct.workPage,
+        direct.root,
+        appendLog,
+        path.join(sessionUserDir, 'failures'),
+        instrument,
+      );
+      await onFsmPhase?.('importing_report');
+      const { rosterId } = await importPdfBuffer({ userId, runId, fileName: directName, buffer: directBuf });
+      return { rosterId, mode: 'sab_iflight' };
+    } catch (e) {
+      await appendLog({
+        step: 'iflight_direct_attempt',
+        phase: 'failed',
+        url: iflightDirectUrl,
+        message: e instanceof Error ? e.message : String(e),
+        note: 'Tentando próxima URL ou fallback SAB',
+      });
+      await direct.workPage.close().catch(() => {});
+    }
+  }
+
+  // ── SAB → iFlight Neo (fallback) ─────────────────────────────────────────────
   await appendLog({ step: 'sab_iflight_start', message: 'Iniciando pipeline SAB → iFlight Neo → CrewRosterReport' });
   const sabUrl = config.latamPortalSabUrl();
   await ensurePortalSabSurface(page, sabUrl, appendLog);
