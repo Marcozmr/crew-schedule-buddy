@@ -1,4 +1,6 @@
 import Fastify from 'fastify';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { config } from './config.js';
 import { getUserIdFromJwt } from './auth.js';
 import { getServiceClient } from './db.js';
@@ -6,6 +8,7 @@ import { log } from './logger.js';
 import { startConnectFlow, runSyncFlow } from './providers/latam/latamAutomation.js';
 import { startGolConnectFlow } from './providers/gol/golAutomation.js';
 import { startAzulConnectFlow } from './providers/azul/azulAutomation.js';
+import { encryptSession } from './session-crypto.js';
 
 const app = Fastify({ logger: false });
 
@@ -16,7 +19,7 @@ app.addHook('onRequest', async (req, reply) => {
     reply.header('Access-Control-Allow-Origin', origin);
     reply.header('Vary', 'Origin');
     reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept');
-    reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    reply.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   }
   if (req.method === 'OPTIONS') {
     reply.status(204).send();
@@ -450,6 +453,227 @@ app.post('/v1/azul/connect', async (req, reply) => {
   );
 
   return { sessionId, runId };
+});
+
+// ── Domínios cujos cookies são aceites (servidor filtra; extensão filtra de novo) ──────────────
+const ALLOWED_COOKIE_DOMAINS = [
+  'portal.latam.com',
+  '.portal.latam.com',
+  'iflightla.ibsplc.aero',
+  '.iflightla.ibsplc.aero',
+];
+
+function isCookieDomainAllowed(domain: string): boolean {
+  return ALLOWED_COOKIE_DOMAINS.some((d) => domain === d || domain.endsWith(d));
+}
+
+type ChromeSameSite = 'no_restriction' | 'lax' | 'strict' | 'unspecified';
+type PlaywrightSameSite = 'Strict' | 'Lax' | 'None';
+
+interface ChromeCookieItem {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expirationDate?: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite?: ChromeSameSite;
+}
+
+interface PlaywrightCookieItem {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: PlaywrightSameSite;
+}
+
+function chromeSameSiteToPlaywright(s: ChromeSameSite | undefined): PlaywrightSameSite {
+  if (s === 'strict') return 'Strict';
+  if (s === 'no_restriction') return 'None';
+  return 'Lax';
+}
+
+function toPlaywrightCookie(c: ChromeCookieItem): PlaywrightCookieItem {
+  return {
+    name: c.name,
+    value: c.value,
+    domain: c.domain,
+    path: c.path,
+    expires: c.expirationDate ?? -1,
+    httpOnly: c.httpOnly,
+    secure: c.secure,
+    sameSite: chromeSameSiteToPlaywright(c.sameSite),
+  };
+}
+
+/**
+ * Importa cookies capturados pela extensão Chrome, cifra-os e guarda na BD.
+ * Dispara sync imediatamente. Nenhum cookie é registado em logs.
+ */
+app.post('/v1/latam/session/import', async (req, reply) => {
+  log('api', 'info', 'session_import_request', { method: req.method, url: req.url });
+
+  const userId = await requireUser(req.headers.authorization);
+  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+
+  const body = (req.body ?? {}) as { cookies?: unknown[]; userAgent?: string };
+  if (!Array.isArray(body.cookies) || body.cookies.length === 0) {
+    return reply.status(400).send({ error: 'cookies[] obrigatório e não pode ser vazio' });
+  }
+
+  // Validação de domínio — segurança em profundidade (a extensão também filtra)
+  const rawCookies = body.cookies as ChromeCookieItem[];
+  const forbidden = rawCookies.filter((c) => !isCookieDomainAllowed(c.domain));
+  if (forbidden.length > 0) {
+    log('api', 'warn', 'session_import_forbidden_domain', {
+      userId,
+      domains: forbidden.map((c) => c.domain),
+    });
+    return reply.status(400).send({
+      error: `Domínio(s) não permitidos: ${forbidden.map((c) => c.domain).join(', ')}`,
+    });
+  }
+
+  const playwrightCookies = rawCookies.map(toPlaywrightCookie);
+  const storageState = { cookies: playwrightCookies, origins: [] };
+  const encryptedBlob = encryptSession(JSON.stringify(storageState), config.sessionEncryptionKey());
+
+  const supabase = getServiceClient();
+  const now = new Date().toISOString();
+  const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: session, error: se } = await supabase
+    .from('automation_sessions')
+    .upsert(
+      {
+        user_id: userId,
+        provider: 'latam',
+        status: 'portal_connected',
+        encrypted_session_blob: encryptedBlob,
+        session_valid_until: validUntil,
+        last_error: null,
+        updated_at: now,
+      },
+      { onConflict: 'user_id,provider' },
+    )
+    .select('id')
+    .single();
+
+  if (se || !session) {
+    log('api', 'error', 'session_import_upsert_failed', { message: se?.message ?? 'no data' });
+    return reply.status(500).send({ error: 'Falha ao guardar sessão' });
+  }
+
+  const sessionId = (session as { id: string }).id;
+
+  await supabase
+    .from('user_roster_connection')
+    .update({ automation_session_id: sessionId, updated_at: now })
+    .eq('user_id', userId);
+
+  // Finalizar runs presos antes de criar nova
+  const last = await latestRunForSession(supabase, sessionId);
+  if (last && !last.finished_at) {
+    await finalizeStaleRun(supabase, last, sessionId);
+  }
+
+  const { data: run, error: re } = await supabase
+    .from('automation_runs')
+    .insert({ session_id: sessionId, user_id: userId, status: 'roster_downloading', step_logs: [] })
+    .select('id')
+    .single();
+
+  if (re || !run) {
+    log('api', 'error', 'session_import_run_failed', { message: re?.message ?? 'no data' });
+    return reply.status(500).send({ error: 'Falha ao criar execução de sync' });
+  }
+
+  const runId = (run as { id: string }).id;
+  log('api', 'info', 'session_import_ok', { userId, sessionId, runId, cookieCount: playwrightCookies.length });
+
+  void runSyncFlow({ userId, sessionId, runId }).catch(async (e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    log('api', 'error', 'session_import_sync_unhandled', { sessionId, runId, message: msg });
+    const sb = getServiceClient();
+    const ts = new Date().toISOString();
+    await sb.from('automation_runs').update({ status: 'error', error_message: msg, finished_at: ts, updated_at: ts }).eq('id', runId);
+    await sb.from('automation_sessions').update({ status: 'error', last_error: msg, updated_at: ts }).eq('id', sessionId);
+  });
+
+  return { sessionId, runId };
+});
+
+/** Estado da sessão LATAM do utilizador autenticado (para o popup da extensão). */
+app.get('/v1/latam/session/status', async (req, reply) => {
+  const userId = await requireUser(req.headers.authorization);
+  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+
+  const supabase = getServiceClient();
+  const { data: sess } = await supabase
+    .from('automation_sessions')
+    .select('id, status, session_valid_until, last_error, updated_at')
+    .eq('user_id', userId)
+    .eq('provider', 'latam')
+    .maybeSingle();
+
+  if (!sess) return { connected: false, status: 'disconnected' };
+
+  const s = sess as { id: string; status: string; session_valid_until?: string; last_error?: string; updated_at: string };
+  return {
+    connected: s.status === 'portal_connected' || s.status === 'roster_connected',
+    status: s.status,
+    sessionId: s.id,
+    validUntil: s.session_valid_until ?? null,
+    lastError: s.last_error ?? null,
+    updatedAt: s.updated_at,
+  };
+});
+
+/** Revoga a sessão LATAM: apaga blob cifrado e repõe status disconnected. */
+app.delete('/v1/latam/session', async (req, reply) => {
+  const userId = await requireUser(req.headers.authorization);
+  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+
+  const supabase = getServiceClient();
+  const { data: sess } = await supabase
+    .from('automation_sessions')
+    .select('id, storage_state_path')
+    .eq('user_id', userId)
+    .eq('provider', 'latam')
+    .maybeSingle();
+
+  if (!sess) return { ok: true };
+
+  const s = sess as { id: string; storage_state_path?: string };
+
+  // Apaga ficheiro de disco se existir (sessões Playwright antigas)
+  if (s.storage_state_path) {
+    try {
+      await fs.unlink(path.join(config.dataDir(), s.storage_state_path));
+    } catch {
+      /* ficheiro já não existe — não é erro */
+    }
+  }
+
+  const now = new Date().toISOString();
+  await supabase
+    .from('automation_sessions')
+    .update({
+      status: 'disconnected',
+      encrypted_session_blob: null,
+      storage_state_path: null,
+      last_error: null,
+      updated_at: now,
+    })
+    .eq('id', s.id);
+
+  log('api', 'info', 'session_revoked', { userId, sessionId: s.id });
+  return { ok: true };
 });
 
 app.get('/health', async () => ({ ok: true }));

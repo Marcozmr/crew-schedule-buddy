@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EscalaX — Sessão iFlight</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: #1a1a1a;
+      background: #fff;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .header-logo {
+      width: 28px; height: 28px;
+      background: #2563eb;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 12px;
+      flex-shrink: 0;
+    }
+    .header-title { font-weight: 600; font-size: 14px; }
+    .header-sub { font-size: 11px; color: #6b7280; }
+
+    .body { padding: 16px; }
+
+    /* estado */
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .pill-ok    { background: #dcfce7; color: #166534; }
+    .pill-ok .dot { background: #16a34a; }
+    .pill-error { background: #fee2e2; color: #991b1b; }
+    .pill-error .dot { background: #dc2626; }
+    .pill-warn  { background: #fef9c3; color: #92400e; }
+    .pill-warn .dot { background: #ca8a04; }
+    .pill-idle  { background: #f3f4f6; color: #374151; }
+    .pill-idle .dot { background: #9ca3af; }
+
+    .msg { font-size: 12px; color: #374151; line-height: 1.55; margin-bottom: 12px; }
+    .msg-hint { font-size: 11px; color: #6b7280; line-height: 1.5; margin-bottom: 14px; }
+
+    /* consentimento */
+    .consent-box {
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      border-radius: 8px; padding: 12px;
+      font-size: 11px; color: #1e3a8a; line-height: 1.55;
+      margin-bottom: 14px;
+    }
+    .consent-box strong { display: block; font-size: 12px; margin-bottom: 4px; }
+    .consent-box ul { padding-left: 16px; margin-top: 6px; }
+    .consent-box li { margin-bottom: 3px; }
+
+    /* botões */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; padding: 9px 14px; border-radius: 7px;
+      font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-danger  { background: #fff; color: #dc2626; border: 1px solid #fca5a5; margin-top: 8px; }
+    .btn-danger:hover:not(:disabled) { background: #fef2f2; }
+    .btn-ghost   { background: transparent; color: #6b7280; font-size: 11px; font-weight: 500; padding: 6px 0; margin-top: 4px; }
+    .btn-ghost:hover:not(:disabled) { color: #374151; }
+
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid #93c5fd;
+      border-top-color: #2563eb; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 12px 0; }
+
+    .session-info { font-size: 11px; color: #6b7280; margin-bottom: 10px; }
+    .session-info span { color: #374151; font-weight: 500; }
+
+    #screen-loading,
+    #screen-no-escalax,
+    #screen-wrong-domain,
+    #screen-consent,
+    #screen-connected,
+    #screen-error { display: none; }
+
+    .active { display: block !important; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">EX</div>
+  <div>
+    <div class="header-title">EscalaX</div>
+    <div class="header-sub">Sessão iFlight</div>
+  </div>
+</div>
+
+<div class="body">
+
+  <!-- A: Carregando -->
+  <div id="screen-loading">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+      <div class="spinner"></div>
+      <span class="msg" style="margin:0;">Verificando...</span>
+    </div>
+  </div>
+
+  <!-- B: EscalaX não aberto -->
+  <div id="screen-no-escalax">
+    <span class="status-pill pill-warn"><span class="dot"></span>EscalaX não encontrado</span>
+    <p class="msg">Abra o <strong>EscalaX</strong> em outra aba do Chrome e faça login antes de usar esta extensão.</p>
+    <a href="https://www.escalax.app.br" target="_blank" class="btn btn-primary" style="text-decoration:none;">
+      Abrir EscalaX
+    </a>
+  </div>
+
+  <!-- C: Domínio incorreto -->
+  <div id="screen-wrong-domain">
+    <span class="status-pill pill-warn"><span class="dot"></span>Domínio não autorizado</span>
+    <p class="msg">Esta extensão funciona apenas quando você está no <strong>iFlight Neo</strong> ou no <strong>portal LATAM</strong>.</p>
+    <p class="msg-hint">Navegue até <strong>iflightla.ibsplc.aero</strong> ou <strong>portal.latam.com</strong>, faça login e tente novamente.</p>
+  </div>
+
+  <!-- D: Consentimento -->
+  <div id="screen-consent">
+    <span class="status-pill pill-idle"><span class="dot"></span>Pronto para conectar</span>
+    <div class="consent-box">
+      <strong>Você autoriza o EscalaX a:</strong>
+      <ul>
+        <li>Capturar cookies de sessão de <strong>portal.latam.com</strong> e <strong>iflightla.ibsplc.aero</strong></li>
+        <li>Usar esses cookies para baixar sua escala automaticamente</li>
+        <li>Armazenar a sessão de forma cifrada no servidor EscalaX</li>
+      </ul>
+      <p style="margin-top:8px;"><strong>Nunca são capturados:</strong> senha, dados de outros sites ou informações pessoais além da sessão de escala.</p>
+    </div>
+    <button id="btn-authorize" class="btn btn-primary">
+      Autorizar sincronização
+    </button>
+    <button id="btn-cancel" class="btn btn-ghost">Cancelar</button>
+  </div>
+
+  <!-- E: Enviando -->
+  <div id="screen-sending" style="display:none;">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+      <div class="spinner"></div>
+      <span class="msg" style="margin:0;">Enviando sessão para o EscalaX...</span>
+    </div>
+  </div>
+
+  <!-- F: Conectado / sincronizando -->
+  <div id="screen-connected">
+    <span class="status-pill pill-ok"><span class="dot"></span>Sessão conectada</span>
+    <p class="msg" id="connected-msg">Sua sessão iFlight está ativa. O EscalaX sincronizará sua escala automaticamente.</p>
+    <p class="session-info" id="session-valid-until"></p>
+    <button id="btn-resync" class="btn btn-primary" style="margin-top:4px;">
+      Sincronizar agora
+    </button>
+    <hr class="divider" />
+    <button id="btn-revoke" class="btn btn-danger">
+      Revogar sessão
+    </button>
+  </div>
+
+  <!-- G: Erro -->
+  <div id="screen-error">
+    <span class="status-pill pill-error"><span class="dot"></span>Erro</span>
+    <p class="msg" id="error-msg">Ocorreu um erro.</p>
+    <button id="btn-retry" class="btn btn-primary" style="margin-top:4px;">
+      Tentar novamente
+    </button>
+  </div>
+
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

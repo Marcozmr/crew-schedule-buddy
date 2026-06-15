@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { CheckCircle2, Loader2, RefreshCw, Sparkles, Unlink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { useAutomationSessionFromSupabase } from '@/hooks/useAutomationSessionFromSupabase';
@@ -9,7 +9,7 @@ import {
   decideLatamAutomationKick,
   mapAutomationToUiPhase,
 } from '@/lib/roster/automation-ui-phase';
-import { postLatamSync } from '@/lib/roster-automation-api';
+import { postLatamSync, deleteLatamSession } from '@/lib/roster-automation-api';
 import { formatDateTimeBR } from '@/lib/date-utils';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { reportOperationalEvent } from '@/lib/monitoring/errorReporting';
@@ -38,6 +38,7 @@ export function AutomationStatusCard({
 
   const [retryNonce, setRetryNonce] = useState(0);
   const [manualRetryBusy, setManualRetryBusy] = useState(false);
+  const [revokeBusy, setRevokeBusy] = useState(false);
   const successHandled = useRef(false);
 
   useEffect(() => {
@@ -101,6 +102,20 @@ export function AutomationStatusCard({
     }
   }, [user, session, latestRun, getAccessToken, refresh]);
 
+  const handleRevokeSession = useCallback(async () => {
+    if (!user) return;
+    setRevokeBusy(true);
+    try {
+      await deleteLatamSession(getAccessToken);
+      toast.message('Sessão revogada', { description: 'A sessão iFlight foi removida do servidor.' });
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível revogar a sessão.');
+    } finally {
+      setRevokeBusy(false);
+    }
+  }, [user, getAccessToken, refresh]);
+
   if (!active || !user) return null;
   if (!loading && !session && !latestRun) return null;
 
@@ -158,7 +173,33 @@ export function AutomationStatusCard({
                 <Link to="/conectar-escala">Reconectar portal</Link>
               </Button>
             )}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="w-full sm:w-auto gap-2 text-destructive hover:text-destructive"
+              disabled={revokeBusy}
+              onClick={() => void handleRevokeSession()}
+            >
+              {revokeBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
+              Revogar sessão
+            </Button>
           </div>
+        </div>
+      )}
+      {ui.phase === 'success' && (
+        <div className="flex justify-end pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="gap-2 text-muted-foreground hover:text-destructive"
+            disabled={revokeBusy}
+            onClick={() => void handleRevokeSession()}
+          >
+            {revokeBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
+            Revogar sessão
+          </Button>
         </div>
       )}
     </div>

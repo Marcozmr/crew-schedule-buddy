@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: path.join(__dirname, '../../../.env') });
@@ -69,6 +70,20 @@ export const config = {
     return [...new Set([...localDefaults, ...fromEnv])];
   },
   headless: () => process.env.ROSTER_AUTOMATION_HEADLESS !== '0',
+  /**
+   * Chave AES-256-GCM para cifrar/decifrar o storageState da sessão iFlight.
+   * Deve ter 64 caracteres hex (32 bytes). Gera uma aleatória em dev se ausente.
+   * Em produção (Render), definir SESSION_ENCRYPTION_KEY como variável de ambiente.
+   */
+  sessionEncryptionKey: (): string => {
+    const k = process.env.SESSION_ENCRYPTION_KEY?.trim();
+    if (k && k.length === 64) return k;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SESSION_ENCRYPTION_KEY não configurada — defina 64 hex chars no Render');
+    }
+    // Dev: chave aleatória por processo (sessões não sobrevivem a restart, mas não quebra o build)
+    return randomBytes(32).toString('hex');
+  },
   /**
    * Quando `0`, desativa o fallback SAB→iFlight (por defeito está ativo).
    * Se a Rota de Ouro eCrew não gravar HTML/PDF, cai automaticamente no pipeline SAB→iFlight.

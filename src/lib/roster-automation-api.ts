@@ -90,6 +90,37 @@ export async function getLatamSession(
   return res.json() as Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }>;
 }
 
+/** Revoga a sessão LATAM no worker (apaga blob cifrado e volta a disconnected). */
+export async function deleteLatamSession(getAccessToken: () => Promise<string | null>): Promise<void> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  await fetchWorker(`${b}/v1/latam/session`, {
+    method: 'DELETE',
+    headers: await authHeader(getAccessToken),
+  });
+}
+
+export interface LatamSessionStatus {
+  connected: boolean;
+  status: string;
+  sessionId?: string;
+  validUntil?: string | null;
+  lastError?: string | null;
+  updatedAt?: string;
+}
+
+/** Estado da sessão LATAM para o utilizador autenticado. */
+export async function getLatamSessionStatus(
+  getAccessToken: () => Promise<string | null>,
+): Promise<LatamSessionStatus> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const res = await fetchWorker(`${b}/v1/latam/session/status`, {
+    headers: await authHeader(getAccessToken),
+  });
+  return res.json() as Promise<LatamSessionStatus>;
+}
+
 /** Rótulos em português para os estados persistidos pelo worker (UI secundária / diagnóstico). */
 export function automationStatusLabelPt(status: string | undefined): string {
   const map: Record<string, string> = {

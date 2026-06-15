@@ -16,6 +16,7 @@ import { detectCorporateSurface } from './surface-detector.js';
 import { runLatamGoldPathRosterImport } from './latam-production-pipeline.js';
 import type { CorporateFsmState } from './fsm-types.js';
 import { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
+import { decryptSession } from '../../session-crypto.js';
 
 const SCOPE = 'latam';
 
@@ -377,16 +378,51 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
   let browser: Browser | null = null;
   let syncInstrument: PostLoginNavigationInstrument | null = null;
 
-  try {
-    await fs.access(storePath);
-    await appendRunLog(runId, { step: 'session_restored', message: 'storageState encontrado em disco' });
-  } catch {
-    await setRunStatus(runId, 'reconnect_required', {
-      error_message: 'Sem sessão gravada — ligue o portal primeiro',
-      finished: true,
-    });
-    await setSessionStatus(sessionId, 'reconnect_required', 'Sem storageState');
-    return;
+  // Carrega storageState: blob cifrado na BD (extensão) → ficheiro em disco (Playwright legado)
+  type StorageStateObj = {
+    cookies: Array<{
+      name: string; value: string; domain: string; path: string;
+      expires: number; httpOnly: boolean; secure: boolean; sameSite: 'Strict' | 'Lax' | 'None';
+    }>;
+    origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
+  };
+
+  let storageStateArg: string | StorageStateObj = storePath;
+
+  const { data: sessionRow } = await getServiceClient()
+    .from('automation_sessions')
+    .select('encrypted_session_blob')
+    .eq('id', sessionId)
+    .single();
+
+  const encryptedBlob = (sessionRow as { encrypted_session_blob?: string } | null)?.encrypted_session_blob ?? null;
+
+  if (encryptedBlob) {
+    try {
+      storageStateArg = JSON.parse(decryptSession(encryptedBlob, config.sessionEncryptionKey())) as StorageStateObj;
+      await appendRunLog(runId, { step: 'session_restored', message: 'Sessão restaurada do blob cifrado (extensão)' });
+    } catch (decryptErr) {
+      const msg = decryptErr instanceof Error ? decryptErr.message : String(decryptErr);
+      log(SCOPE, 'error', 'session_decrypt_failed', { sessionId, message: msg });
+      await setRunStatus(runId, 'reconnect_required', {
+        error_message: 'Falha a decifrar sessão — reconecte via extensão',
+        finished: true,
+      });
+      await setSessionStatus(sessionId, 'reconnect_required', 'Falha a decifrar sessão');
+      return;
+    }
+  } else {
+    try {
+      await fs.access(storePath);
+      await appendRunLog(runId, { step: 'session_restored', message: 'storageState encontrado em disco' });
+    } catch {
+      await setRunStatus(runId, 'reconnect_required', {
+        error_message: 'Sem sessão gravada — use a extensão EscalaX para conectar',
+        finished: true,
+      });
+      await setSessionStatus(sessionId, 'reconnect_required', 'Sem storageState');
+      return;
+    }
   }
 
   await appendRunLog(runId, { step: 'sync_start', message: 'Sincronização com storageState restaurado' });
@@ -396,7 +432,7 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
 
   try {
     context = await browser.newContext({
-      storageState: storePath,
+      storageState: storageStateArg,
       viewport: { width: 1400, height: 900 },
       locale: 'pt-BR',
       timezoneId: 'America/Sao_Paulo',

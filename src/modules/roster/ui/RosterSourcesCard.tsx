@@ -331,33 +331,65 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
           )}
 
           {automationConfigured && iflightWindowOpened && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-              <p className="text-sm font-semibold text-foreground">
-                Após acessar o iFlight Neo, baixe o Roster Report e importe aqui.
-              </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                No iFlight Neo, navegue até CrewRosterReport, baixe o PDF e use o botão abaixo.
-              </p>
-              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">
+                  iFlight Neo aberto — como sincronizar?
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Há duas formas de trazer sua escala para o EscalaX:
+                </p>
+              </div>
+
+              {/* Opção A — extensão (recomendada) */}
+              <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-3 space-y-2">
+                <p className="text-xs font-semibold text-foreground">Opção A — Extensão Chrome (sincronização automática)</p>
+                <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                  <li>Instale a extensão <span className="font-medium text-foreground">EscalaX — Sessão iFlight</span> no Chrome.</li>
+                  <li>Faça login normalmente no iFlight Neo.</li>
+                  <li>Clique no ícone da extensão na barra do Chrome.</li>
+                  <li>Confirme o consentimento e clique em <span className="font-medium text-foreground">Autorizar sincronização</span>.</li>
+                  <li>O EscalaX importa sua escala automaticamente.</li>
+                </ol>
+                <p className="text-xs text-muted-foreground">
+                  A extensão captura apenas cookies de{' '}
+                  <span className="font-mono text-foreground/80">portal.latam.com</span> e{' '}
+                  <span className="font-mono text-foreground/80">iflightla.ibsplc.aero</span>.
+                  Nenhuma senha é capturada.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Para instalar: abra o Chrome → Menu → Mais ferramentas → Extensões → Modo desenvolvedor →
+                  {' '}Carregar sem compactação → selecione a pasta{' '}
+                  <span className="font-mono text-foreground/80">browser-extension/escalax-session-capture</span>.
+                </p>
+              </div>
+
+              {/* Opção B — PDF manual */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-foreground">Opção B — Importação manual (PDF)</p>
+                <p className="text-xs text-muted-foreground">
+                  No iFlight Neo, navegue até CrewRosterReport, baixe o PDF e importe abaixo.
+                </p>
                 <PdfImportDialog
                   onImportComplete={handleImportComplete}
                   trigger={
-                    <Button type="button" size="sm" className="w-full sm:w-auto gap-1.5">
+                    <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
                       <Upload className="w-4 h-4" />
-                      Importar Roster Report
+                      Importar Roster Report (PDF)
                     </Button>
                   }
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full sm:w-auto text-muted-foreground"
-                  onClick={() => setIflightWindowOpened(false)}
-                >
-                  Fechar
-                </Button>
               </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => setIflightWindowOpened(false)}
+              >
+                Fechar
+              </Button>
             </div>
           )}
 
