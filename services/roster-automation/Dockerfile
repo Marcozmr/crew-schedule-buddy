@@ -22,8 +22,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 RUN npm ci
 
-COPY tsconfig.json tsup.config.ts ./
-COPY src/ ./src/
+COPY . .
 
 RUN npm run build
 
