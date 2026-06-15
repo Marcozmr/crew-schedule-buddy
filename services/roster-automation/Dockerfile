@@ -4,68 +4,42 @@
 #
 # Build:   docker build -t escalax-roster-automation .
 # Run:     docker run --env-file .env -p 8790:8790 escalax-roster-automation
-#
-# Variáveis obrigatórias em produção (ver README / seção de variáveis abaixo):
-#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-#   ROSTER_AUTOMATION_CORS_ORIGINS, LATAM_PORTAL_LOGIN_URL,
-#   LATAM_IFLIGHT_DEEP_LINK_URL, ROSTER_AUTOMATION_HEADLESS
 
-# ── Stage 1: build TypeScript → dist/ ────────────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:20-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-
-# Não baixar browsers nesta etapa (só precisamos para o build TS)
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-
-RUN npm ci
-
-COPY . .
-
-RUN npm run build
-
-# ── Stage 2: imagem de produção ───────────────────────────────────────────────
-FROM node:20-slim AS production
-
-# Dependências de sistema mínimas necessárias antes do playwright install
+# Certificados para HTTPS (Supabase, LATAM portal, iFlight)
 RUN apt-get update && apt-get install -y \
       ca-certificates \
-      curl \
     --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
+# 1. Dependências npm (prod + dev — tsup é devDependency, necessário para o build)
 COPY package.json package-lock.json ./
-
-ENV NODE_ENV=production
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm ci
 
-# Instalar apenas dependências de produção (playwright, fastify, supabase, etc.)
-RUN npm ci --omit=dev
+# 2. Chromium + dependências de sistema (camada cacheada enquanto package.json não mudar)
+RUN npx playwright install chromium --with-deps
 
-# Instalar o Chromium + todas as dependências de sistema que ele precisa.
-# --with-deps roda apt-get automaticamente; só baixa Chromium (não Firefox/WebKit).
-RUN npx playwright install chromium --with-deps \
-  && rm -rf /root/.cache/ms-playwright/chromium_*/chrome-linux/nacl_irt_x86_64.nexe 2>/dev/null || true
+# 3. Código-fonte e compilação TypeScript → dist/
+COPY . .
+RUN npm run build
 
-# Copiar artefatos compilados do stage anterior
-COPY --from=builder /app/dist ./dist
+# Falha o build explicitamente se dist/index.js não foi gerado
+RUN node -e "require('fs').accessSync('dist/index.js')" \
+  && echo "dist/index.js OK"
 
-# ── Configuração de runtime ───────────────────────────────────────────────────
-
-# Headless obrigatório em servidor (sem display)
+# ── Runtime ───────────────────────────────────────────────────────────────────
+ENV NODE_ENV=production
 ENV ROSTER_AUTOMATION_HEADLESS=1
 
-# Railway / Render injetam PORT; ROSTER_AUTOMATION_PORT tem precedência.
-# config.ts lê: ROSTER_AUTOMATION_PORT ?? PORT ?? 8790
+# Railway/Render injetam PORT; ROSTER_AUTOMATION_PORT tem precedência (ver config.ts)
 ENV ROSTER_AUTOMATION_PORT=8790
 
 EXPOSE 8790
 
-# Health check via Node (sem depender de curl no PATH da imagem final)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD node -e "\
     const p = +(process.env.ROSTER_AUTOMATION_PORT || process.env.PORT || 8790); \
