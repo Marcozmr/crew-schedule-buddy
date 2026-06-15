@@ -33,6 +33,7 @@ import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
 import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
+import { isLatamWebViewAvailable, openLatamPortalWebView } from '@/lib/roster/latam-mobile-webview-service';
 
 interface RosterSourcesCardProps {
   onImportComplete?: () => void;
@@ -60,6 +61,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [automationError, setAutomationError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
+  const [mobileAuthenticated, setMobileAuthenticated] = useState(false);
   const iflightOpenUrl =
     corporatePortalConfig.iflightModuleUrl || 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
 
@@ -115,6 +117,30 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
 
   const handleConnectPortal = useCallback(async () => {
     setAutomationError(null);
+
+    // Android nativo: usa WebView controlada para login/SSO/MFA
+    if (isLatamWebViewAvailable()) {
+      setPortalConnecting(true);
+      try {
+        const result = await openLatamPortalWebView();
+        if (result.authenticated) {
+          setMobileAuthenticated(true);
+          if (user) {
+            void UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id).then(() => {
+              emitRosterUpdated({ userId: user.id, reason: 'active_roster_changed', at: new Date().toISOString() });
+              void refreshConnection();
+            });
+          }
+        }
+      } catch {
+        // Utilizador fechou o WebView — sem erro
+      } finally {
+        setPortalConnecting(false);
+        bump();
+      }
+      return;
+    }
+
     if (automationConfigured) {
       window.open(iflightOpenUrl, '_blank', 'noopener,noreferrer');
       setIflightWindowOpened(true);
@@ -129,7 +155,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       bump();
       void refreshConnection();
     }
-  }, [automationConfigured, bump, iflightOpenUrl, refreshConnection]);
+  }, [automationConfigured, bump, iflightOpenUrl, refreshConnection, user]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
@@ -320,6 +346,33 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                   Marcar como conectado (teste)
                 </Button>
               )}
+            </div>
+          )}
+
+          {mobileAuthenticated && (
+            <div className="rounded-xl border border-success/20 bg-success/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-foreground">iFlight detectado!</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Você está autenticado no iFlight. No app, navegue até CrewRosterReport, baixe o PDF e importe aqui.
+              </p>
+              <PdfImportDialog
+                onImportComplete={handleImportComplete}
+                trigger={
+                  <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
+                    <Upload className="w-4 h-4" />
+                    Importar Roster Report (PDF)
+                  </Button>
+                }
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => setMobileAuthenticated(false)}
+              >
+                Fechar
+              </Button>
             </div>
           )}
 

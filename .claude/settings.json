@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -)",
+      "Bash(python -c \"import sys,json; p=json.load\\(sys.stdin\\); deps={**p.get\\('dependencies',{}\\),**p.get\\('devDependencies',{}\\)}; caps=[k for k in deps if 'capacitor' in k.lower\\(\\)]; [print\\(k,deps[k]\\) for k in caps]\")",
+      "Bash(ls android/)",
+      "Bash(ls ios/)",
+      "Bash(cat capacitor.config.ts)",
+      "Bash(cat capacitor.config.json)",
+      "Read(//c/c/Users/Mrvin/OneDrive/Desktop/Projetos Dev/Escalax/**)",
+      "Bash(python -c ' *)",
+      "Bash(cat src/lib/roster/roster-automation/playwright-runner.ts)",
+      "Bash(cat src/lib/roster/roster-automation/index.ts)",
+      "Bash(ls src/lib/roster/roster-automation/)",
+      "Bash(ls src/lib/roster/)",
+      "Bash(npm -v)",
+      "Bash(npx cap *)",
+      "Bash(npm install *)",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 npm install @capacitor/core@^8.2.0 @capacitor/android@^8.2.0 @capacitor/ios@^8.2.0 --strict-ssl false)",
+      "Bash(echo \"EXIT:$?\")"
+    ]
+  }
+}
