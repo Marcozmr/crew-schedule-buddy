@@ -31,7 +31,7 @@ import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
-import { isRosterAutomationConfigured, postLatamConnect } from '@/lib/roster-automation-api';
+import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 
 interface RosterSourcesCardProps {
@@ -59,6 +59,9 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [portalConnecting, setPortalConnecting] = useState(false);
   const [automationError, setAutomationError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
+  const iflightOpenUrl =
+    corporatePortalConfig.iflightModuleUrl || 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
 
   const loadLastSync = useCallback(async () => {
     if (!user) return;
@@ -111,25 +114,22 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const bump = useCallback(() => setRefreshTrigger((t) => t + 1), []);
 
   const handleConnectPortal = useCallback(async () => {
-    setPortalConnecting(true);
     setAutomationError(null);
+    if (automationConfigured) {
+      window.open(iflightOpenUrl, '_blank', 'noopener,noreferrer');
+      setIflightWindowOpened(true);
+      return;
+    }
+    setPortalConnecting(true);
     try {
-      if (automationConfigured) {
-        await postLatamConnect(getAccessToken);
-      } else {
-        const provider = RosterSyncService.getProviderById('corporate_portal');
-        await provider.connect();
-      }
-    } catch (e) {
-      if (automationConfigured) {
-        setAutomationError(e instanceof Error ? e.message : String(e));
-      }
+      const provider = RosterSyncService.getProviderById('corporate_portal');
+      await provider.connect();
     } finally {
       setPortalConnecting(false);
       bump();
       void refreshConnection();
     }
-  }, [automationConfigured, bump, getAccessToken, refreshConnection]);
+  }, [automationConfigured, bump, iflightOpenUrl, refreshConnection]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
@@ -143,16 +143,9 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
 
   const handleManualPortalConfirm = useCallback(async () => {
     if (automationConfigured) {
-      setPortalConnecting(true);
+      window.open(iflightOpenUrl, '_blank', 'noopener,noreferrer');
+      setIflightWindowOpened(true);
       setAutomationError(null);
-      try {
-        await postLatamConnect(getAccessToken);
-      } catch (e) {
-        setAutomationError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setPortalConnecting(false);
-        bump();
-      }
       return;
     }
     // Fluxo manual legado
@@ -168,7 +161,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       });
     }
     bump();
-  }, [automationConfigured, bump, getAccessToken, user, refreshConnection]);
+  }, [automationConfigured, bump, iflightOpenUrl, user, refreshConnection]);
 
   const handleOpenedIFlight = useCallback(() => {
     if (!user) return;
@@ -265,7 +258,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 {isLoginUrlConfigured() ? (
                   <p className="text-xs text-muted-foreground break-words">
                     {automationConfigured
-                      ? 'A sincronização oficial corre no servidor (login seguro na janela do automatizador). Clique em Conectar para iniciar — o worker abrirá o portal LATAM automaticamente.'
+                      ? 'Clique em Conectar para abrir o iFlight Neo. Após fazer login, baixe o Roster Report e importe aqui.'
                       : 'Toque em Conectar para abrir o portal. Depois volte ao EscalaX e siga os passos indicados — SAB, iFlight e importação do CrewRosterReport (o app não fecha o portal automaticamente).'}
                   </p>
                 ) : (
@@ -317,12 +310,12 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
               )}
             </div>
           </div>
-          {portalIsConfigured && !portalIsConnected && (
+          {portalIsConfigured && !portalIsConnected && !automationConfigured && (
             <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border/60">
               <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => void handleManualPortalConfirm()}>
-                {automationConfigured ? 'Iniciar sincronização' : 'Concluí o login no portal'}
+                Concluí o login no portal
               </Button>
-              {import.meta.env.DEV && !automationConfigured && (
+              {import.meta.env.DEV && (
                 <Button type="button" variant="secondary" size="sm" className="w-full sm:w-auto" onClick={handleDevMarkConnected}>
                   Marcar como conectado (teste)
                 </Button>
@@ -334,6 +327,37 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-xs text-destructive">
               <p className="font-semibold mb-1">Falha ao contactar o worker</p>
               <p className="whitespace-pre-wrap font-mono break-all">{automationError}</p>
+            </div>
+          )}
+
+          {automationConfigured && iflightWindowOpened && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-foreground">
+                Após acessar o iFlight Neo, baixe o Roster Report e importe aqui.
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                No iFlight Neo, navegue até CrewRosterReport, baixe o PDF e use o botão abaixo.
+              </p>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                <PdfImportDialog
+                  onImportComplete={handleImportComplete}
+                  trigger={
+                    <Button type="button" size="sm" className="w-full sm:w-auto gap-1.5">
+                      <Upload className="w-4 h-4" />
+                      Importar Roster Report
+                    </Button>
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full sm:w-auto text-muted-foreground"
+                  onClick={() => setIflightWindowOpened(false)}
+                >
+                  Fechar
+                </Button>
+              </div>
             </div>
           )}
 
@@ -484,7 +508,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
               {dailyMode
                 ? 'Sua escala já está no EscalaX. Para uma nova versão, importe o CrewRosterReport. Portal e iFlight ficam abaixo apenas para reconfiguração.'
                 : automationAsPrimary
-                  ? 'A escala oficial é sincronizada automaticamente pelo servidor após a autenticação. Importação manual só como contingência.'
+                  ? 'Conecte-se ao iFlight Neo e importe o CrewRosterReport. Importação manual via PDF abaixo.'
                   : 'Escolha como deseja importar sua escala. O módulo iFlight depende do portal LATAM.'}
             </p>
           </div>

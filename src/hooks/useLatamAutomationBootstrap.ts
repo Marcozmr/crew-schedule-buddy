@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { postLatamConnect, postLatamSync } from '@/lib/roster-automation-api';
+import { postLatamSync } from '@/lib/roster-automation-api';
 import { decideLatamAutomationKick } from '@/lib/roster/automation-ui-phase';
 import type { AutomationRunRow, AutomationSessionRow } from '@/lib/roster/automation-types';
 import { reportUnexpectedError } from '@/lib/monitoring/errorReporting';
@@ -54,16 +54,17 @@ export function useLatamAutomationBootstrap(params: LatamAutomationBootstrapPara
 
     void (async () => {
       try {
+        // connect action requires browser-assisted flow — skip here
         if (kick.action === 'connect') {
-          await postLatamConnect(getAccessToken);
-        } else {
-          const sid = session?.id;
-          if (!sid) {
-            inFlight.current = false;
-            return;
-          }
-          await postLatamSync(getAccessToken, sid);
+          inFlight.current = false;
+          return;
         }
+        const sid = session?.id;
+        if (!sid) {
+          inFlight.current = false;
+          return;
+        }
+        await postLatamSync(getAccessToken, sid);
         lastKickKey.current = key;
         if (import.meta.env.DEV) {
           console.info('[roster-automation] bootstrap ok', kick.action, key);

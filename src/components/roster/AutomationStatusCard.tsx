@@ -9,7 +9,7 @@ import {
   decideLatamAutomationKick,
   mapAutomationToUiPhase,
 } from '@/lib/roster/automation-ui-phase';
-import { postLatamConnect, postLatamSync } from '@/lib/roster-automation-api';
+import { postLatamSync } from '@/lib/roster-automation-api';
 import { formatDateTimeBR } from '@/lib/date-utils';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { reportOperationalEvent } from '@/lib/monitoring/errorReporting';
@@ -81,17 +81,17 @@ export function AutomationStatusCard({
 
   const handleManualRetry = useCallback(async () => {
     if (!user) return;
+    const kick = decideLatamAutomationKick(session, latestRun);
+    if (!kick || kick.action === 'connect' || !session?.id) {
+      toast.message('Importe o CrewRosterReport manualmente', {
+        description: 'Acesse Fontes de Escala, abra o iFlight Neo e importe o PDF da escala.',
+      });
+      return;
+    }
     setManualRetryBusy(true);
     setRetryNonce((n) => n + 1);
     try {
-      const kick = decideLatamAutomationKick(session, latestRun);
-      if (kick?.action === 'sync' && session?.id) {
-        await postLatamSync(getAccessToken, session.id);
-      } else if (kick?.action === 'connect' || !session?.id) {
-        await postLatamConnect(getAccessToken);
-      } else if (session?.id) {
-        await postLatamSync(getAccessToken, session.id);
-      }
+      await postLatamSync(getAccessToken, session.id);
       toast.message('Tentando novamente', { description: 'Retomamos a busca da sua escala.' });
       await refresh();
     } catch (e) {
@@ -102,6 +102,7 @@ export function AutomationStatusCard({
   }, [user, session, latestRun, getAccessToken, refresh]);
 
   if (!active || !user) return null;
+  if (!loading && !session && !latestRun) return null;
 
   if (schemaError) {
     return (

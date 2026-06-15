@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useAutomationSessionFromSupabase } from '@/hooks/useAutomationSessionFromSupabase';
-import { isRosterAutomationConfigured, postLatamConnect, postLatamSync } from '@/lib/roster-automation-api';
+import { isRosterAutomationConfigured, postLatamSync } from '@/lib/roster-automation-api';
 import { decideLatamAppLoadKick } from '@/lib/roster/automation-orchestration';
 import { reportUnexpectedError } from '@/lib/monitoring/errorReporting';
 
@@ -79,23 +79,20 @@ export function LatamAutomationAppLoad(): null {
     void (async () => {
       inFlight.current = true;
       try {
+        // connect action requires browser-assisted flow — skip automatic trigger
         if (kick.action === 'connect') {
-          await postLatamConnect(getAccessToken);
-          writeInitialConnectDone(user.id);
-          if (import.meta.env.DEV) {
-            console.info('[roster-automation] app-load connect dispatched');
-          }
-        } else {
-          const sid = session?.id;
-          if (!sid) {
-            inFlight.current = false;
-            return;
-          }
-          await postLatamSync(getAccessToken, sid);
-          writeLastAppLoadSyncMs(user.id);
-          if (import.meta.env.DEV) {
-            console.info('[roster-automation] app-load sync dispatched');
-          }
+          inFlight.current = false;
+          return;
+        }
+        const sid = session?.id;
+        if (!sid) {
+          inFlight.current = false;
+          return;
+        }
+        await postLatamSync(getAccessToken, sid);
+        writeLastAppLoadSyncMs(user.id);
+        if (import.meta.env.DEV) {
+          console.info('[roster-automation] app-load sync dispatched');
         }
         lastKickKey.current = key;
       } catch (e) {
