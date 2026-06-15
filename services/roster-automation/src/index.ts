@@ -317,6 +317,20 @@ app.post('/v1/azul/connect', async (req, reply) => {
 
 app.get('/health', async () => ({ ok: true }));
 
+/** Diagnóstico de configuração — sem segredos (nenhuma chave ou password). */
+app.get('/v1/status', async () => ({
+  ok: true,
+  worker: 'roster-automation',
+  port: config.port,
+  headless: config.headless(),
+  latamPortalConfigured: Boolean(config.latamPortalLoginUrl()),
+  latamSabUrl: config.latamPortalSabUrl(),
+  iflightPrimaryUrl: config.iflightDeepLinkUrl(),
+  iflightFallbackUrl: 'https://iflightla.ibsplc.aero/iflight',
+  ecrewConfigured: Boolean(config.latamEcredEntryUrl()),
+  dataDir: config.dataDir(),
+}));
+
 const port = config.port;
 app.listen({ port, host: '0.0.0.0' }).then(() => {
   log('server', 'info', 'listening', { port });

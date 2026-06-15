@@ -4,7 +4,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { importPdfArrayBufferWithClient } from '../../../src/lib/pdf-import.ts';
+import { importPdfArrayBufferWithClient } from './import/pdfImportWorker.js';
 import { log } from './logger.js';
 
 export type CorporateAutomationImportOrigin = 'latam_automation' | 'gol_automation' | 'azul_automation';
@@ -39,8 +39,6 @@ export async function importDownloadedPdf(params: {
       fileName,
       arrayBuffer: pdfBytes,
       userId,
-      useSessionUser: false,
-      emitRosterEvent: false,
       importOrigin,
       automationRunId,
     });
@@ -92,8 +90,6 @@ export async function importLatamHtmlReportBuffer(params: {
       arrayBuffer: ab,
       extractedTextOverride: text,
       userId: params.userId,
-      useSessionUser: false,
-      emitRosterEvent: false,
       importOrigin,
       automationRunId: params.automationRunId,
     });

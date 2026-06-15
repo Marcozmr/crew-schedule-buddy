@@ -15,10 +15,11 @@ export default defineConfig({
   sourcemap: true,
   splitting: false,
   dts: true,
-  /** Não seguir estes pacotes no grafo de bundle (evita erros chromium-bidi/* no Windows). */
+  /** Não bundlar estes pacotes — carregados de node_modules em runtime. */
   external: [
     'playwright',
     'playwright-core',
     'chromium-bidi',
+    'pdfjs-dist',
   ],
 });

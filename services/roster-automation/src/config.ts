@@ -26,8 +26,8 @@ function anonKey(): string {
 }
 
 export const config = {
-  /** Porta HTTP do serviço (número; env `ROSTER_AUTOMATION_PORT`). */
-  port: Number(process.env.ROSTER_AUTOMATION_PORT ?? 8790),
+  /** Porta HTTP do serviço. ROSTER_AUTOMATION_PORT tem precedência sobre PORT (Railway/Render). */
+  port: Number(process.env.ROSTER_AUTOMATION_PORT ?? process.env.PORT ?? 8790),
   supabaseUrl: () => url(),
   supabaseAnonKey: () => anonKey(),
   supabaseServiceRoleKey: () =>

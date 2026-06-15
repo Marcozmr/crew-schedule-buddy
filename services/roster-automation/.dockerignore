@@ -1,0 +1,30 @@
+# Dependências — reinstaladas no build
+node_modules
+
+# Artefatos de build anteriores
+dist
+
+# Dados de automação gerados em runtime
+data
+
+# Variáveis de ambiente locais (nunca incluir no contexto Docker)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Scripts de diagnóstico (não precisam ir para produção)
+scripts/
+
+# Arquivos de editor/OS
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+
+# Tipos gerados pelo tsup (não necessários em runtime)
+dist/**/*.d.ts
+dist/**/*.d.ts.map
