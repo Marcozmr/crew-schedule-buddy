@@ -23,14 +23,24 @@ app.addHook('onRequest', async (req, reply) => {
   }
 });
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorStatus(error: unknown): number {
+  if (typeof error === 'object' && error !== null && 'statusCode' in error) {
+    const statusCode = (error as { statusCode?: unknown }).statusCode;
+    if (typeof statusCode === 'number') return statusCode;
+  }
+  return 500;
+}
+
 /** Garante que erros de parse JSON do Fastify (400) retornem o mesmo envelope {error} das rotas. */
 app.setErrorHandler((error, _req, reply) => {
-  const status = error.statusCode ?? 500;
-  const msg =
-    status === 400
-      ? `Requisição inválida: ${error.message}`
-      : 'Erro interno no worker';
-  log('api', 'error', 'fastify_error', { status, message: error.message });
+  const status = getErrorStatus(error);
+  const message = getErrorMessage(error);
+  const msg = status === 400 ? `Requisição inválida: ${message}` : 'Erro interno no worker';
+  log('api', 'error', 'fastify_error', { status, message });
   return reply.status(status).send({ error: msg });
 });
 
