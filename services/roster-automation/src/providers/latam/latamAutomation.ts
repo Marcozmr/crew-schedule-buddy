@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { chromium, type Browser, type BrowserContext } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { config } from '../../config.js';
 import { getServiceClient, type AutomationStatusRow } from '../../db.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
@@ -18,6 +18,48 @@ import type { CorporateFsmState } from './fsm-types.js';
 import { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
 
 const SCOPE = 'latam';
+
+const CHROME_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+/**
+ * Tenta navegar por uma lista de URLs em cascata.
+ * Para cada URL tenta primeiro 'domcontentloaded', depois 'commit' (mais permissivo).
+ * Lança erro claro se todas falharem — sem loops infinitos.
+ */
+async function navigateWithFallback(
+  page: Page,
+  urls: string[],
+  appendLog: (entry: Record<string, unknown>) => Promise<void>,
+): Promise<void> {
+  const strategies = [
+    { waitUntil: 'domcontentloaded' as const, timeout: 60_000 },
+    { waitUntil: 'commit' as const, timeout: 30_000 },
+  ];
+
+  for (const url of urls) {
+    for (const { waitUntil, timeout } of strategies) {
+      try {
+        await page.goto(url, { waitUntil, timeout });
+        await appendLog({ step: 'portal_navigate_ok', url, waitUntil });
+        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await appendLog({
+          step: 'portal_navigate_fail',
+          url,
+          waitUntil,
+          error: msg.slice(0, 300),
+        });
+      }
+    }
+  }
+
+  throw new Error(
+    'Não foi possível abrir o portal LATAM pelo servidor. ' +
+      'Tente novamente em alguns minutos ou use importação manual do CrewRosterReport.',
+  );
+}
 
 function sessionDir(userId: string): string {
   return path.join(config.dataDir(), 'latam', userId);
@@ -89,12 +131,13 @@ export async function startConnectFlow(params: {
   runId: string;
 }): Promise<void> {
   const { userId, sessionId, runId } = params;
-  const loginUrl = config.latamPortalLoginUrl();
-  if (!loginUrl) {
-    await setRunStatus(runId, 'error', { error_message: 'LATAM_PORTAL_LOGIN_URL não configurada no worker', finished: true });
-    await setSessionStatus(sessionId, 'error', 'LATAM_PORTAL_LOGIN_URL ausente');
-    return;
-  }
+
+  // Ordem de tentativa: SAB direto → corporativo-latam → iFlight (nunca a raiz do portal, que causa ERR_HTTP2)
+  const entryUrls = [
+    config.latamPortalSabUrl(),
+    'https://portal.latam.com/pt/group/corporativo-latam',
+    config.iflightDeepLinkUrl(),
+  ].filter(Boolean);
 
   await fs.mkdir(sessionDir(userId), { recursive: true });
   const storePath = storageStatePath(userId);
@@ -120,12 +163,16 @@ export async function startConnectFlow(params: {
       headless: config.headless(),
       viewport: { width: 1400, height: 900 },
       locale: 'pt-BR',
+      timezoneId: 'America/Sao_Paulo',
       acceptDownloads: true,
+      ignoreHTTPSErrors: true,
+      userAgent: CHROME_UA,
+      extraHTTPHeaders: { 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' },
     });
     const page = context.pages()[0] ?? (await context.newPage());
     page.setDefaultTimeout(90_000);
 
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await navigateWithFallback(page, entryUrls, (e) => appendRunLog(runId, e));
     await appendRunLog(runId, { step: 'portal_opened', message: 'URL do portal carregada' });
     await appendRunLog(runId, { step: 'portal_connecting', message: 'À espera de autenticação (SSO Microsoft/Google → LATAM)' });
 
@@ -352,13 +399,21 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
       storageState: storePath,
       viewport: { width: 1400, height: 900 },
       locale: 'pt-BR',
+      timezoneId: 'America/Sao_Paulo',
       acceptDownloads: true,
+      ignoreHTTPSErrors: true,
+      userAgent: CHROME_UA,
+      extraHTTPHeaders: { 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' },
     });
     const page = await context.newPage();
     page.setDefaultTimeout(90_000);
 
-    const entry = config.latamPortalLoginUrl() || 'about:blank';
-    await page.goto(entry, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    const syncEntryUrls = [
+      config.latamPortalSabUrl(),
+      'https://portal.latam.com/pt/group/corporativo-latam',
+      config.iflightDeepLinkUrl(),
+    ].filter(Boolean);
+    await navigateWithFallback(page, syncEntryUrls, (e) => appendRunLog(runId, e));
     await appendRunLog(runId, { step: 'portal_opened', message: 'Portal carregado com cookies da sessão' });
 
     if (!(await expectAuthenticatedHome(page, context))) {
