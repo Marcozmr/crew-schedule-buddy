@@ -3,6 +3,10 @@ import { registerPlugin } from '@capacitor/core';
 export interface LatamPortalResult {
   authenticated: boolean;
   currentUrl: string;
+  pdfDownloaded: boolean;
+  pdfBase64?: string;
+  fileName?: string;
+  pdfError?: string;
 }
 
 export interface LatamRosterPluginInterface {

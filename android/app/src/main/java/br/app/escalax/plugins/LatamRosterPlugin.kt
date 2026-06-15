@@ -2,13 +2,15 @@ package br.app.escalax.plugins
 
 import android.app.Activity
 import android.content.Intent
-import com.getcapacitor.ActivityResult
+import android.util.Base64
+import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
+import java.io.File
 
 @CapacitorPlugin(name = "LatamRosterPlugin")
 class LatamRosterPlugin : Plugin() {
@@ -28,6 +30,28 @@ class LatamRosterPlugin : Plugin() {
             val ret = JSObject()
             ret.put("authenticated", data?.getBooleanExtra("authenticated", false) ?: false)
             ret.put("currentUrl", data?.getStringExtra("currentUrl") ?: "")
+
+            val pdfFilePath = data?.getStringExtra("pdfFilePath")
+            if (pdfFilePath != null) {
+                val file = File(pdfFilePath.toString())
+                if (file.exists()) {
+                    try {
+                        val bytes = file.readBytes()
+                        file.delete()
+                        ret.put("pdfDownloaded", true)
+                        ret.put("pdfBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                        ret.put("fileName", data.getStringExtra("fileName") ?: "CrewRosterReport.pdf")
+                    } catch (e: Exception) {
+                        ret.put("pdfDownloaded", false)
+                        ret.put("pdfError", "Erro ao ler PDF: ${e.message}")
+                    }
+                } else {
+                    ret.put("pdfDownloaded", false)
+                }
+            } else {
+                ret.put("pdfDownloaded", false)
+            }
+
             call.resolve(ret)
         } else {
             call.reject("Portal fechado pelo utilizador")

@@ -33,7 +33,8 @@ import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
 import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
-import { isLatamWebViewAvailable, openLatamPortalWebView } from '@/lib/roster/latam-mobile-webview-service';
+import { isLatamWebViewAvailable, openLatamPortalWebView, processMobilePdf } from '@/lib/roster/latam-mobile-webview-service';
+import type { PdfImportResult } from '@/lib/pdf-import';
 
 interface RosterSourcesCardProps {
   onImportComplete?: () => void;
@@ -62,6 +63,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
   const [mobileAuthenticated, setMobileAuthenticated] = useState(false);
+  const [mobileImportResult, setMobileImportResult] = useState<PdfImportResult | null>(null);
   const iflightOpenUrl =
     corporatePortalConfig.iflightModuleUrl || 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
 
@@ -118,12 +120,33 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const handleConnectPortal = useCallback(async () => {
     setAutomationError(null);
 
-    // Android nativo: usa WebView controlada para login/SSO/MFA
+    // Android nativo: usa WebView controlada para login/SSO/MFA e captura automática do PDF
     if (isLatamWebViewAvailable()) {
       setPortalConnecting(true);
+      setMobileImportResult(null);
       try {
         const result = await openLatamPortalWebView();
-        if (result.authenticated) {
+
+        if (result.pdfDownloaded && result.pdfBase64 && user) {
+          // PDF capturado automaticamente — importar via parser existente
+          try {
+            const importResult = await processMobilePdf({
+              pdfBase64: result.pdfBase64,
+              fileName: result.fileName ?? 'CrewRosterReport.pdf',
+              userId: user.id,
+            });
+            setMobileImportResult(importResult);
+            setMobileAuthenticated(true);
+            if (importResult.success) {
+              emitRosterUpdated({ userId: user.id, reason: 'active_roster_changed', at: new Date().toISOString() });
+              void refreshConnection();
+              void loadLastSync();
+            }
+          } catch {
+            setMobileAuthenticated(true); // Mostra fallback manual
+          }
+        } else if (result.authenticated) {
+          // Autenticado mas sem PDF — mostra fallback para importação manual
           setMobileAuthenticated(true);
           if (user) {
             void UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id).then(() => {
@@ -350,26 +373,65 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
           )}
 
           {mobileAuthenticated && (
-            <div className="rounded-xl border border-success/20 bg-success/5 p-4 space-y-3">
-              <p className="text-sm font-semibold text-foreground">iFlight detectado!</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Você está autenticado no iFlight. No app, navegue até CrewRosterReport, baixe o PDF e importe aqui.
-              </p>
-              <PdfImportDialog
-                onImportComplete={handleImportComplete}
-                trigger={
-                  <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
-                    <Upload className="w-4 h-4" />
-                    Importar Roster Report (PDF)
-                  </Button>
-                }
-              />
+            <div className="rounded-xl border p-4 space-y-3
+              border-success/20 bg-success/5">
+              {mobileImportResult?.success && mobileImportResult.insertedCount > 0 && (
+                <>
+                  <p className="text-sm font-semibold text-foreground">Escala importada automaticamente!</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {mobileImportResult.insertedCount} registro(s) importado(s) do CrewRosterReport.
+                  </p>
+                </>
+              )}
+              {mobileImportResult?.duplicate && (
+                <>
+                  <p className="text-sm font-semibold text-foreground">Escala já importada</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Esses dados já estavam no EscalaX — nenhuma alteração foi feita.
+                  </p>
+                </>
+              )}
+              {mobileImportResult?.success === false && (
+                <>
+                  <p className="text-sm font-semibold text-destructive">Falha na importação do PDF</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {mobileImportResult.error ?? 'Erro ao processar o PDF. Tente importar manualmente.'}
+                  </p>
+                  <PdfImportDialog
+                    onImportComplete={handleImportComplete}
+                    trigger={
+                      <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
+                        <Upload className="w-4 h-4" />
+                        Importar PDF manualmente
+                      </Button>
+                    }
+                  />
+                </>
+              )}
+              {!mobileImportResult && (
+                <>
+                  <p className="text-sm font-semibold text-foreground">iFlight detectado!</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Autenticado no iFlight. Navegue até CrewRosterReport — o download será capturado automaticamente,
+                    ou importe o PDF manualmente.
+                  </p>
+                  <PdfImportDialog
+                    onImportComplete={handleImportComplete}
+                    trigger={
+                      <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
+                        <Upload className="w-4 h-4" />
+                        Importar Roster Report (PDF)
+                      </Button>
+                    }
+                  />
+                </>
+              )}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 className="w-full text-muted-foreground"
-                onClick={() => setMobileAuthenticated(false)}
+                onClick={() => { setMobileAuthenticated(false); setMobileImportResult(null); }}
               >
                 Fechar
               </Button>
