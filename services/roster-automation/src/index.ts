@@ -23,22 +23,60 @@ app.addHook('onRequest', async (req, reply) => {
   }
 });
 
+/** Garante que erros de parse JSON do Fastify (400) retornem o mesmo envelope {error} das rotas. */
+app.setErrorHandler((error, _req, reply) => {
+  const status = error.statusCode ?? 500;
+  const msg =
+    status === 400
+      ? `Requisição inválida: ${error.message}`
+      : 'Erro interno no worker';
+  log('api', 'error', 'fastify_error', { status, message: error.message });
+  return reply.status(status).send({ error: msg });
+});
+
 async function requireUser(auth: string | undefined): Promise<string | null> {
   return getUserIdFromJwt(auth);
 }
 
+type RunRow = { id: string; finished_at: string | null; started_at: string };
+
+/** Execução mais recente da sessão. Inclui started_at para deteção de runs presas. */
 async function latestRunForSession(
   supabase: ReturnType<typeof getServiceClient>,
   sessionId: string,
-): Promise<{ id: string; finished_at: string | null } | null> {
+): Promise<RunRow | null> {
   const { data: rows } = await supabase
     .from('automation_runs')
-    .select('id, finished_at')
+    .select('id, finished_at, started_at')
     .eq('session_id', sessionId)
     .order('started_at', { ascending: false })
     .limit(1);
-  const r = rows?.[0] as { id: string; finished_at: string | null } | undefined;
+  const r = rows?.[0] as RunRow | undefined;
   return r ?? null;
+}
+
+/** Run presa: sem finished_at e iniciada há mais de 35 min (além do timeout de SSO de 25 min). */
+function isStaleRun(run: RunRow): boolean {
+  if (run.finished_at) return false;
+  return Date.now() - new Date(run.started_at).getTime() > 35 * 60_000;
+}
+
+async function finalizeStaleRun(
+  supabase: ReturnType<typeof getServiceClient>,
+  run: RunRow,
+  sessionId: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const msg = 'Run anterior expirou sem resposta — iniciando nova tentativa';
+  log('api', 'warn', 'stale_run_finalized', { runId: run.id, sessionId });
+  await supabase
+    .from('automation_runs')
+    .update({ status: 'error', error_message: msg, finished_at: now, updated_at: now })
+    .eq('id', run.id);
+  await supabase
+    .from('automation_sessions')
+    .update({ status: 'error', last_error: msg, updated_at: now })
+    .eq('id', sessionId);
 }
 
 /** Inicia browser dirigido ao portal — o utilizador autentica; gravamos storageState ao detetar home. */
@@ -58,8 +96,12 @@ app.post('/v1/latam/connect', async (req, reply) => {
   if (existingSess?.id) {
     const last = await latestRunForSession(supabase, (existingSess as { id: string }).id);
     if (last && !last.finished_at) {
-      log('api', 'info', 'connect_skipped_in_flight', { sessionId: existingSess.id, runId: last.id });
-      return { sessionId: existingSess.id, runId: last.id, resumed: true as const };
+      if (isStaleRun(last)) {
+        await finalizeStaleRun(supabase, last, (existingSess as { id: string }).id);
+      } else {
+        log('api', 'info', 'connect_skipped_in_flight', { sessionId: existingSess.id, runId: last.id });
+        return { sessionId: existingSess.id, runId: last.id, resumed: true as const };
+      }
     }
   }
 
@@ -148,8 +190,12 @@ app.post('/v1/latam/sync', async (req, reply) => {
   const sid = (sess as { id: string }).id;
   const last = await latestRunForSession(supabase, sid);
   if (last && !last.finished_at) {
-    log('api', 'info', 'sync_skipped_in_flight', { sessionId: sid, runId: last.id });
-    return { sessionId: sid, runId: last.id, resumed: true as const };
+    if (isStaleRun(last)) {
+      await finalizeStaleRun(supabase, last, sid);
+    } else {
+      log('api', 'info', 'sync_skipped_in_flight', { sessionId: sid, runId: last.id });
+      return { sessionId: sid, runId: last.id, resumed: true as const };
+    }
   }
 
   const { data: run, error: re } = await supabase

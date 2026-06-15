@@ -56,6 +56,7 @@ export async function postLatamConnect(getAccessToken: () => Promise<string | nu
   const res = await fetchWorker(url, {
     method: 'POST',
     headers: await authHeader(getAccessToken),
+    body: '{}',
   });
   return res.json() as Promise<{ sessionId: string; runId: string }>;
 }
