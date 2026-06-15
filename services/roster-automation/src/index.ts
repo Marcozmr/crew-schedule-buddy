@@ -35,12 +35,31 @@ function getErrorStatus(error: unknown): number {
   return 500;
 }
 
-/** Garante que erros de parse JSON do Fastify (400) retornem o mesmo envelope {error} das rotas. */
-app.setErrorHandler((error, _req, reply) => {
+/** Garante que erros do Fastify retornem o mesmo envelope {error} das rotas. */
+app.setErrorHandler((error, req, reply) => {
   const status = getErrorStatus(error);
   const message = getErrorMessage(error);
-  const msg = status === 400 ? `Requisição inválida: ${message}` : 'Erro interno no worker';
-  log('api', 'error', 'fastify_error', { status, message });
+  const stack = error instanceof Error ? (error.stack ?? '').slice(0, 800) : '';
+  let bodySnippet = '';
+  try {
+    const raw = JSON.stringify(req.body);
+    if (raw) bodySnippet = raw.slice(0, 300);
+  } catch {
+    bodySnippet = '[unserializable]';
+  }
+  log('api', 'error', 'fastify_error', {
+    status,
+    message,
+    stack,
+    method: req.method,
+    url: req.url,
+    body: bodySnippet,
+  });
+  // Expõe a mensagem real temporariamente (remover após diagnóstico)
+  const msg =
+    status === 400
+      ? `Requisição inválida: ${message}`
+      : `Erro interno no worker: ${message}`;
   return reply.status(status).send({ error: msg });
 });
 
@@ -91,17 +110,28 @@ async function finalizeStaleRun(
 
 /** Inicia browser dirigido ao portal — o utilizador autentica; gravamos storageState ao detetar home. */
 app.post('/v1/latam/connect', async (req, reply) => {
+  log('api', 'info', 'connect_request', { method: req.method, url: req.url });
+
   const userId = await requireUser(req.headers.authorization);
-  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+  if (!userId) {
+    log('api', 'warn', 'connect_auth_failed', { hasHeader: Boolean(req.headers.authorization) });
+    return reply.status(401).send({ error: 'Não autorizado' });
+  }
+  log('api', 'info', 'connect_auth_ok', { userId });
 
   const supabase = getServiceClient();
 
-  const { data: existingSess } = await supabase
+  const { data: existingSess, error: sessLookupErr } = await supabase
     .from('automation_sessions')
     .select('id')
     .eq('user_id', userId)
     .eq('provider', 'latam')
     .maybeSingle();
+  log('api', 'info', 'connect_existing_session', {
+    found: Boolean(existingSess?.id),
+    sessionId: existingSess?.id ?? null,
+    lookupError: sessLookupErr?.message ?? null,
+  });
 
   if (existingSess?.id) {
     const last = await latestRunForSession(supabase, (existingSess as { id: string }).id);
@@ -131,11 +161,12 @@ app.post('/v1/latam/connect', async (req, reply) => {
     .single();
 
   if (se || !session) {
-    log('api', 'error', 'session_upsert_failed', { message: se?.message });
+    log('api', 'error', 'connect_session_upsert_failed', { message: se?.message ?? 'no data' });
     return reply.status(500).send({ error: se?.message ?? 'Falha ao criar sessão' });
   }
 
   const sessionId = (session as { id: string }).id;
+  log('api', 'info', 'connect_session_upserted', { sessionId });
 
   await supabase
     .from('user_roster_connection')
@@ -154,14 +185,18 @@ app.post('/v1/latam/connect', async (req, reply) => {
     .single();
 
   if (re || !run) {
+    log('api', 'error', 'connect_run_insert_failed', { message: re?.message ?? 'no data', sessionId });
     return reply.status(500).send({ error: re?.message ?? 'Falha ao criar execução' });
   }
 
   const runId = (run as { id: string }).id;
+  log('api', 'info', 'connect_run_created', { sessionId, runId });
 
+  log('api', 'info', 'connect_flow_dispatched', { sessionId, runId });
   void startConnectFlow({ userId, sessionId, runId }).catch(async (e) => {
     const msg = e instanceof Error ? e.message : String(e);
-    log('api', 'error', 'connect_flow_unhandled', { sessionId, runId, message: msg });
+    const stack = e instanceof Error ? (e.stack ?? '').slice(0, 800) : '';
+    log('api', 'error', 'connect_flow_unhandled', { sessionId, runId, message: msg, stack });
     const sb = getServiceClient();
     const now = new Date().toISOString();
     await sb
@@ -179,12 +214,22 @@ app.post('/v1/latam/connect', async (req, reply) => {
 
 /** Sincronização manual: reutiliza storageState, navega ao iFlight, descarrega PDF e importa. */
 app.post('/v1/latam/sync', async (req, reply) => {
+  log('api', 'info', 'sync_request', { method: req.method, url: req.url });
+
   const userId = await requireUser(req.headers.authorization);
-  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+  if (!userId) {
+    log('api', 'warn', 'sync_auth_failed', { hasHeader: Boolean(req.headers.authorization) });
+    return reply.status(401).send({ error: 'Não autorizado' });
+  }
+  log('api', 'info', 'sync_auth_ok', { userId });
 
   const body = (req.body ?? {}) as { sessionId?: string };
   const sessionId = body.sessionId?.trim();
-  if (!sessionId) return reply.status(400).send({ error: 'sessionId obrigatório' });
+  if (!sessionId) {
+    log('api', 'warn', 'sync_missing_session_id', { bodyKeys: Object.keys(body) });
+    return reply.status(400).send({ error: 'sessionId obrigatório' });
+  }
+  log('api', 'info', 'sync_body_parsed', { sessionId });
 
   const supabase = getServiceClient();
   const { data: sess, error } = await supabase
@@ -194,10 +239,18 @@ app.post('/v1/latam/sync', async (req, reply) => {
     .single();
 
   if (error || !sess || (sess as { user_id: string }).user_id !== userId) {
+    log('api', 'warn', 'sync_session_invalid', {
+      sessionId,
+      dbError: error?.message ?? null,
+      found: Boolean(sess),
+      ownerMismatch: sess ? (sess as { user_id: string }).user_id !== userId : null,
+    });
     return reply.status(403).send({ error: 'Sessão inválida' });
   }
 
   const sid = (sess as { id: string }).id;
+  log('api', 'info', 'sync_session_found', { sessionId: sid });
+
   const last = await latestRunForSession(supabase, sid);
   if (last && !last.finished_at) {
     if (isStaleRun(last)) {
@@ -219,13 +272,19 @@ app.post('/v1/latam/sync', async (req, reply) => {
     .select('id')
     .single();
 
-  if (re || !run) return reply.status(500).send({ error: re?.message ?? 'Falha ao criar execução' });
+  if (re || !run) {
+    log('api', 'error', 'sync_run_insert_failed', { message: re?.message ?? 'no data', sessionId });
+    return reply.status(500).send({ error: re?.message ?? 'Falha ao criar execução' });
+  }
 
   const runId = (run as { id: string }).id;
+  log('api', 'info', 'sync_run_created', { sessionId, runId });
 
+  log('api', 'info', 'sync_flow_dispatched', { sessionId, runId });
   void runSyncFlow({ userId, sessionId, runId }).catch(async (e) => {
     const msg = e instanceof Error ? e.message : String(e);
-    log('api', 'error', 'sync_flow_unhandled', { sessionId, runId, message: msg });
+    const stack = e instanceof Error ? (e.stack ?? '').slice(0, 800) : '';
+    log('api', 'error', 'sync_flow_unhandled', { sessionId, runId, message: msg, stack });
     const sb = getServiceClient();
     const now = new Date().toISOString();
     await sb
