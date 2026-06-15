@@ -107,9 +107,20 @@ app.post('/v1/latam/connect', async (req, reply) => {
 
   const runId = (run as { id: string }).id;
 
-  void startConnectFlow({ userId, sessionId, runId }).catch((e) =>
-    log('api', 'error', 'connect_flow_unhandled', { message: e instanceof Error ? e.message : String(e) }),
-  );
+  void startConnectFlow({ userId, sessionId, runId }).catch(async (e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    log('api', 'error', 'connect_flow_unhandled', { sessionId, runId, message: msg });
+    const sb = getServiceClient();
+    const now = new Date().toISOString();
+    await sb
+      .from('automation_runs')
+      .update({ status: 'error', error_message: msg, finished_at: now, updated_at: now })
+      .eq('id', runId);
+    await sb
+      .from('automation_sessions')
+      .update({ status: 'error', last_error: msg, updated_at: now })
+      .eq('id', sessionId);
+  });
 
   return { sessionId, runId };
 });
@@ -156,9 +167,20 @@ app.post('/v1/latam/sync', async (req, reply) => {
 
   const runId = (run as { id: string }).id;
 
-  void runSyncFlow({ userId, sessionId, runId }).catch((e) =>
-    log('api', 'error', 'sync_flow_unhandled', { message: e instanceof Error ? e.message : String(e) }),
-  );
+  void runSyncFlow({ userId, sessionId, runId }).catch(async (e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    log('api', 'error', 'sync_flow_unhandled', { sessionId, runId, message: msg });
+    const sb = getServiceClient();
+    const now = new Date().toISOString();
+    await sb
+      .from('automation_runs')
+      .update({ status: 'error', error_message: msg, finished_at: now, updated_at: now })
+      .eq('id', runId);
+    await sb
+      .from('automation_sessions')
+      .update({ status: 'error', last_error: msg, updated_at: now })
+      .eq('id', sessionId);
+  });
 
   return { sessionId, runId };
 });

@@ -57,6 +57,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [portalStatus, setPortalStatus] = useState<ProviderStatus | null>(null);
   const [iflightStatus, setIFlightStatus] = useState<ProviderStatus | null>(null);
   const [portalConnecting, setPortalConnecting] = useState(false);
+  const [automationError, setAutomationError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const loadLastSync = useCallback(async () => {
@@ -111,6 +112,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
 
   const handleConnectPortal = useCallback(async () => {
     setPortalConnecting(true);
+    setAutomationError(null);
     try {
       if (automationConfigured) {
         await postLatamConnect(getAccessToken);
@@ -118,8 +120,10 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         const provider = RosterSyncService.getProviderById('corporate_portal');
         await provider.connect();
       }
-    } catch {
-      // erros de automação aparecem no AutomationStatusCard via Supabase realtime
+    } catch (e) {
+      if (automationConfigured) {
+        setAutomationError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setPortalConnecting(false);
       bump();
@@ -139,12 +143,12 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
 
   const handleManualPortalConfirm = useCallback(async () => {
     if (automationConfigured) {
-      // Automação: disparar o worker Playwright (não marca popup como "conectado")
       setPortalConnecting(true);
+      setAutomationError(null);
       try {
         await postLatamConnect(getAccessToken);
-      } catch {
-        // erros visíveis no AutomationStatusCard via Supabase realtime
+      } catch (e) {
+        setAutomationError(e instanceof Error ? e.message : String(e));
       } finally {
         setPortalConnecting(false);
         bump();
@@ -323,6 +327,13 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                   Marcar como conectado (teste)
                 </Button>
               )}
+            </div>
+          )}
+
+          {automationConfigured && automationError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-xs text-destructive">
+              <p className="font-semibold mb-1">Falha ao contactar o worker</p>
+              <p className="whitespace-pre-wrap font-mono break-all">{automationError}</p>
             </div>
           )}
 

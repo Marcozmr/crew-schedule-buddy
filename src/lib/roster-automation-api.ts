@@ -18,20 +18,45 @@ async function authHeader(getAccessToken: () => Promise<string | null>): Promise
   return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
 }
 
+/**
+ * Fetch com erros detalhados: distingue falha de rede/CORS (sem resposta) de erro HTTP.
+ * Inclui URL chamada, status e body na mensagem de erro para facilitar diagnóstico.
+ */
+async function fetchWorker(url: string, options: RequestInit): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Sem resposta do worker — possível erro de CORS ou worker offline.\nURL: ${url}\nDetalhe: ${detail}`,
+    );
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let detail = body;
+    try {
+      const j = JSON.parse(body) as { error?: string };
+      if (j.error) detail = j.error;
+    } catch {
+      // body não é JSON — usa texto puro
+    }
+    throw new Error(`Worker retornou ${res.status} em ${url}${detail ? `\n${detail}` : ''}`);
+  }
+  return res;
+}
+
 export async function postLatamConnect(getAccessToken: () => Promise<string | null>): Promise<{
   sessionId: string;
   runId: string;
 }> {
   const b = baseUrl();
-  if (!b) throw new Error('Automação não configurada');
-  const res = await fetch(`${b}/v1/latam/connect`, {
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const url = `${b}/v1/latam/connect`;
+  const res = await fetchWorker(url, {
     method: 'POST',
     headers: await authHeader(getAccessToken),
   });
-  if (!res.ok) {
-    const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? `Erro ${res.status}`);
-  }
   return res.json() as Promise<{ sessionId: string; runId: string }>;
 }
 
@@ -40,16 +65,13 @@ export async function postLatamSync(
   sessionId: string,
 ): Promise<{ sessionId: string; runId: string }> {
   const b = baseUrl();
-  if (!b) throw new Error('Automação não configurada');
-  const res = await fetch(`${b}/v1/latam/sync`, {
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const url = `${b}/v1/latam/sync`;
+  const res = await fetchWorker(url, {
     method: 'POST',
     headers: await authHeader(getAccessToken),
     body: JSON.stringify({ sessionId }),
   });
-  if (!res.ok) {
-    const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? `Erro ${res.status}`);
-  }
   return res.json() as Promise<{ sessionId: string; runId: string }>;
 }
 
@@ -61,14 +83,9 @@ export async function getLatamSession(
   recentRuns: Record<string, unknown>[];
 }> {
   const b = baseUrl();
-  if (!b) throw new Error('Automação não configurada');
-  const res = await fetch(`${b}/v1/latam/session/${encodeURIComponent(sessionId)}`, {
-    headers: await authHeader(getAccessToken),
-  });
-  if (!res.ok) {
-    const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? `Erro ${res.status}`);
-  }
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const url = `${b}/v1/latam/session/${encodeURIComponent(sessionId)}`;
+  const res = await fetchWorker(url, { headers: await authHeader(getAccessToken) });
   return res.json() as Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }>;
 }
 
