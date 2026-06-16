@@ -50,7 +50,14 @@ export default function LoginPage() {
   if (session && emailConfirmed) return <Navigate to="/home" replace />;
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1f3c 40%, #1a3a5c 70%, #0a1628 100%)' }}>
+    <div className="min-h-screen relative flex items-center justify-center overflow-hidden">
+      <img
+        src="/pexels-pixabay-104826.jpg"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover object-center"
+      />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(10,15,30,0.82) 0%, rgba(13,31,60,0.78) 40%, rgba(26,58,92,0.72) 70%, rgba(10,22,40,0.85) 100%)' }} />
 
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6 }} className="relative z-10 w-full max-w-md mx-4">
         <div className="rounded-2xl p-8 shadow-elevated backdrop-blur-md bg-black/20 border border-white/10">
