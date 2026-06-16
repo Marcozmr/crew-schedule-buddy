@@ -14,11 +14,19 @@ export default function DownloadRosterPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="gradient-dark px-4 py-4 flex items-center gap-3">
-        <button onClick={() => navigate('/home')} className="text-primary-foreground p-1">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <h1 className="text-lg font-bold text-primary-foreground">Baixar Escala</h1>
+      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '16/7', maxHeight: '320px', minHeight: '160px' }}>
+        <img
+          src="/pexels-pixabay-104826.jpg"
+          alt="Avião ao pôr do sol"
+          className="absolute inset-0 w-full h-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/60" />
+        <div className="absolute inset-0 px-4 py-4 flex items-start gap-3">
+          <button onClick={() => navigate('/home')} className="text-white p-1 mt-0.5">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <h1 className="text-lg font-bold text-white">Baixar Escala</h1>
+        </div>
       </div>
 
       <div className="p-4 max-w-3xl mx-auto space-y-4 min-w-0">
