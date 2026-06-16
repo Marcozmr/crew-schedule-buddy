@@ -57,7 +57,7 @@ export default function LoginPage() {
         aria-hidden="true"
         className="absolute inset-0 w-full h-full object-cover object-center"
       />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(10,15,30,0.82) 0%, rgba(13,31,60,0.78) 40%, rgba(26,58,92,0.72) 70%, rgba(10,22,40,0.85) 100%)' }} />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.55) 100%)' }} />
 
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6 }} className="relative z-10 w-full max-w-md mx-4">
         <div className="rounded-2xl p-8 shadow-elevated backdrop-blur-md bg-black/20 border border-white/10">
