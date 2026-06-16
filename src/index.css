@@ -13,14 +13,14 @@
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    /* Azul: destaques, links, navegação ativa — não usado como fill dos botões primários (ver Button) */
-    --primary: 221 83% 53%;
+    /* Slate profissional: destaques, links, navegação ativa */
+    --primary: 220 13% 32%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 221 83% 63%;
+    --primary-glow: 220 13% 44%;
     --secondary: 220 14% 96%;
     --secondary-foreground: 222 35% 18%;
     --muted: 220 12% 91%;
-    --muted-foreground: 220 9% 42%;
+    --muted-foreground: 220 9% 46%;
     --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 51%;
@@ -31,18 +31,18 @@
     --warning-foreground: 0 0% 100%;
     --border: 220 13% 86%;
     --input: 220 13% 88%;
-    --ring: 221 83% 53%;
+    --ring: 220 13% 32%;
     --radius: 0.75rem;
     --radius-card: 1.25rem;
     --radius-shell: 1.75rem;
     --sidebar-background: 220 12% 95%;
     --sidebar-foreground: 220 9% 38%;
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary: 220 13% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 14% 92%;
     --sidebar-accent-foreground: 222 47% 11%;
     --sidebar-border: 220 13% 88%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-ring: 220 13% 32%;
   }
 
   .dark {
@@ -52,9 +52,9 @@
     --card-foreground: 210 40% 98%;
     --popover: 222 47% 14%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
+    --primary: 215 20% 70%;
     --primary-foreground: 222 47% 11%;
-    --primary-glow: 217 91% 65%;
+    --primary-glow: 215 20% 78%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217 33% 17%;
@@ -69,15 +69,15 @@
     --warning-foreground: 0 0% 100%;
     --border: 217 33% 22%;
     --input: 217 33% 22%;
-    --ring: 224 76% 55%;
+    --ring: 215 20% 70%;
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 215 20% 70%;
     --sidebar-primary-foreground: 222 47% 11%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217 33% 22%;
-    --sidebar-ring: 224 76% 55%;
+    --sidebar-ring: 215 20% 70%;
   }
 }
 
@@ -153,8 +153,8 @@
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }
 
-  /* Em mobile, mais espaço para o FAB não cobrir conteúdo */
-  @media (max-width: 767px) {
+  /* Em mobile/tablet, espaço para a bottom nav não cobrir conteúdo */
+  @media (max-width: 1023px) {
     .pb-safe-content {
       padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
     }
@@ -192,7 +192,7 @@
   }
 
   .gradient-primary {
-    background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(221, 83%, 45%));
+    background: linear-gradient(135deg, hsl(220, 13%, 32%), hsl(220, 13%, 24%));
   }
 
   .gradient-dark {
@@ -200,7 +200,7 @@
   }
 
   .gradient-sky {
-    background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(200, 95%, 50%));
+    background: linear-gradient(135deg, hsl(220, 13%, 38%), hsl(220, 10%, 28%));
   }
 
   .shadow-card {
@@ -212,12 +212,12 @@
   }
 
   .shadow-glow-blue {
-    box-shadow: 0 0 16px hsl(221 83% 53% / 0.15);
+    box-shadow: 0 0 16px hsl(220 13% 32% / 0.18);
   }
 
   .text-gradient {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(200, 95%, 55%));
+    background-image: linear-gradient(135deg, hsl(220, 13%, 40%), hsl(220, 10%, 28%));
   }
 
   .hover-lift {

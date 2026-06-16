@@ -28,6 +28,7 @@
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
+    "@capacitor/local-notifications": "^8.2.0",
     "@date-fns/tz": "^1.4.1",
     "@hookform/resolvers": "^3.10.0",
     "@lovable.dev/cloud-auth-js": "^0.0.3",

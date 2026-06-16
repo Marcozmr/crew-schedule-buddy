@@ -3,7 +3,7 @@ import { ArrowLeft, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.2.0';
 
 export function LegalFooter({ className }: { className?: string }) {
   return (

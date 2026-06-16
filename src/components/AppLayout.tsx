@@ -1,14 +1,15 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, Home, HelpCircle, Radar, CalendarClock } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, HelpCircle, Radar, CalendarClock } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { ConnectedRosterLifecycle } from '@/components/roster/ConnectedRosterLifecycle';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { AppShell } from '@/components/layout/AppShell';
+import { useFlightNotifications } from '@/hooks/useFlightNotifications';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,6 +20,13 @@ const navItems = [
   { path: '/rest-calc', label: 'Calcular descanso', icon: BedDouble },
   { path: '/regulation', label: 'Calculadora operacional', icon: Shield },
   { path: '/settings', label: 'Configurações', icon: Settings },
+];
+
+const bottomNavItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/minha-escala', label: 'Minha Escala', icon: CalendarClock },
+  { path: '/schedule', label: 'Calendário', icon: Calendar },
+  { path: '/duty-calc', label: 'Jornada', icon: Clock },
 ];
 
 function desktopNavLinkClass(active: boolean) {
@@ -38,19 +46,45 @@ interface AppNavLinkProps {
 
 function AppNavLink({ children, className, onClick, to }: AppNavLinkProps) {
   const hasRouter = useInRouterContext();
-
   if (!hasRouter) {
-    return (
-      <a href={to} className={className} onClick={onClick}>
-        {children}
-      </a>
-    );
+    return <a href={to} className={className} onClick={onClick}>{children}</a>;
   }
+  return <RouterLink to={to} className={className} onClick={onClick}>{children}</RouterLink>;
+}
 
+function MobileBottomNav({ pathname, onMenuOpen }: { pathname: string; onMenuOpen: () => void }) {
   return (
-    <RouterLink to={to} className={className} onClick={onClick}>
-      {children}
-    </RouterLink>
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card/95 backdrop-blur-xl border-t border-border"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="flex items-stretch h-14">
+        {bottomNavItems.map((item) => {
+          const active = pathname === item.path;
+          return (
+            <AppNavLink
+              key={item.path}
+              to={item.path}
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 transition-colors ${
+                active ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <item.icon className={`w-[18px] h-[18px] ${active ? 'stroke-[2.5]' : 'stroke-2'}`} />
+              <span className={`text-[9px] leading-none mt-0.5 ${active ? 'font-semibold' : 'font-medium'}`}>
+                {item.label}
+              </span>
+            </AppNavLink>
+          );
+        })}
+        <button
+          onClick={onMenuOpen}
+          className="flex flex-col items-center justify-center gap-0.5 flex-1 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Menu className="w-[18px] h-[18px] stroke-2" />
+          <span className="text-[9px] font-medium leading-none mt-0.5">Menu</span>
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -60,6 +94,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { signOut, profile, user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  useFlightNotifications();
 
   useEffect(() => {
     if (!user) return;
@@ -82,173 +117,193 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
   }, [user]);
 
   const handleLogout = async () => { await signOut(); window.location.href = '/'; };
-  const initials = profile?.name?.split(' ').map((name) => name[0]).join('').substring(0, 2).toUpperCase() || 'U';
+  const initials = profile?.name?.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
   const pageTitle = navItems.find((item) => location.pathname === item.path)?.label || '';
+  const pathname = location.pathname;
 
   return (
     <AppShell>
       <div className="flex min-h-dvh w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background lg:flex-row">
         <ConnectedRosterLifecycle />
+
+        {/* Desktop sidebar */}
         <aside className="hidden w-[248px] shrink-0 flex-col border-b border-border bg-card safe-area-top safe-area-bottom dark:border-border dark:bg-card/50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-dvh lg:border-b-0 lg:border-r lg:border-border lg:shadow-sm">
-        <div className="flex h-16 items-center gap-3 border-b border-border px-5 dark:border-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
-            <Plane className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
-        </div>
-
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {navItems.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <AppNavLink
-                key={item.path}
-                to={item.path}
-                className={desktopNavLinkClass(active)}
-              >
-                <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-sidebar-primary-foreground' : ''}`} />
-                <span>{item.label}</span>
-              </AppNavLink>
-            );
-          })}
-        </nav>
-
-        <div className="space-y-2 border-t border-border p-3 dark:border-border">
-          {profile && (
-            <AppNavLink to="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
-              <Avatar className="w-7 h-7">
-                <AvatarImage src={profile.avatar_url || undefined} />
-                <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">{profile.name}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{profile.airline || profile.email}</p>
-              </div>
-            </AppNavLink>
-          )}
-          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full">
-            <LogOut className="w-4 h-4" /> Sair
-          </button>
-        </div>
-      </aside>
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
-        <header className="sticky top-0 z-40 min-h-[3.5rem] px-4 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={() => navigate(-1)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button onClick={() => navigate('/dashboard')} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <Home className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2 ml-1 min-w-0">
-              <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center shrink-0">
-                <Plane className="w-3 h-3 text-primary-foreground" />
-              </div>
-              {pageTitle && <span className="text-sm font-semibold text-foreground truncate">{pageTitle}</span>}
+          <div className="flex h-16 items-center gap-3 border-b border-border px-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
+              <Plane className="h-4 w-4 text-primary-foreground" />
             </div>
+            <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <AppNavLink to="/notifications" className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>
-              )}
-            </AppNavLink>
-            <button onClick={() => setDrawerOpen(true)} className="p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <Menu className="w-5 h-5" />
+          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+            {navItems.map((item) => {
+              const active = pathname === item.path;
+              return (
+                <AppNavLink key={item.path} to={item.path} className={desktopNavLinkClass(active)}>
+                  <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-sidebar-primary-foreground' : ''}`} />
+                  <span>{item.label}</span>
+                </AppNavLink>
+              );
+            })}
+          </nav>
+          <div className="space-y-2 border-t border-border p-3">
+            {profile && (
+              <AppNavLink to="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
+                <Avatar className="w-7 h-7">
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{profile.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{profile.airline || profile.email}</p>
+                </div>
+              </AppNavLink>
+            )}
+            <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full">
+              <LogOut className="w-4 h-4" /> Sair
             </button>
           </div>
-        </header>
+        </aside>
 
-        <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
-            {pageTitle}
-          </h1>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <AppNavLink
-              to="/support"
-              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
-            >
-              <HelpCircle className="h-4 w-4" />
-            </AppNavLink>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
+          {/* Mobile top header */}
+          <header className="sticky top-0 z-40 min-h-[3.5rem] px-3 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
+            <div className="flex items-center gap-1 min-w-0">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2 ml-0.5 min-w-0">
+                <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center shrink-0">
+                  <Plane className="w-3 h-3 text-primary-foreground" />
+                </div>
+                <span className="text-sm font-semibold text-foreground truncate">
+                  {pageTitle || 'EscalaX'}
+                </span>
+              </div>
+            </div>
             <AppNavLink
               to="/notifications"
-              className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+              className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                   {unreadCount}
                 </span>
               )}
             </AppNavLink>
-            {profile && (
+          </header>
+
+          {/* Desktop top header */}
+          <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
+              {pageTitle}
+            </h1>
+            <div className="flex items-center gap-2 sm:gap-3">
               <AppNavLink
-                to="/profile"
-                className="ml-1 flex items-center gap-2 rounded-xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:hover:border-border dark:hover:bg-secondary"
+                to="/support"
+                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
               >
-                <Avatar className="h-9 w-9 border border-slate-200/80 shadow-sm dark:border-border">
-                  <AvatarImage src={profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
-                </Avatar>
-                <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-800 xl:inline dark:text-foreground">
-                  {profile.name}
-                </span>
+                <HelpCircle className="h-4 w-4" />
               </AppNavLink>
-            )}
-          </div>
-        </header>
-
-        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <SheetContent side="right" className="w-72 bg-card border-border p-0 flex flex-col max-h-dvh">
-            <SheetHeader className="p-4 border-b border-border safe-area-top">
-              <SheetTitle className="text-foreground text-left text-sm">Menu</SheetTitle>
-            </SheetHeader>
-            {profile && (
-              <AppNavLink to="/profile" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 mx-3 mt-3 mb-2 p-3 rounded-xl bg-secondary">
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{profile.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
-                </div>
+              <AppNavLink
+                to="/notifications"
+                className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+                    {unreadCount}
+                  </span>
+                )}
               </AppNavLink>
-            )}
-            <nav className="p-3 space-y-0.5 flex-1 overflow-y-auto">
-              {navItems.map((item) => {
-                const active = location.pathname === item.path;
-                return (
-                  <AppNavLink key={item.path} to={item.path} onClick={() => setDrawerOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active ? 'bg-sidebar-primary/12 text-sidebar-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
-                  </AppNavLink>
-                );
-              })}
-              <AppNavLink to="/support" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary hover:text-foreground">
-                <HelpCircle className="w-4 h-4" /> Suporte
-              </AppNavLink>
-            </nav>
-            <div className="p-3 border-t border-border safe-area-bottom bg-card">
-              <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary w-full">
-                <LogOut className="w-4 h-4" /> Sair
-              </button>
+              {profile && (
+                <AppNavLink
+                  to="/profile"
+                  className="ml-1 flex items-center gap-2 rounded-xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:hover:border-border dark:hover:bg-secondary"
+                >
+                  <Avatar className="h-9 w-9 border border-slate-200/80 shadow-sm dark:border-border">
+                    <AvatarImage src={profile.avatar_url || undefined} />
+                    <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                  </Avatar>
+                  <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-800 xl:inline dark:text-foreground">
+                    {profile.name}
+                  </span>
+                </AppNavLink>
+              )}
             </div>
-          </SheetContent>
-        </Sheet>
+          </header>
 
-        <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible bg-background">
-          <div className="w-full max-w-none px-3 py-5 pb-safe-content sm:px-4 sm:py-6 md:px-5 md:py-7 lg:px-6 lg:py-8 xl:px-8 2xl:px-12 safe-area-bottom">
-            {children}
-          </div>
-        </main>
+          {/* Mobile drawer */}
+          <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <SheetContent side="right" className="w-[280px] bg-background border-border p-0 flex flex-col max-h-dvh">
+              <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
+              {profile && (
+                <AppNavLink
+                  to="/profile"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-3 p-4 border-b border-border bg-card safe-area-top shrink-0"
+                >
+                  <Avatar className="w-10 h-10 shrink-0">
+                    <AvatarImage src={profile.avatar_url || undefined} />
+                    <AvatarFallback className="text-sm font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{profile.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
+                  </div>
+                </AppNavLink>
+              )}
+              <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+                {navItems.map((item) => {
+                  const active = pathname === item.path;
+                  return (
+                    <AppNavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setDrawerOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                      }`}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      {item.label}
+                    </AppNavLink>
+                  );
+                })}
+                <AppNavLink
+                  to="/support"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <HelpCircle className="w-4 h-4 shrink-0" /> Suporte
+                </AppNavLink>
+              </nav>
+              <div className="p-2 border-t border-border safe-area-bottom">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" /> Sair da conta
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
 
-        <FeedbackFAB />
-        <PWAInstallPrompt />
+          <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible bg-background">
+            <div className="w-full max-w-none px-3 py-5 pb-safe-content sm:px-4 sm:py-6 md:px-5 md:py-7 lg:px-6 lg:py-8 xl:px-8 2xl:px-12 safe-area-bottom">
+              {children}
+            </div>
+          </main>
+
+          <FeedbackFAB />
+          <PWAInstallPrompt />
+        </div>
+
+        <MobileBottomNav pathname={pathname} onMenuOpen={() => setDrawerOpen(true)} />
       </div>
-    </div>
     </AppShell>
   );
 }
@@ -260,13 +315,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
     const navigate = (to: string | number) => {
       if (typeof window === 'undefined') return;
-      if (typeof to === 'number') {
-        window.history.go(to);
-        return;
-      }
+      if (typeof to === 'number') { window.history.go(to); return; }
       window.location.href = to;
     };
-
     return (
       <AppLayoutRouterFallback pathname={pathname} navigate={navigate}>
         {children}
@@ -277,7 +328,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return <AppLayoutInner>{children}</AppLayoutInner>;
 }
 
-function AppLayoutRouterFallback({ children, navigate, pathname }: { children: ReactNode; navigate: (to: string | number) => void; pathname: string }) {
+function AppLayoutRouterFallback({
+  children,
+  navigate,
+  pathname,
+}: {
+  children: ReactNode;
+  navigate: (to: string | number) => void;
+  pathname: string;
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { signOut, profile, user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -303,173 +362,192 @@ function AppLayoutRouterFallback({ children, navigate, pathname }: { children: R
   }, [user]);
 
   const handleLogout = async () => { await signOut(); window.location.href = '/'; };
-  const initials = profile?.name?.split(' ').map((name) => name[0]).join('').substring(0, 2).toUpperCase() || 'U';
+  const initials = profile?.name?.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
   const pageTitle = navItems.find((item) => pathname === item.path)?.label || '';
 
   return (
     <AppShell>
       <div className="flex min-h-dvh w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background lg:flex-row">
         <ConnectedRosterLifecycle />
+
+        {/* Desktop sidebar */}
         <aside className="hidden w-[248px] shrink-0 flex-col border-b border-border bg-card safe-area-top safe-area-bottom dark:border-border dark:bg-card/50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-dvh lg:border-b-0 lg:border-r lg:border-border lg:shadow-sm">
-        <div className="flex h-16 items-center gap-3 border-b border-border px-5 dark:border-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
-            <Plane className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
-        </div>
-
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {navItems.map((item) => {
-            const active = pathname === item.path;
-            return (
-              <a
-                key={item.path}
-                href={item.path}
-                className={desktopNavLinkClass(active)}
-              >
-                <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-sidebar-primary-foreground' : ''}`} />
-                <span>{item.label}</span>
-              </a>
-            );
-          })}
-        </nav>
-
-        <div className="space-y-2 border-t border-border p-3 dark:border-border">
-          {profile && (
-            <a href="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
-              <Avatar className="w-7 h-7">
-                <AvatarImage src={profile.avatar_url || undefined} />
-                <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">{profile.name}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{profile.airline || profile.email}</p>
-              </div>
-            </a>
-          )}
-          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full">
-            <LogOut className="w-4 h-4" /> Sair
-          </button>
-        </div>
-      </aside>
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
-        <header className="sticky top-0 z-40 min-h-[3.5rem] px-4 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={() => navigate(-1)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button onClick={() => navigate('/dashboard')} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <Home className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2 ml-1 min-w-0">
-              <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center shrink-0">
-                <Plane className="w-3 h-3 text-primary-foreground" />
-              </div>
-              {pageTitle && <span className="text-sm font-semibold text-foreground truncate">{pageTitle}</span>}
+          <div className="flex h-16 items-center gap-3 border-b border-border px-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
+              <Plane className="h-4 w-4 text-primary-foreground" />
             </div>
+            <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <a href="/notifications" className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>
-              )}
-            </a>
-            <button onClick={() => setDrawerOpen(true)} className="p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
-              <Menu className="w-5 h-5" />
+          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+            {navItems.map((item) => {
+              const active = pathname === item.path;
+              return (
+                <a key={item.path} href={item.path} className={desktopNavLinkClass(active)}>
+                  <item.icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-sidebar-primary-foreground' : ''}`} />
+                  <span>{item.label}</span>
+                </a>
+              );
+            })}
+          </nav>
+          <div className="space-y-2 border-t border-border p-3">
+            {profile && (
+              <a href="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
+                <Avatar className="w-7 h-7">
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{profile.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{profile.airline || profile.email}</p>
+                </div>
+              </a>
+            )}
+            <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full">
+              <LogOut className="w-4 h-4" /> Sair
             </button>
           </div>
-        </header>
+        </aside>
 
-        <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
-            {pageTitle}
-          </h1>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <a
-              href="/support"
-              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
-            >
-              <HelpCircle className="h-4 w-4" />
-            </a>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
+          {/* Mobile top header */}
+          <header className="sticky top-0 z-40 min-h-[3.5rem] px-3 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
+            <div className="flex items-center gap-1 min-w-0">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2 ml-0.5 min-w-0">
+                <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center shrink-0">
+                  <Plane className="w-3 h-3 text-primary-foreground" />
+                </div>
+                <span className="text-sm font-semibold text-foreground truncate">
+                  {pageTitle || 'EscalaX'}
+                </span>
+              </div>
+            </div>
             <a
               href="/notifications"
-              className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+              className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                   {unreadCount}
                 </span>
               )}
             </a>
-            {profile && (
+          </header>
+
+          {/* Desktop top header */}
+          <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
+              {pageTitle}
+            </h1>
+            <div className="flex items-center gap-2 sm:gap-3">
               <a
-                href="/profile"
-                className="ml-1 flex items-center gap-2 rounded-xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:hover:border-border dark:hover:bg-secondary"
+                href="/support"
+                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
               >
-                <Avatar className="h-9 w-9 border border-slate-200/80 shadow-sm dark:border-border">
-                  <AvatarImage src={profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
-                </Avatar>
-                <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-800 xl:inline dark:text-foreground">
-                  {profile.name}
-                </span>
+                <HelpCircle className="h-4 w-4" />
               </a>
-            )}
-          </div>
-        </header>
-
-        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <SheetContent side="right" className="w-72 bg-card border-border p-0 flex flex-col max-h-dvh">
-            <SheetHeader className="p-4 border-b border-border safe-area-top">
-              <SheetTitle className="text-foreground text-left text-sm">Menu</SheetTitle>
-            </SheetHeader>
-            {profile && (
-              <a href="/profile" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 mx-3 mt-3 mb-2 p-3 rounded-xl bg-secondary">
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{profile.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
-                </div>
+              <a
+                href="/notifications"
+                className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+                    {unreadCount}
+                  </span>
+                )}
               </a>
-            )}
-            <nav className="p-3 space-y-0.5 flex-1 overflow-y-auto">
-              {navItems.map((item) => {
-                const active = pathname === item.path;
-                return (
-                  <a key={item.path} href={item.path} onClick={() => setDrawerOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active ? 'bg-sidebar-primary/12 text-sidebar-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
-                  </a>
-                );
-              })}
-              <a href="/support" onClick={() => setDrawerOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary hover:text-foreground">
-                <HelpCircle className="w-4 h-4" /> Suporte
-              </a>
-            </nav>
-            <div className="p-3 border-t border-border safe-area-bottom bg-card">
-              <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary w-full">
-                <LogOut className="w-4 h-4" /> Sair
-              </button>
+              {profile && (
+                <a
+                  href="/profile"
+                  className="ml-1 flex items-center gap-2 rounded-xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:hover:border-border dark:hover:bg-secondary"
+                >
+                  <Avatar className="h-9 w-9 border border-slate-200/80 shadow-sm dark:border-border">
+                    <AvatarImage src={profile.avatar_url || undefined} />
+                    <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                  </Avatar>
+                  <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-800 xl:inline dark:text-foreground">
+                    {profile.name}
+                  </span>
+                </a>
+              )}
             </div>
-          </SheetContent>
-        </Sheet>
+          </header>
 
-        <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible bg-background">
-          <div className="w-full max-w-none px-3 py-5 pb-safe-content sm:px-4 sm:py-6 md:px-5 md:py-7 lg:px-6 lg:py-8 xl:px-8 2xl:px-12 safe-area-bottom">
-            {children}
-          </div>
-        </main>
+          {/* Mobile drawer */}
+          <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <SheetContent side="right" className="w-[280px] bg-background border-border p-0 flex flex-col max-h-dvh">
+              <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
+              {profile && (
+                <a
+                  href="/profile"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-3 p-4 border-b border-border bg-card safe-area-top shrink-0"
+                >
+                  <Avatar className="w-10 h-10 shrink-0">
+                    <AvatarImage src={profile.avatar_url || undefined} />
+                    <AvatarFallback className="text-sm font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{profile.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
+                  </div>
+                </a>
+              )}
+              <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+                {navItems.map((item) => {
+                  const active = pathname === item.path;
+                  return (
+                    <a
+                      key={item.path}
+                      href={item.path}
+                      onClick={() => setDrawerOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                      }`}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      {item.label}
+                    </a>
+                  );
+                })}
+                <a
+                  href="/support"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <HelpCircle className="w-4 h-4 shrink-0" /> Suporte
+                </a>
+              </nav>
+              <div className="p-2 border-t border-border safe-area-bottom">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" /> Sair da conta
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
 
-        <FeedbackFAB />
-        <PWAInstallPrompt />
+          <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible bg-background">
+            <div className="w-full max-w-none px-3 py-5 pb-safe-content sm:px-4 sm:py-6 md:px-5 md:py-7 lg:px-6 lg:py-8 xl:px-8 2xl:px-12 safe-area-bottom">
+              {children}
+            </div>
+          </main>
+
+          <FeedbackFAB />
+          <PWAInstallPrompt />
+        </div>
+
+        <MobileBottomNav pathname={pathname} onMenuOpen={() => setDrawerOpen(true)} />
       </div>
-    </div>
     </AppShell>
   );
 }
