@@ -20,10 +20,20 @@ const devLog = (...args: unknown[]) => {
   if (import.meta.env.DEV) console.log('[FeedbackFAB]', ...args);
 };
 
-export function FeedbackFAB() {
+interface FeedbackFABProps {
+  /** Quando fornecido, o FAB funciona em modo controlado (sem botão flutuante) */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Oculta o botão flutuante; use quando o trigger vem de fora */
+  hideTrigger?: boolean;
+}
+
+export function FeedbackFAB({ open: controlledOpen, onOpenChange: controlledOnChange, hideTrigger }: FeedbackFABProps = {}) {
   const { user, profile, loading } = useAuth();
   const location = useLocation();
-  const [open, setOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen! : internalOpen;
   const [step, setStep] = useState<'choose' | 'form'>('choose');
   const [type, setType] = useState<SupportPayload['type']>('suggestion');
   const [name, setName] = useState('');
@@ -40,6 +50,10 @@ export function FeedbackFAB() {
     setName(profile?.name || '');
     setEmail(user?.email || '');
   }, [profile?.name, user?.email]);
+
+  const setOpen = (next: boolean) => {
+    if (isControlled) { controlledOnChange?.(next); } else { setInternalOpen(next); }
+  };
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
@@ -128,19 +142,21 @@ export function FeedbackFAB() {
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Trigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'pointer-events-auto fixed right-4 lg:right-6 safe-bottom-fab lg:safe-bottom-6 z-[100] flex h-12 w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full gradient-sky text-primary-foreground shadow-elevated transition-transform hover:scale-105 active:scale-95',
-            open && 'pointer-events-none opacity-0',
-          )}
-          aria-label="Abrir suporte"
-          aria-expanded={open}
-        >
-          <MessageCircle className="h-5 w-5 md:h-6 md:w-6" />
-        </button>
-      </DialogPrimitive.Trigger>
+      {!hideTrigger && (
+        <DialogPrimitive.Trigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'pointer-events-auto fixed right-4 lg:right-6 safe-bottom-fab lg:safe-bottom-6 z-[100] flex h-12 w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full gradient-sky text-primary-foreground shadow-elevated transition-transform hover:scale-105 active:scale-95',
+              open && 'pointer-events-none opacity-0',
+            )}
+            aria-label="Abrir suporte"
+            aria-expanded={open}
+          >
+            <MessageCircle className="h-5 w-5 lg:h-6 lg:w-6" />
+          </button>
+        </DialogPrimitive.Trigger>
+      )}
 
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay

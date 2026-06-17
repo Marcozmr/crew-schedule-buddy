@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, HelpCircle, Radar, CalendarClock } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, HelpCircle, Radar, CalendarClock, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,7 +52,15 @@ function AppNavLink({ children, className, onClick, to }: AppNavLinkProps) {
   return <RouterLink to={to} className={className} onClick={onClick}>{children}</RouterLink>;
 }
 
-function MobileBottomNav({ pathname, onMenuOpen }: { pathname: string; onMenuOpen: () => void }) {
+function MobileBottomNav({
+  pathname,
+  onMenuOpen,
+  onFeedbackOpen,
+}: {
+  pathname: string;
+  onMenuOpen: () => void;
+  onFeedbackOpen: () => void;
+}) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card/95 backdrop-blur-xl border-t border-border"
@@ -69,19 +77,26 @@ function MobileBottomNav({ pathname, onMenuOpen }: { pathname: string; onMenuOpe
                 active ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
-              <item.icon className={`w-[18px] h-[18px] ${active ? 'stroke-[2.5]' : 'stroke-2'}`} />
-              <span className={`text-[9px] leading-none mt-0.5 ${active ? 'font-semibold' : 'font-medium'}`}>
+              <item.icon className={`w-[17px] h-[17px] ${active ? 'stroke-[2.5]' : 'stroke-2'}`} />
+              <span className={`text-[8px] leading-none mt-0.5 ${active ? 'font-semibold' : 'font-medium'}`}>
                 {item.label}
               </span>
             </AppNavLink>
           );
         })}
         <button
+          onClick={onFeedbackOpen}
+          className="flex flex-col items-center justify-center gap-0.5 flex-1 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <MessageCircle className="w-[17px] h-[17px] stroke-2" />
+          <span className="text-[8px] font-medium leading-none mt-0.5">Suporte</span>
+        </button>
+        <button
           onClick={onMenuOpen}
           className="flex flex-col items-center justify-center gap-0.5 flex-1 text-muted-foreground hover:text-foreground transition-colors"
         >
-          <Menu className="w-[18px] h-[18px] stroke-2" />
-          <span className="text-[9px] font-medium leading-none mt-0.5">Menu</span>
+          <Menu className="w-[17px] h-[17px] stroke-2" />
+          <span className="text-[8px] font-medium leading-none mt-0.5">Menu</span>
         </button>
       </div>
     </nav>
@@ -92,6 +107,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const { signOut, profile, user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   useFlightNotifications();
@@ -298,11 +314,15 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
             </div>
           </main>
 
-          <FeedbackFAB />
+          <FeedbackFAB open={feedbackOpen} onOpenChange={setFeedbackOpen} hideTrigger />
           <PWAInstallPrompt />
         </div>
 
-        <MobileBottomNav pathname={pathname} onMenuOpen={() => setDrawerOpen(true)} />
+        <MobileBottomNav
+          pathname={pathname}
+          onMenuOpen={() => setDrawerOpen(true)}
+          onFeedbackOpen={() => setFeedbackOpen(true)}
+        />
       </div>
     </AppShell>
   );
@@ -338,6 +358,7 @@ function AppLayoutRouterFallback({
   pathname: string;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const { signOut, profile, user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -542,11 +563,15 @@ function AppLayoutRouterFallback({
             </div>
           </main>
 
-          <FeedbackFAB />
+          <FeedbackFAB open={feedbackOpen} onOpenChange={setFeedbackOpen} hideTrigger />
           <PWAInstallPrompt />
         </div>
 
-        <MobileBottomNav pathname={pathname} onMenuOpen={() => setDrawerOpen(true)} />
+        <MobileBottomNav
+          pathname={pathname}
+          onMenuOpen={() => setDrawerOpen(true)}
+          onFeedbackOpen={() => setFeedbackOpen(true)}
+        />
       </div>
     </AppShell>
   );
