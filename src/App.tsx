@@ -51,6 +51,7 @@ const AboutPage = lazy(() => import("./pages/AboutPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const CorporateAuthCallbackPage = lazy(() => import("./pages/CorporateAuthCallbackPage"));
 const ShareImportPlaceholderPage = lazy(() => import("./pages/ShareImportPlaceholderPage"));
+const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -268,6 +269,16 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <UploadPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Conexões">
+              <ConnectionsPage />
+            </RouteErrorBoundary>
           </ProtectedRoute>
         }
       />

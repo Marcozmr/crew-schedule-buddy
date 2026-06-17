@@ -194,7 +194,47 @@ export function OnboardingModal({ open, onClose }: Props) {
                     </div>
                     <div className="space-y-3">
                       <div><Label className="text-xs text-muted-foreground">Nome completo</Label><Input value={profileForm.name} onChange={e => setProfileForm(f => ({ ...f, name: e.target.value }))} placeholder="João Silva" /></div>
-                      <div><Label className="text-xs text-muted-foreground">Companhia aérea</Label><Input value={profileForm.airline} onChange={e => setProfileForm(f => ({ ...f, airline: e.target.value }))} placeholder="LATAM, GOL, Azul..." /></div>
+                      {/* Airline visual selector */}
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Qual é a sua companhia aérea?</Label>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {[
+                            { name: 'GOL', color: 'bg-orange-500', text: 'text-white' },
+                            { name: 'LATAM', color: 'bg-red-600', text: 'text-white' },
+                            { name: 'Azul', color: 'bg-cyan-500', text: 'text-white' },
+                            { name: 'Avianca', color: 'bg-red-700', text: 'text-white' },
+                            { name: 'MAP', color: 'bg-blue-600', text: 'text-white' },
+                            { name: 'Passaredo', color: 'bg-green-600', text: 'text-white' },
+                          ].map(a => (
+                            <button
+                              key={a.name}
+                              type="button"
+                              onClick={() => setProfileForm(f => ({ ...f, airline: a.name }))}
+                              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 transition-all text-left ${
+                                profileForm.airline === a.name
+                                  ? 'border-primary bg-primary/10'
+                                  : 'border-border hover:border-primary/40'
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-full ${a.color} flex items-center justify-center shrink-0`}>
+                                <span className={`text-xs font-bold ${a.text}`}>{a.name.charAt(0)}</span>
+                              </div>
+                              <span className="text-sm font-medium text-foreground">{a.name}</span>
+                              {profileForm.airline === a.name && (
+                                <CheckCircle2 className="w-4 h-4 text-primary ml-auto" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-2">
+                          <Input
+                            value={!['GOL','LATAM','Azul','Avianca','MAP','Passaredo'].includes(profileForm.airline) ? profileForm.airline : ''}
+                            onChange={e => setProfileForm(f => ({ ...f, airline: e.target.value }))}
+                            placeholder="Outra companhia..."
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">Função</Label>
                         <Select value={profileForm.crewRole} onValueChange={v => setProfileForm(f => ({ ...f, crewRole: v }))}>

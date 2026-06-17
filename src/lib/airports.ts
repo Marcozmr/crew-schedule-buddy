@@ -1,0 +1,63 @@
+export interface AirportInfo {
+  icao: string;
+  name: string;
+  city: string;
+  lat: number;
+  lon: number;
+}
+
+export const AIRPORTS_DB: Record<string, AirportInfo> = {
+  GRU: { icao: 'SBGR', name: 'Guarulhos', city: 'Guarulhos', lat: -23.4356, lon: -46.4731 },
+  CGH: { icao: 'SBSP', name: 'Congonhas', city: 'São Paulo', lat: -23.6261, lon: -46.6564 },
+  VCP: { icao: 'SBKP', name: 'Viracopos', city: 'Campinas', lat: -23.0074, lon: -47.1345 },
+  BSB: { icao: 'SBBR', name: 'Brasília', city: 'Brasília', lat: -15.8711, lon: -47.9186 },
+  GIG: { icao: 'SBGL', name: 'Galeão', city: 'Rio de Janeiro', lat: -22.8099, lon: -43.2505 },
+  SDU: { icao: 'SBRJ', name: 'Santos Dumont', city: 'Rio de Janeiro', lat: -22.9105, lon: -43.1631 },
+  SSA: { icao: 'SBSV', name: 'Salvador', city: 'Salvador', lat: -12.9086, lon: -38.3225 },
+  CNF: { icao: 'SBCF', name: 'Confins', city: 'Belo Horizonte', lat: -19.6244, lon: -43.9719 },
+  PLU: { icao: 'SBPL', name: 'Pampulha', city: 'Belo Horizonte', lat: -19.8512, lon: -43.9506 },
+  POA: { icao: 'SBPA', name: 'Salgado Filho', city: 'Porto Alegre', lat: -29.9944, lon: -51.1711 },
+  REC: { icao: 'SBRF', name: 'Recife', city: 'Recife', lat: -8.1264, lon: -34.9236 },
+  CWB: { icao: 'SBCT', name: 'Afonso Pena', city: 'Curitiba', lat: -25.5285, lon: -49.1758 },
+  FOR: { icao: 'SBFZ', name: 'Fortaleza', city: 'Fortaleza', lat: -3.7761, lon: -38.5325 },
+  MAO: { icao: 'SBEG', name: 'Eduardo Gomes', city: 'Manaus', lat: -3.0386, lon: -60.0497 },
+  BEL: { icao: 'SBBE', name: 'Val de Cans', city: 'Belém', lat: -1.3792, lon: -48.4764 },
+  FLN: { icao: 'SBFL', name: 'Hercílio Luz', city: 'Florianópolis', lat: -27.6703, lon: -48.5525 },
+  NAT: { icao: 'SBNT', name: 'Natal', city: 'Natal', lat: -5.9111, lon: -35.2478 },
+  MCZ: { icao: 'SBMO', name: 'Maceió', city: 'Maceió', lat: -9.5108, lon: -35.7917 },
+  VIX: { icao: 'SBVT', name: 'Vitória', city: 'Vitória', lat: -20.2581, lon: -40.2864 },
+  CGB: { icao: 'SBCY', name: 'Marechal Rondon', city: 'Cuiabá', lat: -15.6528, lon: -56.1167 },
+  GYN: { icao: 'SBGO', name: 'Santa Genoveva', city: 'Goiânia', lat: -16.6319, lon: -49.2206 },
+  THE: { icao: 'SBTE', name: 'Teresina', city: 'Teresina', lat: -5.0599, lon: -42.8236 },
+  PMW: { icao: 'SBPJ', name: 'Palmas', city: 'Palmas', lat: -10.2915, lon: -48.3569 },
+  PVH: { icao: 'SBPV', name: 'Porto Velho', city: 'Porto Velho', lat: -8.7093, lon: -63.9023 },
+  BVB: { icao: 'SBBV', name: 'Boa Vista', city: 'Boa Vista', lat: 2.8414, lon: -60.6922 },
+  MAB: { icao: 'SBMA', name: 'Marabá', city: 'Marabá', lat: -5.3686, lon: -49.1380 },
+  SLZ: { icao: 'SBSL', name: 'Marechal Cunha Machado', city: 'São Luís', lat: -2.5856, lon: -44.2341 },
+  JPA: { icao: 'SBJP', name: 'Castro Pinto', city: 'João Pessoa', lat: -7.1459, lon: -34.9508 },
+  AJU: { icao: 'SBJU', name: 'Santa Maria', city: 'Aracaju', lat: -10.9843, lon: -37.0713 },
+  MGF: { icao: 'SBMG', name: 'Silvio Name Jr.', city: 'Maringá', lat: -23.4796, lon: -52.0122 },
+  LDB: { icao: 'SBLO', name: 'Londrina', city: 'Londrina', lat: -23.3336, lon: -51.1301 },
+  FOZ: { icao: 'SBFI', name: 'Foz do Iguaçu', city: 'Foz do Iguaçu', lat: -25.6002, lon: -54.4852 },
+  JOI: { icao: 'SBJV', name: 'Lauro Carneiro de Loyola', city: 'Joinville', lat: -26.2244, lon: -48.7972 },
+  XAP: { icao: 'SBCH', name: 'Chapecó', city: 'Chapecó', lat: -27.1342, lon: -52.6566 },
+  NVT: { icao: 'SBNF', name: 'Navegantes', city: 'Navegantes', lat: -26.8800, lon: -48.6514 },
+  UDI: { icao: 'SBUL', name: 'Uberlândia', city: 'Uberlândia', lat: -18.8836, lon: -48.2251 },
+  PMG: { icao: 'SBDO', name: 'Ponta Porã', city: 'Ponta Porã', lat: -22.5497, lon: -55.7026 },
+  CZS: { icao: 'SBCZ', name: 'Cruzeiro do Sul', city: 'Cruzeiro do Sul', lat: -7.5999, lon: -72.7694 },
+  STM: { icao: 'SBSN', name: 'Santarém', city: 'Santarém', lat: -2.4247, lon: -54.7858 },
+  MCP: { icao: 'SBMQ', name: 'Macapá', city: 'Macapá', lat: 0.0505, lon: -51.0722 },
+  IOS: { icao: 'SBIL', name: 'Ilhéus', city: 'Ilhéus', lat: -14.8160, lon: -39.0336 },
+  BPS: { icao: 'SNBR', name: 'Porto Seguro', city: 'Porto Seguro', lat: -16.4418, lon: -39.0808 },
+  PPB: { icao: 'SBDN', name: 'Presidente Prudente', city: 'Presidente Prudente', lat: -22.1756, lon: -51.4243 },
+  CFC: { icao: 'SBCA', name: 'Cascavel', city: 'Cascavel', lat: -25.0002, lon: -53.5008 },
+  // International hubs commonly operated
+  EZE: { icao: 'SAEZ', name: 'Ezeiza', city: 'Buenos Aires', lat: -34.8222, lon: -58.5358 },
+  SCL: { icao: 'SCEL', name: 'Santiago', city: 'Santiago', lat: -33.3930, lon: -70.7858 },
+  LIM: { icao: 'SPJC', name: 'Lima', city: 'Lima', lat: -12.0219, lon: -77.1143 },
+  BOG: { icao: 'SKBO', name: 'Bogotá', city: 'Bogotá', lat: 4.7016, lon: -74.1469 },
+  MIA: { icao: 'KMIA', name: 'Miami', city: 'Miami', lat: 25.7959, lon: -80.2870 },
+  JFK: { icao: 'KJFK', name: 'JFK', city: 'New York', lat: 40.6413, lon: -73.7781 },
+  ORY: { icao: 'LFPO', name: 'Orly', city: 'Paris', lat: 48.7262, lon: 2.3590 },
+  LIS: { icao: 'LPPT', name: 'Lisboa', city: 'Lisboa', lat: 38.7813, lon: -9.1359 },
+};
