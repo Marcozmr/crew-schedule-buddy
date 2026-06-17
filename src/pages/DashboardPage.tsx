@@ -26,6 +26,7 @@ import {
   useOnboardingModal,
 } from "../components/OnboardingModal";
 import { DutyPeriodCard } from "../components/dashboard/DutyPeriodCard";
+import { DutyFlightsSection } from "@/components/flight/DutyFlightsSection";
 import { Button } from "../components/ui/button";
 import {
   Tooltip,
@@ -295,6 +296,24 @@ export default function DashboardPage() {
             )}
           </SurfacePanel>
         </motion.div>
+
+        {/* ── Voos detalhados (hoje ou próximos) ── */}
+        {!loading && (todayDuties.length > 0 || nextDuty) && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08, duration: 0.3 }}
+            className="space-y-6"
+          >
+            {todayDuties.length > 0 ? (
+              todayDuties.map((duty, i) => (
+                <DutyFlightsSection key={duty.id} duty={duty} todayStr={todayStr} delay={i * 0.05} />
+              ))
+            ) : nextDuty ? (
+              <DutyFlightsSection duty={nextDuty} todayStr={todayStr} />
+            ) : null}
+          </motion.div>
+        )}
 
         {loading && (
           <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-4">

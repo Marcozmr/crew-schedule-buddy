@@ -7,9 +7,11 @@ import { AppLayout } from '@/components/AppLayout';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { Link } from 'react-router-dom';
-import { Calendar, Plane, ChevronLeft, ChevronRight, CalendarClock, Building2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, CalendarClock, Building2 } from 'lucide-react';
+import { useAirportWeather } from '@/hooks/useAirportWeather';
+import { FlightCard } from '@/components/flight/FlightCard';
 import { motion } from 'framer-motion';
-import { formatTimeBR, parseDateBRT } from '@/lib/date-utils';
+import { parseDateBRT } from '@/lib/date-utils';
 import { compareScheduleEntries } from '@/lib/schedule-entry-sort';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { buildCrewSituationDisplayFromEntry } from '@/lib/roster/crew-tripulante-display';
@@ -20,6 +22,88 @@ import {
   getRosterCalendarCellPillClass,
 } from '@/lib/roster/roster-calendar-icons';
 import { getRosterEventVisualType } from '@/lib/roster/roster-calendar-visual';
+
+// Sub-component so hooks run unconditionally per entry list
+function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof Array.prototype.filter>; monthLabel: string }) {
+  const flightArrCodes = useMemo(
+    () => [...new Set(entries.filter((e: { is_flight: boolean; arrival?: string }) => e.is_flight && e.arrival).map((e: { arrival: string }) => e.arrival.trim().toUpperCase().slice(0, 3)))],
+    [entries]
+  );
+  const { data: wxData } = useAirportWeather(flightArrCodes as string[]);
+
+  if (entries.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Calendar className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+        <p className="text-sm text-muted-foreground">Sem atividades neste dia</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {entries.map((entry: ReturnType<typeof Array.prototype.filter>[0], index: number) => {
+        const tripCrew = entry.is_flight ? buildCrewSituationDisplayFromEntry(entry) : null;
+
+        if (entry.is_flight) {
+          const arrCode = entry.arrival?.trim().toUpperCase().slice(0, 3);
+          return (
+            <motion.div
+              key={entry.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <FlightCard
+                leg={entry}
+                weather={wxData[arrCode]}
+                reportTime={entry.report_time}
+                debriefTime={entry.debrief_time}
+                showMetButton
+              />
+              {tripCrew && (
+                <div className="mt-2 glass p-3">
+                  <CrewTripulanteSummary crew={tripCrew} scheduleEntry={entry} />
+                </div>
+              )}
+            </motion.div>
+          );
+        }
+
+        return (
+          <motion.div
+            key={entry.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className="glass p-4 min-w-0"
+          >
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${getRosterCalendarContainerClass(entry)}`}>
+                <RosterCalendarEventIcon entry={entry} size="md" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <span className="font-semibold text-foreground text-sm break-words">{entry.flight_number || entry.activity_type}</span>
+                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground whitespace-nowrap">{entry.activity_type}</span>
+                </div>
+                {getRosterEventVisualType(entry) === 'rest' && (
+                  <p className="mt-1 text-sm font-medium text-success">Folga / Descanso</p>
+                )}
+                {entry.hotel_name && (
+                  <p className="mt-2 flex items-start gap-1.5 break-words text-xs text-muted-foreground">
+                    <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>{entry.hotel_name}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function SchedulePage() {
   const { schedule, reload } = useScheduleData();
@@ -176,107 +260,8 @@ export default function SchedulePage() {
             </SheetTitle>
           </SheetHeader>
 
-          <div className="p-4 sm:p-5 space-y-3 overflow-y-auto max-h-[calc(100vh-80px)]">
-            {selectedEntries.length === 0 ? (
-              <div className="text-center py-12">
-                <Calendar className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Sem atividades neste dia</p>
-              </div>
-            ) : (
-              selectedEntries.map((entry, index) => {
-                const tripCrew = entry.is_flight ? buildCrewSituationDisplayFromEntry(entry) : null;
-                return (
-                <motion.div
-                  key={entry.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="glass p-4 min-w-0"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${getRosterCalendarContainerClass(entry)}`}
-                    >
-                      <RosterCalendarEventIcon entry={entry} size="md" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        <span className="font-semibold text-foreground text-sm break-words">{entry.flight_number}</span>
-                        {!entry.is_flight && (
-                          <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground whitespace-nowrap">{entry.activity_type}</span>
-                        )}
-                      </div>
-
-                      {entry.is_flight && (
-                        <>
-                          <div className="flex items-center gap-2 mt-3 min-w-0">
-                            <div className="text-center min-w-[52px]">
-                              <p className="text-sm sm:text-base font-bold font-mono text-foreground break-words">
-                                {(entry.departure_airport || entry.departure || '---').substring(0, 3).toUpperCase()}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{formatTimeBR(entry.departure_time)}</p>
-                            </div>
-                            <div className="flex-1 min-w-0 flex items-center gap-1">
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                              <div className="h-px flex-1 bg-border" />
-                              <Plane className="w-3 h-3 text-primary shrink-0" />
-                              <div className="h-px flex-1 bg-border" />
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                            </div>
-                            <div className="text-center min-w-[52px]">
-                              <p className="text-sm sm:text-base font-bold font-mono text-foreground break-words">
-                                {(entry.arrival_airport || entry.arrival || '---').substring(0, 3).toUpperCase()}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{formatTimeBR(entry.arrival_time)}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-border text-[11px] min-w-0">
-                            {entry.report_time && (
-                              <span className="text-muted-foreground whitespace-nowrap">
-                                Apresent.: <span className="font-mono font-medium text-primary">{formatTimeBR(entry.report_time)}</span>
-                              </span>
-                            )}
-                            {entry.flight_hours != null && (
-                              <span className="text-muted-foreground whitespace-nowrap">
-                                Voo: <span className="font-mono font-medium text-foreground">{entry.flight_hours}h</span>
-                              </span>
-                            )}
-                            {entry.duty_hours != null && (
-                              <span className="text-muted-foreground whitespace-nowrap">
-                                Jornada: <span className="font-mono font-medium text-foreground">{entry.duty_hours}h</span>
-                              </span>
-                            )}
-                          </div>
-                          {tripCrew && (
-                            <div className="mt-3 pt-3 border-t border-border">
-                              <CrewTripulanteSummary crew={tripCrew} scheduleEntry={entry} />
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {!entry.is_flight && getRosterEventVisualType(entry) === 'rest' && (
-                        <div className="mt-2 flex min-w-0 items-center gap-2">
-                          <RosterCalendarEventIcon entry={entry} size="md" />
-                          <span className="break-words text-sm font-medium text-success">
-                            Folga / Descanso
-                          </span>
-                        </div>
-                      )}
-
-                      {entry.hotel_name && (
-                        <p className="mt-2 flex items-start gap-1.5 break-words text-xs text-muted-foreground">
-                          <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span>{entry.hotel_name}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-              })
-            )}
+          <div className="p-4 sm:p-5 overflow-y-auto max-h-[calc(100vh-80px)]">
+            <DayDetailContent entries={selectedEntries} monthLabel={months[selectedMonth]} />
           </div>
         </SheetContent>
       </Sheet>
