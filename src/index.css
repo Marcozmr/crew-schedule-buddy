@@ -175,12 +175,15 @@
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius-card, 1.25rem);
     box-shadow:
-      0 1px 2px hsl(0 0% 0% / 0.05),
-      0 6px 16px hsl(220 14% 40% / 0.08);
+      0 1px 3px hsl(0 0% 0% / 0.06),
+      0 4px 12px hsl(220 14% 40% / 0.09),
+      0 8px 24px hsl(220 14% 40% / 0.05);
   }
 
   .dark .glass {
-    box-shadow: 0 1px 3px hsl(0 0% 0% / 0.35), 0 1px 2px hsl(0 0% 0% / 0.2);
+    box-shadow:
+      0 1px 3px hsl(0 0% 0% / 0.40),
+      0 4px 12px hsl(0 0% 0% / 0.25);
   }
 
   .glass-elevated {
@@ -188,12 +191,21 @@
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius-card, 1.25rem);
     box-shadow:
-      0 4px 8px -2px hsl(0 0% 0% / 0.06),
-      0 14px 32px -6px hsl(220 14% 40% / 0.1);
+      0 2px 6px hsl(0 0% 0% / 0.06),
+      0 8px 20px -4px hsl(220 14% 40% / 0.12),
+      0 18px 40px -8px hsl(220 14% 40% / 0.08);
   }
 
   .dark .glass-elevated {
-    box-shadow: 0 4px 6px -1px hsl(0 0% 0% / 0.35), 0 10px 15px -3px hsl(0 0% 0% / 0.25);
+    box-shadow:
+      0 4px 6px -1px hsl(0 0% 0% / 0.40),
+      0 10px 20px -3px hsl(0 0% 0% / 0.30);
+  }
+
+  /* Superfície plana sem border para usar dentro de glass */
+  .app-surface {
+    background: hsl(var(--secondary));
+    border-radius: calc(var(--radius-card, 1.25rem) - 4px);
   }
 
   .gradient-primary {
