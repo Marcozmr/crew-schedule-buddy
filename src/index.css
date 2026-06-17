@@ -149,6 +149,11 @@
     bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }
 
+  /* FAB acima da bottom nav em mobile (h-14 = 3.5rem + margem) */
+  .safe-bottom-fab {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+
   .pb-safe-content {
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }

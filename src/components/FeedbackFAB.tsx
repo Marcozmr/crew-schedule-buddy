@@ -132,7 +132,7 @@ export function FeedbackFAB() {
         <button
           type="button"
           className={cn(
-            'pointer-events-auto fixed right-4 md:right-6 safe-bottom-4 md:safe-bottom-6 z-[100] flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full gradient-sky text-primary-foreground shadow-elevated transition-transform hover:scale-105 active:scale-95',
+            'pointer-events-auto fixed right-4 lg:right-6 safe-bottom-fab lg:safe-bottom-6 z-[100] flex h-12 w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full gradient-sky text-primary-foreground shadow-elevated transition-transform hover:scale-105 active:scale-95',
             open && 'pointer-events-none opacity-0',
           )}
           aria-label="Abrir suporte"
