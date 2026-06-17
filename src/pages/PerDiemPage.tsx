@@ -1,55 +1,127 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/AppLayout';
-import { useAuth } from '@/lib/auth-context';
-import { supabase } from '@/integrations/supabase/client';
+import { useScheduleData } from '@/hooks/useScheduleData';
+import { groupIntoDutyPeriods } from '@/lib/duty-grouping';
+import {
+  computeDutyPerDiem,
+  loadRates,
+  saveRates,
+  MEAL_LABEL,
+  MEAL_EMOJI,
+  DEFAULT_RATES,
+  type MealRates,
+  type ComputedDutyPerDiem,
+} from '@/lib/perdiem-calc';
+import { NumericInput } from '@/components/ui/numeric-input';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { NumericInput, safeParseNumber } from '@/components/ui/numeric-input';
-import { toast } from 'sonner';
-import { UtensilsCrossed, Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatDateBR } from '@/lib/date-utils';
-import type { Database } from '@/integrations/supabase/types';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings2, CalendarClock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-type PerDiemRow = Database['public']['Tables']['perdiem_entries']['Row'];
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const WEEK_DAY_SHORT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 
 function fmtBRL(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function EntryCard({ entry, onDelete }: { entry: PerDiemRow; onDelete: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const total = Number(entry.total_value || 0);
-  const unitValue = Number(entry.unit_value || 0);
-  const qty = Number(entry.quantity || 1);
+function dutyDateLabel(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00`);
+  const wd = WEEK_DAY_SHORT[d.getDay()];
+  const day = String(d.getDate()).padStart(2, '0');
+  const mon = String(d.getMonth() + 1).padStart(2, '0');
+  return `${wd}., ${day}/${mon}`;
+}
+
+// ── RatesSheet ─────────────────────────────────────────────────────────────
+
+function RatesSheet({ onClose }: { onClose: () => void }) {
+  const [draft, setDraft] = useState<MealRates>(() => loadRates());
+
+  const handleSave = () => {
+    saveRates(draft);
+    onClose();
+    window.dispatchEvent(new Event('perdiem-rates-updated'));
+  };
+
+  const field = (label: string, key: keyof MealRates) => (
+    <div key={key}>
+      <Label className="text-xs text-muted-foreground">{MEAL_EMOJI[key]} {label}</Label>
+      <NumericInput
+        value={draft[key]}
+        onValueChange={v => setDraft(r => ({ ...r, [key]: v ?? 0 }))}
+        decimals={2}
+        className="mt-1"
+        placeholder="0,00"
+      />
+    </div>
+  );
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-card overflow-hidden">
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-left"
-        onClick={() => setExpanded(e => !e)}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end bg-black/50"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="w-full bg-card rounded-t-3xl p-6 space-y-4"
+        onClick={e => e.stopPropagation()}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <UtensilsCrossed className="w-4 h-4 text-primary" />
+        <div className="w-10 h-1 rounded-full bg-border mx-auto" />
+        <div>
+          <h3 className="text-base font-bold text-foreground">Configurar Taxas</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Valores por refeição para cálculo automático</p>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground leading-tight">{entry.location || 'Sem local'}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{formatDateBR(entry.date)}</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          {field('Café da Manhã', 'breakfast')}
+          {field('Almoço', 'lunch')}
+          {field('Jantar', 'dinner')}
+          {field('Pernoite', 'overnight')}
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-foreground">{fmtBRL(total)}</p>
-          {qty > 1 && <p className="text-[10px] text-muted-foreground">{qty}× {fmtBRL(unitValue)}</p>}
+
+        <div className="flex gap-3 pt-1">
+          <Button variant="outline" className="flex-1 rounded-xl" onClick={onClose}>Cancelar</Button>
+          <Button className="flex-1 rounded-xl" onClick={handleSave}>Salvar</Button>
         </div>
-        <div className="ml-1 text-muted-foreground">
-          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ── DutyPerDiemCard ─────────────────────────────────────────────────────────
+
+function DutyPerDiemCard({ entry }: { entry: ComputedDutyPerDiem }) {
+  const [open, setOpen] = useState(false);
+
+  const mealIcons = [...new Set(entry.meals.map(m => MEAL_EMOJI[m.type]))].join(' ');
+
+  return (
+    <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
+      {/* Row header */}
+      <button
+        className="w-full flex items-center gap-2 px-4 py-3 text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className={`w-2 h-2 rounded-full shrink-0 ${entry.hasOvernight ? 'bg-blue-400' : 'bg-green-400'}`} />
+        <span className="text-sm font-semibold text-foreground flex-1">{dutyDateLabel(entry.date)}</span>
+        <span className="text-base mr-1">{mealIcons}</span>
+        <span className="text-sm font-bold text-foreground">{fmtBRL(entry.total)}</span>
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
       </button>
 
+      {/* Expanded meal list */}
       <AnimatePresence>
-        {expanded && (
+        {open && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -57,33 +129,23 @@ function EntryCard({ entry, onDelete }: { entry: PerDiemRow; onDelete: () => voi
             transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 pt-0 border-t border-border/50 space-y-2">
-              <div className="grid grid-cols-3 gap-2 mt-3">
-                <div className="bg-muted/40 rounded-xl p-2 text-center">
-                  <p className="text-[10px] text-muted-foreground">Quantidade</p>
-                  <p className="text-sm font-bold text-foreground">{qty}</p>
+            <div className="border-t border-border/50 divide-y divide-border/30">
+              {entry.meals.map((meal, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{MEAL_LABEL[meal.type]}</p>
+                    <p className="text-xs text-muted-foreground">{meal.activityLabel}</p>
+                  </div>
+                  <span className="text-sm font-bold text-foreground">{fmtBRL(meal.value)}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    meal.isNational
+                      ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                      : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                  }`}>
+                    {meal.isNational ? 'NAC' : 'INT'}
+                  </span>
                 </div>
-                <div className="bg-muted/40 rounded-xl p-2 text-center">
-                  <p className="text-[10px] text-muted-foreground">Valor unit.</p>
-                  <p className="text-sm font-bold text-foreground">{fmtBRL(unitValue)}</p>
-                </div>
-                <div className="bg-primary/10 rounded-xl p-2 text-center">
-                  <p className="text-[10px] text-muted-foreground">Total</p>
-                  <p className="text-sm font-bold text-primary">{fmtBRL(total)}</p>
-                </div>
-              </div>
-              {entry.notes && (
-                <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">{entry.notes}</p>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 mt-1"
-                onClick={onDelete}
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                Excluir diária
-              </Button>
+              ))}
             </div>
           </motion.div>
         )}
@@ -92,243 +154,189 @@ function EntryCard({ entry, onDelete }: { entry: PerDiemRow; onDelete: () => voi
   );
 }
 
-function AddEntrySheet({ onAdded }: { onAdded: () => void }) {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ date: '', location: '', quantity: 1 as number | null, unit_value: null as number | null, notes: '' });
-
-  const displayTotal = safeParseNumber(form.quantity, 1) * safeParseNumber(form.unit_value);
-
-  const handleAdd = async () => {
-    if (!user || !form.date) { toast.error('Preencha a data'); return; }
-    setSaving(true);
-    const qty = safeParseNumber(form.quantity, 1);
-    const uv = safeParseNumber(form.unit_value);
-    await supabase.from('perdiem_entries').insert({
-      user_id: user.id, date: form.date, location: form.location,
-      quantity: qty, unit_value: uv, total_value: qty * uv, notes: form.notes || null,
-    });
-    toast.success('Diária adicionada!');
-    setForm({ date: '', location: '', quantity: 1, unit_value: null, notes: '' });
-    setSaving(false);
-    setOpen(false);
-    onAdded();
-  };
-
-  return (
-    <>
-      <Button className="w-full rounded-xl" onClick={() => setOpen(true)}>
-        <Plus className="w-4 h-4 mr-2" />Nova Diária
-      </Button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end bg-black/50"
-            onClick={() => setOpen(false)}
-          >
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="w-full bg-card rounded-t-3xl p-6 space-y-4"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="w-10 h-1 rounded-full bg-border mx-auto mb-2" />
-              <h3 className="text-base font-bold text-foreground">Nova Diária</h3>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Data</Label>
-                  <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Local</Label>
-                  <Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="GRU" className="mt-1" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Quantidade</Label>
-                  <NumericInput value={form.quantity} onValueChange={v => setForm(f => ({ ...f, quantity: v }))} min={1} decimals={0} blurDefault={1} className="mt-1" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Valor Unitário (R$)</Label>
-                  <NumericInput value={form.unit_value} onValueChange={v => setForm(f => ({ ...f, unit_value: v }))} decimals={2} className="mt-1" />
-                </div>
-              </div>
-
-              <Input
-                placeholder="Observações (opcional)"
-                value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              />
-
-              <div className="flex items-center justify-between pt-1">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total a lançar</p>
-                  <p className="text-lg font-bold text-foreground">{fmtBRL(displayTotal)}</p>
-                </div>
-                <Button className="rounded-xl px-6" onClick={handleAdd} disabled={saving || !form.date}>
-                  {saving ? 'Salvando…' : 'Adicionar'}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  );
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PerDiemPage() {
-  const { user } = useAuth();
-  const [entries, setEntries] = useState<PerDiemRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { schedule, loading: schedLoading } = useScheduleData();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
+  const [showRates, setShowRates] = useState(false);
+  const [ratesVersion, setRatesVersion] = useState(0);
 
-  const load = async () => {
-    if (!user) { setEntries([]); setLoading(false); return; }
-    setLoading(true);
-    const { data } = await supabase
-      .from('perdiem_entries').select('*').eq('user_id', user.id)
-      .order('date', { ascending: false }).limit(200);
-    setEntries(data || []);
-    setLoading(false);
-  };
+  // Force re-render when rates are saved
+  if (typeof window !== 'undefined') {
+    window.addEventListener('perdiem-rates-updated', () => setRatesVersion(v => v + 1), { once: true });
+  }
 
-  useEffect(() => { load(); }, [user]);
+  const rates = useMemo(() => loadRates(), [ratesVersion]);
 
-  const handleDelete = async (id: string) => {
-    if (!user) return;
-    await supabase.from('perdiem_entries').delete().eq('id', id).eq('user_id', user.id);
-    toast.success('Excluída');
-    load();
-  };
+  const allDuties = useMemo(() => groupIntoDutyPeriods(schedule), [schedule]);
 
-  const monthEntries = useMemo(() => {
+  const monthDuties = useMemo(() => {
     const prefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
-    return entries.filter(e => e.date?.startsWith(prefix));
-  }, [entries, selectedMonth, selectedYear]);
+    return allDuties.filter(d => d.dutyStartDate.startsWith(prefix));
+  }, [allDuties, selectedMonth, selectedYear]);
 
-  const totalMonth = useMemo(() => monthEntries.reduce((s, e) => s + Number(e.total_value || 0), 0), [monthEntries]);
-  const uniqueDays = useMemo(() => new Set(monthEntries.map(e => e.date)).size, [monthEntries]);
-  const uniqueLocations = useMemo(() => new Set(monthEntries.map(e => e.location).filter(Boolean)).size, [monthEntries]);
+  const perDiemEntries = useMemo(() =>
+    monthDuties
+      .map(d => computeDutyPerDiem(d, rates))
+      .filter((x): x is ComputedDutyPerDiem => x !== null)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [monthDuties, rates]
+  );
 
-  // group by location for breakdown
-  const byLocation = useMemo(() => {
-    const map: Record<string, { count: number; total: number }> = {};
-    for (const e of monthEntries) {
-      const key = e.location || 'Sem local';
-      if (!map[key]) map[key] = { count: 0, total: 0 };
-      map[key].count += 1;
-      map[key].total += Number(e.total_value || 0);
+  const totalMonth = useMemo(() => perDiemEntries.reduce((s, e) => s + e.total, 0), [perDiemEntries]);
+
+  const workDays = useMemo(() => new Set(perDiemEntries.map(e => e.date)).size, [perDiemEntries]);
+  const overnights = useMemo(() => perDiemEntries.filter(e => e.hasOvernight).length, [perDiemEntries]);
+
+  // Meal breakdown totals
+  const mealBreakdown = useMemo(() => {
+    const map: Record<string, { count: number; value: number; total: number; isNational: boolean }> = {};
+    for (const entry of perDiemEntries) {
+      for (const meal of entry.meals) {
+        const key = meal.type;
+        if (!map[key]) map[key] = { count: 0, value: meal.value, total: 0, isNational: meal.isNational };
+        map[key].count += 1;
+        map[key].total += meal.value;
+      }
     }
-    return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
-  }, [monthEntries]);
+    return map;
+  }, [perDiemEntries]);
+
+  const hasSchedule = schedule.length > 0;
 
   return (
     <AppLayout>
       <div className="space-y-4">
-        {/* Hero total card */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl overflow-hidden p-5"
-          style={{ background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.7) 100%)' }}
-        >
-          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, white 0%, transparent 60%)' }} />
-          <div className="relative">
-            <p className="text-primary-foreground/80 text-sm font-medium">Total de Diárias</p>
-            <p className="text-primary-foreground text-4xl font-extrabold tracking-tight mt-1">
-              {fmtBRL(totalMonth)}
-            </p>
-            <div className="flex items-center gap-4 mt-3">
-              <div>
-                <p className="text-primary-foreground/70 text-[11px]">Registros</p>
-                <p className="text-primary-foreground text-lg font-bold">{monthEntries.length}</p>
-              </div>
-              <div className="w-px h-8 bg-primary-foreground/20" />
-              <div>
-                <p className="text-primary-foreground/70 text-[11px]">Dias</p>
-                <p className="text-primary-foreground text-lg font-bold">{uniqueDays}</p>
-              </div>
-              <div className="w-px h-8 bg-primary-foreground/20" />
-              <div>
-                <p className="text-primary-foreground/70 text-[11px]">Locais</p>
-                <p className="text-primary-foreground text-lg font-bold">{uniqueLocations}</p>
-              </div>
-            </div>
+        {/* Month selector + rates button */}
+        <div className="flex items-center gap-2">
+          <div className="glass flex-1 px-3 py-2 flex items-center justify-between gap-2">
+            <button
+              onClick={() => setSelectedMonth(m => Math.max(0, m - 1))}
+              className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-semibold text-foreground">{MONTHS[selectedMonth]} {selectedYear}</span>
+            <button
+              onClick={() => setSelectedMonth(m => Math.min(11, m + 1))}
+              className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        </motion.div>
-
-        {/* Month selector */}
-        <div className="glass px-4 py-2.5 flex items-center justify-between gap-2">
           <button
-            onClick={() => setSelectedMonth(m => Math.max(0, m - 1))}
-            className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+            onClick={() => setShowRates(true)}
+            className="glass p-2.5 rounded-xl text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-semibold text-foreground">{MONTHS[selectedMonth]} {selectedYear}</span>
-          <button
-            onClick={() => setSelectedMonth(m => Math.min(11, m + 1))}
-            className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
-          >
-            <ChevronRight className="w-4 h-4" />
+            <Settings2 className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Breakdown by location */}
-        {byLocation.length > 0 && (
-          <div className="glass p-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Por local</p>
-            {byLocation.map(([loc, stats]) => {
-              const pct = totalMonth > 0 ? (stats.total / totalMonth) * 100 : 0;
-              return (
-                <div key={loc} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1.5 text-foreground font-medium">
-                      <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-                      {loc}
-                    </span>
-                    <span className="font-bold text-foreground">{fmtBRL(stats.total)}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">{stats.count} registro{stats.count !== 1 ? 's' : ''}</p>
-                </div>
-              );
-            })}
+        {/* Total card */}
+        <div className="glass rounded-2xl p-5 text-center space-y-1">
+          <p className="text-sm text-muted-foreground font-medium">Total de Diárias</p>
+          <p className="text-4xl font-extrabold text-foreground tracking-tight">
+            {fmtBRL(totalMonth)}
+          </p>
+          <div className="flex justify-center gap-8 pt-2">
+            <div>
+              <p className="text-2xl font-bold text-foreground">{workDays}</p>
+              <p className="text-xs text-muted-foreground">Dias trabalhados</p>
+            </div>
+            <div className="w-px bg-border" />
+            <div>
+              <p className="text-2xl font-bold text-foreground">{overnights}</p>
+              <p className="text-xs text-muted-foreground">Pernoites fora</p>
+            </div>
+          </div>
+        </div>
+
+        {/* No schedule imported */}
+        {!schedLoading && !hasSchedule && (
+          <div className="glass rounded-2xl p-5 text-center space-y-2">
+            <p className="text-sm font-semibold text-foreground">Escala não importada</p>
+            <p className="text-xs text-muted-foreground">
+              Importe sua escala para calcular diárias automaticamente
+            </p>
+            <Link
+              to="/minha-escala"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline mt-1"
+            >
+              <CalendarClock className="w-3.5 h-3.5" />
+              Ir para Minha Escala
+            </Link>
           </div>
         )}
 
-        {/* Add button */}
-        <AddEntrySheet onAdded={load} />
+        {/* Detalhamento */}
+        {Object.keys(mealBreakdown).length > 0 && (
+          <div className="glass rounded-2xl p-4 space-y-3">
+            <p className="text-sm font-bold text-foreground">Detalhamento</p>
+            <div className="space-y-0">
+              {/* Group by national/international */}
+              {(['Nacional', 'Internacional'] as const).map(group => {
+                const isNat = group === 'Nacional';
+                const rows = Object.entries(mealBreakdown).filter(([, v]) => v.isNational === isNat);
+                if (rows.length === 0) return null;
+                return (
+                  <div key={group} className="space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground pt-1">{group}</p>
+                    {rows.map(([type, stats]) => (
+                      <div key={type} className="flex items-center justify-between text-sm py-0.5">
+                        <span className="text-foreground">
+                          {stats.count} {MEAL_LABEL[type as keyof typeof MEAL_LABEL]}{stats.count !== 1 ? 's' : ''}
+                        </span>
+                        <span className="text-muted-foreground font-mono text-xs">
+                          {stats.count} × {fmtBRL(stats.value)} = <strong className="text-foreground">{fmtBRL(stats.total)}</strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-        {/* Entry list */}
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : monthEntries.length === 0 ? (
-          <div className="text-center py-12">
-            <UtensilsCrossed className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma diária em {MONTHS[selectedMonth]}</p>
-          </div>
-        ) : (
+        {/* Detalhes por dia */}
+        {perDiemEntries.length > 0 && (
           <div className="space-y-2">
-            {monthEntries.map(e => (
-              <EntryCard key={e.id} entry={e} onDelete={() => handleDelete(e.id)} />
+            <p className="text-sm font-bold text-foreground px-0.5">Detalhes por dia</p>
+            {perDiemEntries.map(entry => (
+              <DutyPerDiemCard key={entry.dutyId} entry={entry} />
             ))}
           </div>
         )}
+
+        {/* Empty state for month with schedule but no per diem */}
+        {!schedLoading && hasSchedule && perDiemEntries.length === 0 && (
+          <div className="text-center py-10">
+            <p className="text-2xl mb-2">🍽️</p>
+            <p className="text-sm font-medium text-foreground">Sem diárias em {MONTHS[selectedMonth]}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Nenhuma jornada com apresentação encontrada neste mês
+            </p>
+          </div>
+        )}
+
+        {/* Rates config note */}
+        <div className="flex items-center justify-center gap-1.5 pb-2">
+          <Settings2 className="w-3 h-3 text-muted-foreground/60" />
+          <button
+            onClick={() => setShowRates(true)}
+            className="text-xs text-muted-foreground/70 hover:text-primary transition-colors"
+          >
+            Configurar valores por refeição
+          </button>
+        </div>
       </div>
+
+      {/* Rates bottom sheet */}
+      <AnimatePresence>
+        {showRates && <RatesSheet onClose={() => setShowRates(false)} />}
+      </AnimatePresence>
     </AppLayout>
   );
 }
