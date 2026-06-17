@@ -3,7 +3,17 @@
  * Arquitetura desacoplada para integração corporativa futura.
  */
 
-export type RosterProviderId = 'pdf' | 'manual' | 'corporate_portal' | 'iflight';
+export type RosterProviderId =
+  | 'pdf'
+  | 'manual'
+  | 'corporate_portal'
+  | 'iflight'
+  /** GOL — sistema CrewLink/IADP (portal e-Component) */
+  | 'gol'
+  /** Azul — sistema CAE (Crew Activity Engine) */
+  | 'azul'
+  /** ABX Air — sistema CrewLink/IADP */
+  | 'abx';
 
 export type ConnectionStatus =
   | 'disconnected'

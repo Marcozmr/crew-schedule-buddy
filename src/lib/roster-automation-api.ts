@@ -121,6 +121,62 @@ export async function getLatamSessionStatus(
   return res.json() as Promise<LatamSessionStatus>;
 }
 
+// ── GOL ──────────────────────────────────────────────────────────────────────
+
+export async function postGolConnect(getAccessToken: () => Promise<string | null>): Promise<{
+  sessionId: string;
+  runId: string;
+}> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const res = await fetchWorker(`${b}/v1/gol/connect`, {
+    method: 'POST',
+    headers: await authHeader(getAccessToken),
+    body: '{}',
+  });
+  return res.json() as Promise<{ sessionId: string; runId: string }>;
+}
+
+export async function getGolSession(
+  getAccessToken: () => Promise<string | null>,
+  sessionId: string,
+): Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const res = await fetchWorker(`${b}/v1/gol/session/${encodeURIComponent(sessionId)}`, {
+    headers: await authHeader(getAccessToken),
+  });
+  return res.json() as Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }>;
+}
+
+// ── Azul ─────────────────────────────────────────────────────────────────────
+
+export async function postAzulConnect(getAccessToken: () => Promise<string | null>): Promise<{
+  sessionId: string;
+  runId: string;
+}> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const res = await fetchWorker(`${b}/v1/azul/connect`, {
+    method: 'POST',
+    headers: await authHeader(getAccessToken),
+    body: '{}',
+  });
+  return res.json() as Promise<{ sessionId: string; runId: string }>;
+}
+
+export async function getAzulSession(
+  getAccessToken: () => Promise<string | null>,
+  sessionId: string,
+): Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  const res = await fetchWorker(`${b}/v1/azul/session/${encodeURIComponent(sessionId)}`, {
+    headers: await authHeader(getAccessToken),
+  });
+  return res.json() as Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }>;
+}
+
 /** Rótulos em português para os estados persistidos pelo worker (UI secundária / diagnóstico). */
 export function automationStatusLabelPt(status: string | undefined): string {
   const map: Record<string, string> = {

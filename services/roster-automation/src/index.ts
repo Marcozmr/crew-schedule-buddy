@@ -457,10 +457,19 @@ app.post('/v1/azul/connect', async (req, reply) => {
 
 // ── Domínios cujos cookies são aceites (servidor filtra; extensão filtra de novo) ──────────────
 const ALLOWED_COOKIE_DOMAINS = [
+  // LATAM — iFlightCrew
   'portal.latam.com',
   '.portal.latam.com',
   'iflightla.ibsplc.aero',
   '.iflightla.ibsplc.aero',
+  // GOL — CrewLink/IADP (e-Component)
+  'portal-escala.voegol.com.br',
+  '.voegol.com.br',
+  'gol.com.br',
+  '.gol.com.br',
+  // Azul — CAE (Crew Activity Engine)
+  'cae.voeazul.com.br',
+  '.voeazul.com.br',
 ];
 
 function isCookieDomainAllowed(domain: string): boolean {

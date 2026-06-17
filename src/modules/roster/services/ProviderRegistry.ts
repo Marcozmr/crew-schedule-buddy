@@ -6,6 +6,9 @@ import { PdfProvider } from '../providers/PdfProvider';
 import { ManualProvider } from '../providers/ManualProvider';
 import { CorporatePortalProvider } from '../providers/CorporatePortalProvider';
 import { IFlightProvider } from '../providers/IFlightProvider';
+import { GolProvider } from '../providers/GolProvider';
+import { AzulProvider } from '../providers/AzulProvider';
+import { AbxProvider } from '../providers/AbxProvider';
 import type { RosterProvider, RosterProviderId, RosterSourceInfo } from '../types';
 
 const registry: Record<RosterProviderId, RosterProvider> = {
@@ -13,6 +16,9 @@ const registry: Record<RosterProviderId, RosterProvider> = {
   manual: new ManualProvider(),
   corporate_portal: new CorporatePortalProvider(),
   iflight: new IFlightProvider(),
+  gol: new GolProvider(),
+  azul: new AzulProvider(),
+  abx: new AbxProvider(),
 };
 
 export const ProviderRegistry = {
