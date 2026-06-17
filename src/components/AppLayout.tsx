@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, HelpCircle, Radar, CalendarClock, MessageCircle } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, HelpCircle, Cloud, CalendarClock, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,12 +13,12 @@ import { useFlightNotifications } from '@/hooks/useFlightNotifications';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/pro-board', label: 'Pro Board', icon: Radar },
   { path: '/minha-escala', label: 'Minha escala', icon: CalendarClock },
   { path: '/schedule', label: 'Calendário da escala', icon: Calendar },
   { path: '/duty-calc', label: 'Calcular jornada', icon: Clock },
   { path: '/rest-calc', label: 'Calcular descanso', icon: BedDouble },
   { path: '/regulation', label: 'Calculadora operacional', icon: Shield },
+  { path: '/weather', label: 'MetCenter', icon: Cloud },
   { path: '/settings', label: 'Configurações', icon: Settings },
 ];
 
@@ -26,7 +26,7 @@ const bottomNavItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/minha-escala', label: 'Minha Escala', icon: CalendarClock },
   { path: '/schedule', label: 'Calendário', icon: Calendar },
-  { path: '/duty-calc', label: 'Jornada', icon: Clock },
+  { path: '/weather', label: 'MetCenter', icon: Cloud },
 ];
 
 function desktopNavLinkClass(active: boolean) {

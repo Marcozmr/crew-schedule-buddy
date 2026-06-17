@@ -19,11 +19,11 @@ export function isLatamWebViewAvailable(): boolean {
  * e retorna o resultado bruto do plugin.
  * Lança erro se cancelado pelo utilizador.
  */
-export async function openLatamPortalWebView() {
+export async function openLatamPortalWebView(email?: string) {
   if (!isLatamWebViewAvailable()) {
     throw new Error('WebView LATAM disponível apenas no Android nativo');
   }
-  return LatamRosterPlugin.openLatamPortal();
+  return LatamRosterPlugin.openLatamPortal(email ? { email } : undefined);
 }
 
 /**

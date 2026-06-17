@@ -17,7 +17,9 @@ class LatamRosterPlugin : Plugin() {
 
     @PluginMethod
     fun openLatamPortal(call: PluginCall) {
+        val email = call.data?.getString("email") ?: ""
         val intent = Intent(activity, LatamWebViewActivity::class.java)
+        intent.putExtra("latam_email", email)
         startActivityForResult(call, intent, "handleWebViewResult")
     }
 

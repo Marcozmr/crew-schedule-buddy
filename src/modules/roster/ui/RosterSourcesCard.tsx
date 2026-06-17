@@ -15,6 +15,7 @@ import {
   Link2,
   Unlink,
   ExternalLink,
+  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
@@ -64,6 +65,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
   const [mobileAuthenticated, setMobileAuthenticated] = useState(false);
   const [mobileImportResult, setMobileImportResult] = useState<PdfImportResult | null>(null);
+  const [latamEmail, setLatamEmail] = useState('');
   const iflightOpenUrl =
     corporatePortalConfig.iflightModuleUrl || 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
 
@@ -125,7 +127,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       setPortalConnecting(true);
       setMobileImportResult(null);
       try {
-        const result = await openLatamPortalWebView();
+        const result = await openLatamPortalWebView(latamEmail.trim() || undefined);
 
         if (result.pdfDownloaded && result.pdfBase64 && user) {
           // PDF capturado automaticamente — importar via parser existente
@@ -323,40 +325,55 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 )}
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
-              <span
-                className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 ${
-                  portalIsConnected
-                    ? 'text-success bg-success/10'
-                    : portalStatus?.status === 'failed'
-                      ? 'text-destructive bg-destructive/10'
-                      : 'text-muted-foreground bg-muted'
-                }`}
-              >
-                {portalConnecting && <Loader2 className="w-3 h-3 inline animate-spin mr-1" />}
-                {portalBadge}
-              </span>
-              {portalIsConfigured ? (
-                portalIsConnected ? (
-                  <Button variant="outline" size="sm" onClick={handleDisconnectPortal} disabled={portalConnecting}>
-                    <Unlink className="w-4 h-4 mr-1" />
-                    Desconectar
-                  </Button>
+            <div className="flex flex-col items-end gap-2 shrink-0 min-w-0 w-full sm:w-auto">
+              {/* Email input — só exibe no Android nativo e quando ainda não conectado */}
+              {isLatamWebViewAvailable() && !portalIsConnected && !portalConnecting && (
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    type="email"
+                    value={latamEmail}
+                    onChange={(e) => setLatamEmail(e.target.value)}
+                    placeholder="seu.email@latam.com"
+                    className="text-xs bg-muted border border-border rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary w-full sm:w-48"
+                  />
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 ${
+                    portalIsConnected
+                      ? 'text-success bg-success/10'
+                      : portalStatus?.status === 'failed'
+                        ? 'text-destructive bg-destructive/10'
+                        : 'text-muted-foreground bg-muted'
+                  }`}
+                >
+                  {portalConnecting && <Loader2 className="w-3 h-3 inline animate-spin mr-1" />}
+                  {portalBadge}
+                </span>
+                {portalIsConfigured ? (
+                  portalIsConnected ? (
+                    <Button variant="outline" size="sm" onClick={handleDisconnectPortal} disabled={portalConnecting}>
+                      <Unlink className="w-4 h-4 mr-1" />
+                      Desconectar
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={handleConnectPortal} disabled={portalConnecting}>
+                      {portalConnecting ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Link2 className="w-4 h-4 mr-1" />
+                      )}
+                      Conectar
+                    </Button>
+                  )
                 ) : (
-                  <Button size="sm" onClick={handleConnectPortal} disabled={portalConnecting}>
-                    {portalConnecting ? (
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    ) : (
-                      <Link2 className="w-4 h-4 mr-1" />
-                    )}
+                  <Button size="sm" disabled>
                     Conectar
                   </Button>
-                )
-              ) : (
-                <Button size="sm" disabled>
-                  Conectar
-                </Button>
-              )}
+                )}
+              </div>
             </div>
           </div>
           {portalIsConfigured && !portalIsConnected && !automationConfigured && (

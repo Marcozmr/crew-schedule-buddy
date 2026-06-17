@@ -32,8 +32,9 @@ import java.io.IOException
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
+// Vai direto para iFlightNeo → redireciona para Google OAuth da LATAM automaticamente
 private const val TARGET_DOMAIN = "iflightla.ibsplc.aero"
-private const val START_URL   = "https://portal.latam.com/pt/web/portalsab"
+private const val START_URL = "https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage"
 
 private enum class State { NAVIGATING, IFLIGHT_DETECTED, DOWNLOADING }
 
@@ -46,6 +47,7 @@ class LatamWebViewActivity : AppCompatActivity() {
 
     @Volatile private var state = State.NAVIGATING
     private var currentIFlightUrl = ""
+    private var latamEmail = ""
     private var downloadThread: Thread? = null
     private var activeCall: Call? = null
 
@@ -97,6 +99,7 @@ class LatamWebViewActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
+        latamEmail = intent.getStringExtra("latam_email") ?: ""
         buildLayout()
         configureWebView()
         setupBackHandler()
@@ -178,6 +181,7 @@ class LatamWebViewActivity : AppCompatActivity() {
             builtInZoomControls = false
             useWideViewPort = true
             loadWithOverviewMode = true
+            userAgentString = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
         }
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -197,6 +201,9 @@ class LatamWebViewActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 topProgressBar.visibility = View.GONE
                 when {
+                    url.contains("accounts.google.com") && latamEmail.isNotEmpty() -> {
+                        injectGoogleEmailJs(latamEmail)
+                    }
                     url.contains(TARGET_DOMAIN) && state == State.NAVIGATING -> {
                         state = State.IFLIGHT_DETECTED
                         currentIFlightUrl = url
@@ -206,7 +213,6 @@ class LatamWebViewActivity : AppCompatActivity() {
                         currentIFlightUrl = url
                         injectIFlightJs()
                     }
-                    // Inject portal nav JS on any latam.com page while still navigating
                     url.contains("latam.com") && !url.contains(TARGET_DOMAIN)
                             && state == State.NAVIGATING -> {
                         injectPortalJs()
@@ -246,68 +252,73 @@ class LatamWebViewActivity : AppCompatActivity() {
         }
     }
 
-    // ── PORTAL JS: clicks "iFlightNeo" or any iFlight tile ──────────────────
+    private fun injectGoogleEmailJs(email: String) {
+        val safe = email.replace("'", "\\'")
+        val js = """
+(function() {
+  if (window.__ex_ge__) return;
+  window.__ex_ge__ = true;
+  var tries = 0;
+  function fill() {
+    var inp = document.querySelector('#identifierId,input[type="email"],input[name="identifier"],input[autocomplete="username"]');
+    if (inp && inp.offsetParent !== null) {
+      inp.focus();
+      inp.value = '$safe';
+      ['input','change','keyup'].forEach(function(t){
+        inp.dispatchEvent(new Event(t,{bubbles:true}));
+      });
+      setTimeout(function(){
+        var btn = document.querySelector('#identifierNext button,button[type="submit"],[jsname="LgbsSe"]');
+        if (btn) btn.click();
+      }, 700);
+      return;
+    }
+    if (++tries < 40) setTimeout(fill, 300);
+  }
+  setTimeout(fill, 500);
+})();
+""".trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
     private fun injectPortalJs() {
         val js = """
 (function() {
   var now = Date.now();
   if (window.__ex_pt__ && (now - window.__ex_pt__) < 3000) return;
   window.__ex_pt__ = now;
-
-  function findIFlight() {
+  function find() {
     var els = Array.from(document.querySelectorAll('a,button,div,td,li,span'));
-    for (var i = 0; i < els.length; i++) {
-      var t = (els[i].textContent || '').replace(/\s+/g,' ').trim().toLowerCase();
-      if (t.length > 80) continue;
-      if (t.indexOf('iflightneo') !== -1 || t === 'iflight' ||
-          t.indexOf('crew web portal') !== -1 || t.indexOf('iflight neo') !== -1) return els[i];
+    for (var i=0;i<els.length;i++) {
+      var t=(els[i].textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
+      if (t.length>80) continue;
+      if (t.indexOf('iflightneo')!==-1||t==='iflight'||t.indexOf('crew web portal')!==-1) return els[i];
     }
-    var links = Array.from(document.querySelectorAll('a[href]'));
-    for (var j = 0; j < links.length; j++) {
-      if (/ibsplc|iflight/i.test(links[j].href)) return links[j];
-    }
+    var links=Array.from(document.querySelectorAll('a[href]'));
+    for (var j=0;j<links.length;j++) if(/ibsplc|iflight/i.test(links[j].href)) return links[j];
     return null;
   }
-
-  function go() {
-    var el = findIFlight();
-    if (!el) return false;
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    try { el.click(); } catch(e) {}
-    return true;
-  }
-
-  if (go()) return;
-  var n = 0, ob;
-  var iv = setInterval(function() {
-    if (go()) { clearInterval(iv); if (ob) ob.disconnect(); return; }
-    if (++n >= 25) clearInterval(iv);
-  }, 1000);
-  ob = new MutationObserver(function() {
-    if (go()) { ob.disconnect(); clearInterval(iv); }
-  });
-  ob.observe(document.documentElement, { childList: true, subtree: true });
+  function go(){var el=find();if(!el)return false;el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));try{el.click();}catch(e){}return true;}
+  if(go())return;
+  var n=0,ob;
+  var iv=setInterval(function(){if(go()){clearInterval(iv);if(ob)ob.disconnect();return;}if(++n>=25)clearInterval(iv);},1000);
+  ob=new MutationObserver(function(){if(go()){ob.disconnect();clearInterval(iv);}});
+  ob.observe(document.documentElement,{childList:true,subtree:true});
 })();
 """.trimIndent()
         webView.evaluateJavascript(js, null)
     }
 
-    // ── IFLIGHT JS: intercepts PDF + navigates Hamburger→Roster→Roster Calendar→Roster Report ──
     private fun injectIFlightJs() {
         val js = """
 (function() {
   var now = Date.now();
   if (window.__ex_it__ && (now - window.__ex_it__) < 4000) return;
   window.__ex_it__ = now;
-
-  // ── PDF HOOKS ────────────────────────────────────────────────────────────
-
   if (!window.__ex_h__) {
     window.__ex_h__ = true;
-
     function sendPdf(blob) {
       if (window.__ex_done__) return;
-      var t = (blob.type || '').toLowerCase();
       if (blob.size < 100) return;
       var reader = new FileReader();
       reader.onload = function(e) {
@@ -319,192 +330,43 @@ class LatamWebViewActivity : AppCompatActivity() {
       };
       reader.readAsDataURL(blob);
     }
-
     var oc = URL.createObjectURL;
-    URL.createObjectURL = function(o) {
-      var u = oc.call(URL, o);
-      if (o instanceof Blob) sendPdf(o);
-      return u;
-    };
-
-    var oo = XMLHttpRequest.prototype.open;
-    var os = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function() { this.__eu = arguments[1]||''; return oo.apply(this,arguments); };
-    XMLHttpRequest.prototype.send = function() {
-      var x = this;
-      x.addEventListener('load', function() {
-        try {
-          var r = x.response;
-          if (r instanceof Blob) { sendPdf(r); return; }
-          if (r instanceof ArrayBuffer) sendPdf(new Blob([r],{type:x.getResponseHeader('content-type')||'application/pdf'}));
-        } catch(e) {}
-      });
-      return os.apply(this,arguments);
-    };
-
-    var of = window.fetch;
-    window.fetch = function() {
-      return of.apply(this,arguments).then(function(resp) {
-        var ct = resp.headers.get('content-type')||'';
-        if (ct.indexOf('pdf')!==-1) resp.clone().blob().then(sendPdf);
-        return resp;
-      });
-    };
-
-    document.addEventListener('click', function(e) {
-      var el = e.target;
-      for (var i=0;i<6&&el;i++,el=el.parentElement) {
-        if (el.tagName==='A') {
-          var h = el.href||'';
-          if (h.indexOf('blob:')===0||/\.pdf/i.test(h)) {
-            e.preventDefault(); e.stopImmediatePropagation();
-            fetch(h).then(function(r){return r.blob();}).then(sendPdf).catch(function(){});
-          }
-          break;
-        }
-      }
-    }, true);
+    URL.createObjectURL = function(o) { var u=oc.call(URL,o); if(o instanceof Blob)sendPdf(o); return u; };
+    var oo=XMLHttpRequest.prototype.open,os=XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open=function(){this.__eu=arguments[1]||'';return oo.apply(this,arguments);};
+    XMLHttpRequest.prototype.send=function(){var x=this;x.addEventListener('load',function(){try{var r=x.response;if(r instanceof Blob){sendPdf(r);return;}if(r instanceof ArrayBuffer)sendPdf(new Blob([r],{type:x.getResponseHeader('content-type')||'application/pdf'}));}catch(e){}});return os.apply(this,arguments);};
+    var of=window.fetch;
+    window.fetch=function(){return of.apply(this,arguments).then(function(resp){var ct=resp.headers.get('content-type')||'';if(ct.indexOf('pdf')!==-1)resp.clone().blob().then(sendPdf);return resp;});};
+    document.addEventListener('click',function(e){var el=e.target;for(var i=0;i<6&&el;i++,el=el.parentElement){if(el.tagName==='A'){var h=el.href||'';if(h.indexOf('blob:')===0||/\.pdf/i.test(h)){e.preventDefault();e.stopImmediatePropagation();fetch(h).then(function(r){return r.blob();}).then(sendPdf).catch(function(){});}break;}}},true);
   }
-
-  // ── NAVIGATION STATE MACHINE ─────────────────────────────────────────────
-  //  States: init → open-menu → click-roster → click-calendar → wait-load → click-report → done
-
-  var __st = 'init', __st_ts = Date.now();
-
-  function txt(el) { return (el.textContent||'').replace(/\s+/g,' ').trim().toLowerCase(); }
-
-  function find(sel, kw, maxLen) {
-    var els = Array.from(document.querySelectorAll(sel));
-    for (var i=0;i<els.length;i++) {
-      var t = txt(els[i]);
-      if (maxLen && t.length > maxLen) continue;
-      for (var k=0;k<kw.length;k++) if (t===kw[k]||t.indexOf(kw[k])!==-1) return els[i];
-    }
+  var __st='init',__st_ts=Date.now();
+  function txt(el){return(el.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();}
+  function click(el){if(!el)return false;el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));try{el.click();}catch(e){}return true;}
+  function findHamburger(){
+    var el=document.querySelector('[class*="hamburger"],[class*="menu-btn"],[class*="menu-icon"],[class*="nav-toggle"],[class*="sidebar-toggle"]');if(el)return el;
+    var icons=document.querySelectorAll('mat-icon,[class*="material-icon"]');for(var i=0;i<icons.length;i++){if(txt(icons[i])==='menu')return icons[i].closest('button')||icons[i];}
+    var hdr=document.querySelector('header,.header,.app-header,.toolbar,.navbar');if(hdr){var btns=hdr.querySelectorAll('button,a,[role=button]');for(var j=0;j<btns.length;j++){var r=btns[j].getBoundingClientRect();if(r.width>0&&r.width<80&&r.height>0)return btns[j];}}
+    var e2=document.elementFromPoint(24,36);if(e2&&e2.tagName!=='HTML'&&e2.tagName!=='BODY')return e2.closest('button')||e2.closest('a')||e2;
     return null;
   }
-
-  function click(el) {
-    if (!el) return false;
-    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
-    try{el.click();}catch(e){}
-    return true;
-  }
-
-  function findHamburger() {
-    // Try class-based
-    var sel = '[class*="hamburger"],[class*="menu-btn"],[class*="menu-icon"],[class*="nav-toggle"],[class*="sidebar-toggle"],[class*="toggle-btn"]';
-    var el = document.querySelector(sel);
-    if (el) return el;
-    // Try mat-icon "menu" (Angular Material)
-    var icons = document.querySelectorAll('mat-icon,[class*="material-icon"],[class*="md-icon"]');
-    for (var i=0;i<icons.length;i++) {
-      if (txt(icons[i])==='menu') return icons[i].closest('button')||icons[i];
-    }
-    // Try header buttons
-    var hdr = document.querySelector('header,.header,.app-header,.toolbar,.navbar');
-    if (hdr) {
-      var btns = hdr.querySelectorAll('button,a,[role=button]');
-      for (var j=0;j<btns.length;j++) {
-        var r = btns[j].getBoundingClientRect();
-        if (r.width>0&&r.width<80&&r.height>0) return btns[j]; // Small button = likely hamburger
-      }
-    }
-    // Position fallback: top-left corner
-    var el2 = document.elementFromPoint(24, 36);
-    if (el2&&el2.tagName!=='HTML'&&el2.tagName!=='BODY') return el2.closest('button')||el2.closest('a')||el2;
-    return null;
-  }
-
-  function tryRosterReport() {
-    return click(find('button,a,[role=button],[type=button]',['roster report'],40));
-  }
-  function tryRosterCalendar() {
-    return click(find('a,button,[role=menuitem],li,td',['roster calendar'],50));
-  }
-  function tryRoster() {
-    // "Roster" exactly (NOT "roster calendar" or "crew roster")
-    var els = Array.from(document.querySelectorAll('a,button,[role=menuitem],li,td,span'));
-    for (var i=0;i<els.length;i++) {
-      if (txt(els[i])==='roster') return click(els[i]);
-    }
-    return false;
-  }
-
-  function showBanner() {
-    if (document.getElementById('__ex_b__')) return;
-    var b = document.createElement('div');
-    b.id='__ex_b__';
-    b.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:2147483647;font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;padding:12px 14px 16px;box-shadow:0 -4px 24px rgba(0,0,0,.6);box-sizing:border-box;';
-    b.innerHTML='<div style="display:flex;align-items:flex-start;gap:10px;">'+
-      '<div style="font-size:20px;margin-top:1px">✈</div>'+
-      '<div style="flex:1;"><p style="margin:0 0 6px;font-size:13px;font-weight:700;">EscalaX — siga os passos:</p>'+
-      '<ol style="margin:0;padding-left:16px;font-size:12px;line-height:1.8;color:#cbd5e1;">'+
-        '<li>Menu <strong style="color:#fff">≡</strong> → <strong style="color:#fff">Roster</strong> → <strong style="color:#7dd3fc">Roster Calendar</strong></li>'+
-        '<li>Role até o final da página</li>'+
-        '<li>Toque em <strong style="color:#7dd3fc">Roster Report</strong></li>'+
-        '<li>O PDF será capturado automaticamente ✓</li>'+
-      '</ol></div>'+
-      '<button onclick="document.getElementById(\'__ex_b__\').remove()" style="background:0;border:0;color:#475569;font-size:24px;cursor:pointer;padding:0 0 0 8px;line-height:1;flex-shrink:0;">×</button>'+
-      '</div>';
-    document.body.appendChild(b);
-  }
-
-  function transition(s) { __st = s; __st_ts = Date.now(); }
-
-  var iv = setInterval(function() {
-    var elapsed = Date.now() - __st_ts;
-
-    if (__st === 'init') {
-      // Already on Roster Calendar? Try clicking Roster Report directly
-      if (tryRosterReport()) { transition('done'); return; }
-      // Is "Roster Calendar" link already visible (menu open)?
-      if (tryRosterCalendar()) { transition('wait-load'); return; }
-      // Is "Roster" menu item visible (without hamburger)?
-      if (tryRoster()) { transition('click-calendar'); return; }
-      // Need to open hamburger
-      if (elapsed > 2000) {
-        var hb = findHamburger();
-        if (hb) { click(hb); transition('open-menu'); }
-        else if (elapsed > 8000) { transition('show-banner'); }
-      }
-
-    } else if (__st === 'open-menu') {
-      if (elapsed < 800) return; // Wait for menu animation
-      if (tryRoster()) { transition('click-calendar'); return; }
-      // Maybe "Roster Calendar" became directly visible
-      if (tryRosterCalendar()) { transition('wait-load'); return; }
-      if (elapsed > 5000) transition('show-banner');
-
-    } else if (__st === 'click-calendar') {
-      if (elapsed < 400) return;
-      if (tryRosterCalendar()) { transition('wait-load'); return; }
-      if (elapsed > 5000) transition('show-banner');
-
-    } else if (__st === 'wait-load') {
-      // Wait 3 seconds after navigating to Roster Calendar before clicking
-      if (elapsed < 3000) return;
-      if (tryRosterReport()) { transition('done'); return; }
-      if (elapsed > 12000) transition('show-banner');
-
-    } else if (__st === 'show-banner') {
-      showBanner(); transition('done');
-
-    } else if (__st === 'done') {
-      clearInterval(iv); obs.disconnect();
-    }
-  }, 600);
-
-  // MutationObserver: catch "Roster Report" button appearing after SPA navigation
-  var obs = new MutationObserver(function() {
-    if (__st === 'wait-load' && (Date.now() - __st_ts) > 2000) {
-      if (tryRosterReport()) { transition('done'); clearInterval(iv); obs.disconnect(); }
-    }
-    // Also try clicking it any time it appears
-    if ((__st === 'init' || __st === 'open-menu' || __st === 'click-calendar') && tryRosterReport()) {
-      transition('done'); clearInterval(iv); obs.disconnect();
-    }
+  function tryRR(){return click(Array.from(document.querySelectorAll('button,a,[role=button]')).find(function(e){var t=txt(e);return t==='roster report'&&t.length<40;})||null);}
+  function tryRC(){return click(Array.from(document.querySelectorAll('a,button,[role=menuitem],li,td')).find(function(e){var t=txt(e);return(t==='roster calendar'||t.indexOf('roster calendar')!==-1)&&t.length<60;})||null);}
+  function tryR(){return click(Array.from(document.querySelectorAll('a,button,[role=menuitem],li,td,span')).find(function(e){return txt(e)==='roster';})||null);}
+  function showBanner(){if(document.getElementById('__ex_b__'))return;var b=document.createElement('div');b.id='__ex_b__';b.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:2147483647;font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;padding:12px 14px 16px;box-shadow:0 -4px 24px rgba(0,0,0,.6);box-sizing:border-box;';b.innerHTML='<div style="display:flex;align-items:flex-start;gap:10px;"><div style="font-size:20px">✈</div><div style="flex:1;"><p style="margin:0 0 6px;font-size:13px;font-weight:700;">EscalaX — siga os passos:</p><ol style="margin:0;padding-left:16px;font-size:12px;line-height:1.8;color:#cbd5e1;"><li>Menu ≡ → Roster → Roster Calendar</li><li>Role até o final → toque Roster Report</li><li>PDF capturado automaticamente ✓</li></ol></div><button onclick="document.getElementById(\'__ex_b__\').remove()" style="background:0;border:0;color:#475569;font-size:24px;cursor:pointer;padding:0 0 0 8px;">×</button></div>';document.body.appendChild(b);}
+  function tr(s){__st=s;__st_ts=Date.now();}
+  var iv=setInterval(function(){
+    var e=Date.now()-__st_ts;
+    if(__st==='init'){if(tryRR()){tr('done');return;}if(tryRC()){tr('wait-load');return;}if(tryR()){tr('click-calendar');return;}if(e>2000){var hb=findHamburger();if(hb){click(hb);tr('open-menu');}else if(e>8000)tr('show-banner');}
+    }else if(__st==='open-menu'){if(e<800)return;if(tryR()){tr('click-calendar');return;}if(tryRC()){tr('wait-load');return;}if(e>5000)tr('show-banner');
+    }else if(__st==='click-calendar'){if(e<400)return;if(tryRC()){tr('wait-load');return;}if(e>5000)tr('show-banner');
+    }else if(__st==='wait-load'){if(e<3000)return;if(tryRR()){tr('done');return;}if(e>12000)tr('show-banner');
+    }else if(__st==='show-banner'){showBanner();tr('done');}else if(__st==='done'){clearInterval(iv);obs.disconnect();}
+  },600);
+  var obs=new MutationObserver(function(){
+    if(__st==='wait-load'&&(Date.now()-__st_ts)>2000){if(tryRR()){tr('done');clearInterval(iv);obs.disconnect();}}
+    if((__st==='init'||__st==='open-menu'||__st==='click-calendar')&&tryRR()){tr('done');clearInterval(iv);obs.disconnect();}
   });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  obs.observe(document.documentElement,{childList:true,subtree:true});
 })();
 """.trimIndent()
         webView.evaluateJavascript(js, null)

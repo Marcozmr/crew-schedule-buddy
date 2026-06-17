@@ -10,7 +10,7 @@ export interface LatamPortalResult {
 }
 
 export interface LatamRosterPluginInterface {
-  openLatamPortal(): Promise<LatamPortalResult>;
+  openLatamPortal(options?: { email?: string }): Promise<LatamPortalResult>;
 }
 
 const LatamRosterPlugin = registerPlugin<LatamRosterPluginInterface>('LatamRosterPlugin', {

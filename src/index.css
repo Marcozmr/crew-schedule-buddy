@@ -13,10 +13,10 @@
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    /* Slate profissional: destaques, links, navegação ativa */
-    --primary: 220 13% 32%;
+    /* Azul EscalaX */
+    --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 220 13% 44%;
+    --primary-glow: 221 83% 63%;
     --secondary: 220 14% 96%;
     --secondary-foreground: 222 35% 18%;
     --muted: 220 12% 91%;
@@ -31,18 +31,18 @@
     --warning-foreground: 0 0% 100%;
     --border: 220 13% 86%;
     --input: 220 13% 88%;
-    --ring: 220 13% 32%;
+    --ring: 221 83% 53%;
     --radius: 0.75rem;
     --radius-card: 1.25rem;
     --radius-shell: 1.75rem;
     --sidebar-background: 220 12% 95%;
     --sidebar-foreground: 220 9% 38%;
-    --sidebar-primary: 220 13% 32%;
+    --sidebar-primary: 221 83% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 14% 92%;
     --sidebar-accent-foreground: 222 47% 11%;
     --sidebar-border: 220 13% 88%;
-    --sidebar-ring: 220 13% 32%;
+    --sidebar-ring: 221 83% 53%;
   }
 
   .dark {
@@ -52,9 +52,9 @@
     --card-foreground: 210 40% 98%;
     --popover: 222 47% 14%;
     --popover-foreground: 210 40% 98%;
-    --primary: 215 20% 70%;
+    --primary: 213 94% 68%;
     --primary-foreground: 222 47% 11%;
-    --primary-glow: 215 20% 78%;
+    --primary-glow: 213 94% 76%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217 33% 17%;
@@ -69,15 +69,15 @@
     --warning-foreground: 0 0% 100%;
     --border: 217 33% 22%;
     --input: 217 33% 22%;
-    --ring: 215 20% 70%;
+    --ring: 213 94% 68%;
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 215 20% 70%;
+    --sidebar-primary: 213 94% 68%;
     --sidebar-primary-foreground: 222 47% 11%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217 33% 22%;
-    --sidebar-ring: 215 20% 70%;
+    --sidebar-ring: 213 94% 68%;
   }
 }
 
