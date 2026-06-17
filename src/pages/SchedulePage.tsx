@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { parseDateBRT } from '@/lib/date-utils';
 import { compareScheduleEntries } from '@/lib/schedule-entry-sort';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { AppCard, EmptyState } from '@/components/ui/primitives';
 import { buildCrewSituationDisplayFromEntry } from '@/lib/roster/crew-tripulante-display';
 import { CrewTripulanteSummary } from '@/components/flight-board/CrewTripulanteSummary';
 import {
@@ -32,12 +33,7 @@ function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof 
   const { data: wxData } = useAirportWeather(flightArrCodes as string[]);
 
   if (entries.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Calendar className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-        <p className="text-sm text-muted-foreground">Sem atividades neste dia</p>
-      </div>
-    );
+    return <EmptyState icon={Calendar} title="Sem atividades neste dia" className="my-4" />;
   }
 
   return (
@@ -76,28 +72,30 @@ function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof 
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className="glass p-4 min-w-0"
+            className="min-w-0"
           >
-            <div className="flex items-start gap-3 min-w-0">
-              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${getRosterCalendarContainerClass(entry)}`}>
-                <RosterCalendarEventIcon entry={entry} size="md" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <span className="font-semibold text-foreground text-sm break-words">{entry.flight_number || entry.activity_type}</span>
-                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground whitespace-nowrap">{entry.activity_type}</span>
+            <AppCard>
+              <div className="flex items-start gap-3 px-4 py-3.5 min-w-0">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${getRosterCalendarContainerClass(entry)}`}>
+                  <RosterCalendarEventIcon entry={entry} size="md" />
                 </div>
-                {getRosterEventVisualType(entry) === 'rest' && (
-                  <p className="mt-1 text-sm font-medium text-success">Folga / Descanso</p>
-                )}
-                {entry.hotel_name && (
-                  <p className="mt-2 flex items-start gap-1.5 break-words text-xs text-muted-foreground">
-                    <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{entry.hotel_name}</span>
-                  </p>
-                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="font-semibold text-foreground text-sm break-words">{entry.flight_number || entry.activity_type}</span>
+                    <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded-full text-muted-foreground whitespace-nowrap">{entry.activity_type}</span>
+                  </div>
+                  {getRosterEventVisualType(entry) === 'rest' && (
+                    <p className="mt-1 text-xs font-semibold text-success">Folga / Descanso</p>
+                  )}
+                  {entry.hotel_name && (
+                    <p className="mt-1.5 flex items-start gap-1.5 break-words text-xs text-muted-foreground">
+                      <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{entry.hotel_name}</span>
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            </AppCard>
           </motion.div>
         );
       })}

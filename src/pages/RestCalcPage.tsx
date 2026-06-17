@@ -84,12 +84,9 @@ export default function RestCalcPage() {
   return (
     <AppLayout>
       <div className="space-y-6 pb-10 max-w-4xl">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <BedDouble className="w-6 h-6 text-primary" />
-            Calcular descanso
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
+          <h1 className="text-xl font-bold text-foreground">Calcular descanso</h1>
+          <p className="text-sm text-muted-foreground max-w-xl">
             O descanso começa após o pós-voo: pouso final + tempo debrief configurado.
           </p>
         </motion.div>

@@ -8,11 +8,10 @@ export default function DutyCalcPage() {
   return (
     <AppLayout>
       <div className="space-y-6 pb-10">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Calcular jornada</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Simulação simplificada para consulta rápida: utilize data, trechos e apresentação. Os demais parâmetros
-            operacionais são estimados automaticamente pela aplicação, com a mesma base regulatória do EscalaX.
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold text-foreground">Calcular jornada</h1>
+          <p className="text-sm text-muted-foreground max-w-xl">
+            Simulação simplificada para consulta rápida. Os parâmetros operacionais são estimados automaticamente com a mesma base regulatória do EscalaX.
           </p>
         </div>
 

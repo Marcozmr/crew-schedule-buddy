@@ -3,37 +3,39 @@ import { AppLayout } from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { NotificationService } from '@/lib/services/notification-service';
-import { Bell, AlertTriangle, Ban, Clock, Check, Trash2, Upload, Calendar, Info, Filter } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Bell, AlertTriangle, Ban, Clock, Check, Trash2, Upload, Calendar, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { AppCard, EmptyState } from '@/components/ui/primitives';
 import { toast } from 'sonner';
 
 interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: string;
-  read: boolean;
-  created_at: string;
+  id: string; title: string; message: string; type: string; read: boolean; created_at: string;
 }
-
 type FilterType = 'all' | 'unread' | 'operational' | 'system';
 
 const typeConfig: Record<string, { icon: React.ReactNode; bg: string; text: string }> = {
-  duty_reminder: { icon: <Calendar className="w-4 h-4" />, bg: 'bg-primary/10', text: 'text-primary' },
-  report_reminder: { icon: <Clock className="w-4 h-4" />, bg: 'bg-primary/10', text: 'text-primary' },
-  schedule_change: { icon: <AlertTriangle className="w-4 h-4" />, bg: 'bg-accent/10', text: 'text-accent-foreground' },
-  import_success: { icon: <Upload className="w-4 h-4" />, bg: 'bg-primary/10', text: 'text-primary' },
-  operational_warn: { icon: <AlertTriangle className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-600' },
-  rest_reminder: { icon: <Clock className="w-4 h-4" />, bg: 'bg-primary/10', text: 'text-primary' },
-  weekly_summary: { icon: <Calendar className="w-4 h-4" />, bg: 'bg-primary/10', text: 'text-primary' },
-  cancelled: { icon: <Ban className="w-4 h-4" />, bg: 'bg-destructive/10', text: 'text-destructive' },
-  info: { icon: <Info className="w-4 h-4" />, bg: 'bg-primary/10', text: 'text-primary' },
-  system: { icon: <Bell className="w-4 h-4" />, bg: 'bg-muted', text: 'text-muted-foreground' },
+  duty_reminder:   { icon: <Calendar className="w-4 h-4" />,      bg: 'bg-primary/10',    text: 'text-primary' },
+  report_reminder: { icon: <Clock className="w-4 h-4" />,         bg: 'bg-primary/10',    text: 'text-primary' },
+  schedule_change: { icon: <AlertTriangle className="w-4 h-4" />, bg: 'bg-amber-500/10',  text: 'text-amber-500' },
+  import_success:  { icon: <Upload className="w-4 h-4" />,        bg: 'bg-green-500/10',  text: 'text-green-500' },
+  operational_warn:{ icon: <AlertTriangle className="w-4 h-4" />, bg: 'bg-amber-500/10',  text: 'text-amber-500' },
+  rest_reminder:   { icon: <Clock className="w-4 h-4" />,         bg: 'bg-primary/10',    text: 'text-primary' },
+  weekly_summary:  { icon: <Calendar className="w-4 h-4" />,      bg: 'bg-primary/10',    text: 'text-primary' },
+  cancelled:       { icon: <Ban className="w-4 h-4" />,           bg: 'bg-destructive/10','text': 'text-destructive' },
+  info:            { icon: <Info className="w-4 h-4" />,           bg: 'bg-primary/10',    text: 'text-primary' },
+  system:          { icon: <Bell className="w-4 h-4" />,           bg: 'bg-muted',         text: 'text-muted-foreground' },
 };
 
-const OPERATIONAL_TYPES = new Set(['duty_reminder', 'report_reminder', 'schedule_change', 'operational_warn', 'rest_reminder', 'import_success']);
-const SYSTEM_TYPES = new Set(['system', 'info', 'weekly_summary']);
+const OPERATIONAL_TYPES = new Set(['duty_reminder','report_reminder','schedule_change','operational_warn','rest_reminder','import_success']);
+const SYSTEM_TYPES = new Set(['system','info','weekly_summary']);
+
+const filters: { key: FilterType; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'unread', label: 'Não lidas' },
+  { key: 'operational', label: 'Operacionais' },
+  { key: 'system', label: 'Sistema' },
+];
 
 export default function NotificationsPage() {
   const { user } = useAuth();
@@ -51,16 +53,13 @@ export default function NotificationsPage() {
   useEffect(() => {
     loadNotifications();
     if (!user) return;
-    const channel = supabase
-      .channel('notifications-realtime')
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'notifications',
-        filter: `user_id=eq.${user.id}`,
-      }, (payload) => {
-        const newNotif = payload.new as Notification;
-        setNotifications(prev => [newNotif, ...prev]);
-        toast.info(newNotif.title, { description: newNotif.message });
-      })
+    const channel = supabase.channel('notifications-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const n = payload.new as Notification;
+          setNotifications(prev => [n, ...prev]);
+          toast.info(n.title, { description: n.message });
+        })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
@@ -93,91 +92,107 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const filters: { key: FilterType; label: string }[] = [
-    { key: 'all', label: 'Todas' },
-    { key: 'unread', label: 'Não lidas' },
-    { key: 'operational', label: 'Operacionais' },
-    { key: 'system', label: 'Sistema' },
-  ];
-
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="max-w-2xl mx-auto space-y-4">
+
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Alertas</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-bold text-foreground">Alertas</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {unreadCount > 0 ? `${unreadCount} não lida(s)` : 'Tudo em dia'}
             </p>
           </div>
           {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={markAllRead}>
-              <Check className="w-4 h-4 mr-1" /> Marcar todas
+            <Button variant="outline" size="sm" onClick={markAllRead} className="h-9 gap-1.5">
+              <Check className="w-3.5 h-3.5" /> Marcar todas
             </Button>
           )}
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+        {/* Filtros */}
+        <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
           {filters.map(f => (
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${filter === f.key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+                filter === f.key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
             >
               {f.label}
             </button>
           ))}
         </div>
 
+        {/* Conteúdo */}
         {loading ? (
           <div className="flex justify-center py-20">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-card rounded-xl p-12 text-center shadow-card">
-            <Bell className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">{filter === 'all' ? 'Nenhuma notificação' : 'Nenhuma notificação nesta categoria'}</p>
-          </div>
+          <EmptyState
+            icon={Bell}
+            title="Nenhuma notificação"
+            description={filter === 'all' ? 'Você não tem notificações ainda.' : 'Nenhuma notificação nesta categoria.'}
+          />
         ) : (
-          <div className="space-y-3">
-            {filtered.map((notif, i) => {
-              const config = typeConfig[notif.type] || typeConfig.info;
-              return (
-                <motion.div
-                  key={notif.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.02 }}
-                  className={`bg-card rounded-xl p-4 shadow-card flex items-start gap-3 ${!notif.read ? 'border-l-4 border-primary' : ''}`}
-                >
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${config.bg}`}>
-                    <span className={config.text}>{config.icon}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-semibold text-sm ${!notif.read ? 'text-foreground' : 'text-muted-foreground'}`}>
-                      {notif.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-0.5">{notif.message}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      {new Date(notif.created_at).toLocaleString('pt-BR')}
-                    </p>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {!notif.read && (
-                      <button onClick={() => markAsRead(notif.id)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Marcar como lida">
-                        <Check className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button onClick={() => deleteNotification(notif.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Excluir">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              );
-            })}
+          <div className="space-y-2.5">
+            <AnimatePresence>
+              {filtered.map((notif, i) => {
+                const cfg = typeConfig[notif.type] || typeConfig.info;
+                return (
+                  <motion.div
+                    key={notif.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ delay: i * 0.02, duration: 0.2 }}
+                  >
+                    <AppCard className={!notif.read ? 'border-l-[3px] border-l-primary' : ''}>
+                      <div className="flex items-start gap-4 px-5 py-4">
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${cfg.bg}`}>
+                          <span className={cfg.text}>{cfg.icon}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-semibold ${!notif.read ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {notif.title}
+                          </p>
+                          <p className="mt-0.5 text-sm text-muted-foreground">{notif.message}</p>
+                          <p className="mt-1 text-[11px] text-muted-foreground/50">
+                            {new Date(notif.created_at).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          {!notif.read && (
+                            <button
+                              onClick={() => markAsRead(notif.id)}
+                              className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                              title="Marcar como lida"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteNotification(notif.id)}
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </AppCard>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
           </div>
         )}
+
       </div>
     </AppLayout>
   );

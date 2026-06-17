@@ -1,52 +1,54 @@
 import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { PageSection, SurfacePanel } from "@/components/presentation/PremiumChrome";
+import { AppCard, AppCardSection, SectionLabel } from "@/components/ui/primitives";
 import { RosterConnectionBanner } from "@/components/roster/RosterConnectionBanner";
 import { CorporateRosterFlowBanner } from "@/components/roster/CorporateRosterFlowBanner";
 import { RosterSourcesCard } from "@/components/roster/RosterSourcesCard";
-import { Calendar } from "lucide-react";
+import { Calendar, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
 
-/**
- * Minha escala — status da escala ativa, última atualização, download PDF e reimportação.
- * Conteúdo operacional do dia permanece no Dashboard.
- */
+const fade = (delay = 0) => ({
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  transition: { delay, duration: 0.28, ease: "easeOut" as const },
+});
+
 export default function MyRosterPage() {
   return (
     <AppLayout>
-      <PageSection className="pb-12">
-        <div className="min-w-0 space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
-            Minha escala
-          </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Aqui você acompanha a escala importada, baixa o PDF e atualiza os dados. O resumo do seu dia
-            operacional fica no{" "}
-            <Link to="/dashboard" className="font-medium text-primary hover:underline">
-              Dashboard
-            </Link>
-            .
-          </p>
-        </div>
+      <div className="max-w-2xl space-y-5 pb-12">
 
-        <SurfacePanel className="space-y-5 p-5 md:p-7">
+        {/* Banners de conexão */}
+        <motion.div {...fade(0)} className="space-y-3">
           <CorporateRosterFlowBanner />
           <RosterConnectionBanner />
-          <RosterSourcesCard />
-        </SurfacePanel>
+        </motion.div>
 
-        <Link
-          to="/schedule"
-          className="glass-elevated flex items-center gap-4 rounded-[var(--radius-card,1.25rem)] px-5 py-4 text-sm text-foreground transition-colors hover:bg-muted/30"
-        >
-          <Calendar className="h-5 w-5 shrink-0 text-primary" />
-          <span>
-            <span className="font-semibold">Calendário da escala</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Visualização mensal e detalhes por dia
-            </span>
-          </span>
-        </Link>
-      </PageSection>
+        {/* Fontes da escala */}
+        <motion.div {...fade(0.06)}>
+          <SectionLabel>Fontes da escala</SectionLabel>
+          <RosterSourcesCard />
+        </motion.div>
+
+        {/* Link para calendário */}
+        <motion.div {...fade(0.1)}>
+          <Link to="/schedule">
+            <AppCard className="transition-colors hover:bg-secondary/20 active:bg-secondary/40">
+              <AppCardSection className="flex items-center gap-4 py-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                  <Calendar className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">Calendário da escala</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Visualização mensal e detalhes por dia</p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+              </AppCardSection>
+            </AppCard>
+          </Link>
+        </motion.div>
+
+      </div>
     </AppLayout>
   );
 }

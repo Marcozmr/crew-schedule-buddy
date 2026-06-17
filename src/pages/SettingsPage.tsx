@@ -8,30 +8,30 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AppCard, AppCardSection, SectionLabel, FeatureRow, Divider } from '@/components/ui/primitives';
 import { toast } from 'sonner';
-import { Settings, Save, LogOut, ChevronRight, FileText, HelpCircle, Info, Scale, Shield } from 'lucide-react';
+import { Save, LogOut, FileText, HelpCircle, Info, Scale, Shield, Bell } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { APP_VERSION } from '@/components/legal/LegalDocument';
 import { motion } from 'framer-motion';
 import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
 import { dispatchOperationalPreferencesChanged } from '@/lib/events/operational-preferences-events';
-import {
-  applyResolvedThemePreference,
-  normalizeThemePreference,
-} from '@/lib/themeByTime';
-import {
-  getTimezoneLabel,
-  isKnownOperationalTimezone,
-  OPERATIONAL_TIMEZONE_OPTIONS,
-} from '@/lib/timezone-options';
+import { applyResolvedThemePreference, normalizeThemePreference } from '@/lib/themeByTime';
+import { getTimezoneLabel, isKnownOperationalTimezone, OPERATIONAL_TIMEZONE_OPTIONS } from '@/lib/timezone-options';
+
+const fade = (delay = 0) => ({
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  transition: { delay, duration: 0.3, ease: 'easeOut' as const },
+});
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const { setTheme } = useTheme();
   const [form, setForm] = useState({
-    name: '', base_airport: '', crew_role: '', company_name: '', timezone: 'America/Sao_Paulo',
-    notifications_enabled: true, theme: 'auto',
+    name: '', base_airport: '', crew_role: '', company_name: '',
+    timezone: 'America/Sao_Paulo', notifications_enabled: true, theme: 'auto',
   });
   const [saving, setSaving] = useState(false);
 
@@ -51,7 +51,7 @@ export default function SettingsPage() {
         });
         applyResolvedThemePreference(th, data.timezone, setTheme);
       } else {
-        setForm((current) => ({ ...current, name: profile?.name || '', company_name: profile?.airline || '' }));
+        setForm(c => ({ ...c, name: profile?.name || '', company_name: profile?.airline || '' }));
       }
     });
   }, [user, profile, setTheme]);
@@ -76,105 +76,71 @@ export default function SettingsPage() {
       await supabase.from('profiles').update({ name: form.name, airline: form.company_name }).eq('user_id', user.id);
     }
     if (error) toast.error(error.message);
-    else {
-      toast.success('Ajustes salvos!');
-      dispatchOperationalPreferencesChanged();
-    }
+    else { toast.success('Ajustes salvos!'); dispatchOperationalPreferencesChanged(); }
     setSaving(false);
   };
 
-  const handleLogout = async () => {
-    await signOut();
-    navigate('/');
-  };
+  const handleLogout = async () => { await signOut(); navigate('/'); };
 
   return (
     <AppLayout>
-      <div className="max-w-4xl space-y-6 pb-10 min-w-0">
-        <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-foreground flex items-center gap-2 break-words">
-          <Settings className="w-6 h-6 text-primary shrink-0" /> Configurações
-        </motion.h1>
+      <div className="max-w-2xl space-y-5 pb-10 min-w-0">
 
-        <RosterSourcesCard />
+        {/* Escala */}
+        <motion.div {...fade(0)}>
+          <SectionLabel>Minha escala</SectionLabel>
+          <RosterSourcesCard />
+        </motion.div>
 
-        <div className="glass p-5 sm:p-6 min-w-0">
-          <h3 className="font-semibold text-foreground mb-1">Sistema</h3>
-          <p className="text-xs text-muted-foreground mb-4">Informações legais e suporte</p>
-          <div className="divide-y divide-border rounded-xl border border-border/60 overflow-hidden bg-secondary/20">
-            {[
-              { to: '/about', label: 'Sobre EscalaX', icon: Info },
-              { to: '/legal/terms', label: 'Termos de Uso', icon: FileText },
-              { to: '/legal/privacy', label: 'Política de Privacidade', icon: Shield },
-              { to: '/legal/lgpd', label: 'Política LGPD', icon: Scale },
-              { to: '/support', label: 'Suporte', icon: HelpCircle },
-            ].map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                className="flex items-center justify-between gap-3 px-4 py-3.5 min-h-[48px] hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-              >
-                <span className="flex items-center gap-3 min-w-0">
-                  <Icon className="w-4 h-4 text-primary shrink-0" aria-hidden />
-                  <span className="text-sm text-foreground break-words">{label}</span>
-                </span>
-                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
-              </Link>
-            ))}
-            <div className="flex items-center justify-between gap-3 px-4 py-3.5 min-h-[48px]">
-              <span className="text-sm text-foreground">Versão do app</span>
-              <span className="text-sm text-muted-foreground tabular-nums">{APP_VERSION}</span>
-            </div>
-          </div>
-        </div>
+        {/* Perfil */}
+        <motion.div {...fade(0.06)}>
+          <SectionLabel>Perfil</SectionLabel>
+          <AppCard>
+            <AppCardSection className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nome</Label>
+                <Input value={form.name} onChange={e => setForm(c => ({ ...c, name: e.target.value }))} className="h-11" />
+              </div>
+              <Divider />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Minha base</Label>
+                <Input value={form.base_airport} onChange={e => setForm(c => ({ ...c, base_airport: e.target.value }))} placeholder="BSB" className="h-11" />
+              </div>
+              <Divider />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Função</Label>
+                <Input value={form.crew_role} onChange={e => setForm(c => ({ ...c, crew_role: e.target.value }))} placeholder="Comandante, Copiloto, Comissário..." className="h-11" />
+              </div>
+              <Divider />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Empresa</Label>
+                <Input value={form.company_name} onChange={e => setForm(c => ({ ...c, company_name: e.target.value }))} placeholder="Operador" className="h-11" />
+              </div>
+            </AppCardSection>
+          </AppCard>
+        </motion.div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
-          <div className="glass p-5 sm:p-6 min-w-0">
-            <h3 className="font-semibold text-foreground mb-4">Perfil</h3>
-            <div className="space-y-3 min-w-0">
-              <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Nome</Label>
-                <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
-              </div>
-              <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Minha base</Label>
-                <Input value={form.base_airport} onChange={(event) => setForm((current) => ({ ...current, base_airport: event.target.value }))} placeholder="BSB" />
-              </div>
-              <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Função</Label>
-                <Input value={form.crew_role} onChange={(event) => setForm((current) => ({ ...current, crew_role: event.target.value }))} placeholder="Comandante, Copiloto, Comissário..." />
-              </div>
-              <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Empresa</Label>
-                <Input value={form.company_name} onChange={(event) => setForm((current) => ({ ...current, company_name: event.target.value }))} placeholder="Operador" />
-              </div>
-            </div>
-          </div>
-
-          <div className="glass p-5 sm:p-6 min-w-0">
-            <h3 className="font-semibold text-foreground mb-4">Preferências</h3>
-            <div className="space-y-4 min-w-0">
-              <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Fuso horário</Label>
+        {/* Preferências */}
+        <motion.div {...fade(0.1)}>
+          <SectionLabel>Preferências</SectionLabel>
+          <AppCard>
+            <AppCardSection className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fuso horário</Label>
                 <Select
                   value={form.timezone}
-                  onValueChange={(value) => {
-                    setForm((current) => {
-                      const next = { ...current, timezone: value };
-                      if (next.theme === 'auto') {
-                        queueMicrotask(() => applyResolvedThemePreference('auto', next.timezone, setTheme));
-                      }
+                  onValueChange={value => {
+                    setForm(c => {
+                      const next = { ...c, timezone: value };
+                      if (next.theme === 'auto') queueMicrotask(() => applyResolvedThemePreference('auto', next.timezone, setTheme));
                       return next;
                     });
                   }}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Fuso horário" />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-11 w-full"><SelectValue placeholder="Fuso horário" /></SelectTrigger>
                   <SelectContent>
-                    {OPERATIONAL_TIMEZONE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
+                    {OPERATIONAL_TIMEZONE_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                     ))}
                     {form.timezone.trim() !== '' && !isKnownOperationalTimezone(form.timezone) && (
                       <SelectItem value={form.timezone}>{getTimezoneLabel(form.timezone)}</SelectItem>
@@ -182,21 +148,20 @@ export default function SettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5 min-w-0">
-                <Label className="text-xs">Tema</Label>
+              <Divider />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tema</Label>
                 <Select
                   value={form.theme}
-                  onValueChange={(value) => {
-                    setForm((current) => {
-                      const next = { ...current, theme: value as 'auto' | 'light' | 'dark' };
-                      queueMicrotask(() =>
-                        applyResolvedThemePreference(normalizeThemePreference(next.theme), next.timezone, setTheme),
-                      );
+                  onValueChange={value => {
+                    setForm(c => {
+                      const next = { ...c, theme: value as 'auto' | 'light' | 'dark' };
+                      queueMicrotask(() => applyResolvedThemePreference(normalizeThemePreference(next.theme), next.timezone, setTheme));
                       return next;
                     });
                   }}
                 >
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="auto">Automático (horário)</SelectItem>
                     <SelectItem value="light">Claro</SelectItem>
@@ -204,23 +169,64 @@ export default function SettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center justify-between gap-3 min-w-0">
-                <Label className="break-words">Notificações</Label>
-                <Switch checked={form.notifications_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, notifications_enabled: value }))} />
+              <Divider />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Bell className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium text-foreground cursor-pointer">Notificações</Label>
+                </div>
+                <Switch
+                  checked={form.notifications_enabled}
+                  onCheckedChange={value => setForm(c => ({ ...c, notifications_enabled: value }))}
+                />
+              </div>
+            </AppCardSection>
+          </AppCard>
+        </motion.div>
+
+        {/* Sistema */}
+        <motion.div {...fade(0.14)}>
+          <SectionLabel>Sistema</SectionLabel>
+          <AppCard>
+            <div className="divide-y divide-border/60">
+              {[
+                { to: '/about', label: 'Sobre EscalaX', icon: Info },
+                { to: '/legal/terms', label: 'Termos de Uso', icon: FileText },
+                { to: '/legal/privacy', label: 'Política de Privacidade', icon: Shield },
+                { to: '/legal/lgpd', label: 'Política LGPD', icon: Scale },
+                { to: '/support', label: 'Suporte', icon: HelpCircle },
+              ].map(({ to, label, icon: Icon }) => (
+                <Link key={to} to={to}>
+                  <FeatureRow
+                    icon={Icon}
+                    iconBg="bg-primary/8"
+                    iconColor="text-primary"
+                    title={label}
+                    onClick={undefined}
+                    href={undefined}
+                    className="rounded-none border-0 shadow-none"
+                  />
+                </Link>
+              ))}
+              <div className="flex items-center justify-between px-5 py-4">
+                <span className="text-sm text-muted-foreground">Versão do app</span>
+                <span className="text-sm font-semibold text-foreground tabular-nums">{APP_VERSION}</span>
               </div>
             </div>
-          </div>
-        </div>
+          </AppCard>
+        </motion.div>
 
-        <div className="flex flex-col gap-3 sm:flex-row min-w-0">
-          <Button onClick={handleSave} disabled={saving} className="w-full sm:flex-1">
+        {/* Ações */}
+        <motion.div {...fade(0.18)} className="flex flex-col gap-3 sm:flex-row">
+          <Button onClick={handleSave} disabled={saving} className="w-full sm:flex-1 h-12 font-semibold">
             <Save className="w-4 h-4 mr-2 shrink-0" />
             {saving ? 'Salvando...' : 'Salvar configurações'}
           </Button>
-          <Button variant="outline" className="w-full sm:w-auto text-destructive" onClick={handleLogout}>
+          <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto h-12 text-destructive border-destructive/30 hover:bg-destructive/8">
             <LogOut className="w-4 h-4 mr-2 shrink-0" /> Sair da conta
           </Button>
-        </div>
+        </motion.div>
+
       </div>
     </AppLayout>
   );
