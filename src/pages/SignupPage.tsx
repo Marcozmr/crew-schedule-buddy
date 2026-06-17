@@ -75,14 +75,21 @@ export default function SignupPage() {
           </div>
 
           {success ? (
-            <div className="text-center">
-              <h2 className="text-xl font-bold text-white mb-2">Conta criada! ✉️</h2>
-              <p className="text-white/60 text-sm mb-4">Verifique o seu email para confirmar a conta e depois faça login.</p>
-              <Link to="/verify-email" state={{ email: email.trim().toLowerCase() }}>
-                <Button variant="outline" className="mb-2 border-white/20 text-white hover:bg-white/10">Reenviar ou ajuda com o email</Button>
+            <div className="text-center space-y-3">
+              <div className="flex flex-col items-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-3">
+                  <span className="text-3xl">✉️</span>
+                </div>
+                <h2 className="text-xl font-bold text-white">Conta criada!</h2>
+                <p className="text-white/60 text-sm mt-1">Verifique o seu email para confirmar a conta e depois faça login.</p>
+              </div>
+              <Link to="/verify-email" state={{ email: email.trim().toLowerCase() }} className="block">
+                <Button className="w-full h-11 bg-white/10 border border-white/20 text-white hover:bg-white/20">
+                  Não recebi o email
+                </Button>
               </Link>
-              <Link to="/">
-                <Button className="gradient-sky text-white w-full mt-2">Ir para login</Button>
+              <Link to="/" className="block">
+                <Button className="w-full h-11 gradient-sky text-white font-semibold">Ir para login</Button>
               </Link>
             </div>
           ) : (

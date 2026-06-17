@@ -255,25 +255,25 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
 
           {/* Mobile drawer */}
           <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <SheetContent side="right" className="w-[280px] bg-background border-border p-0 flex flex-col max-h-dvh">
+            <SheetContent side="right" className="w-[85vw] max-w-[320px] bg-background border-border p-0 flex flex-col max-h-dvh">
               <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
               {profile && (
                 <AppNavLink
                   to="/profile"
                   onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-3 p-4 border-b border-border bg-card safe-area-top shrink-0"
+                  className="flex items-center gap-4 px-5 py-5 border-b border-border bg-card safe-area-top shrink-0"
                 >
-                  <Avatar className="w-10 h-10 shrink-0">
+                  <Avatar className="w-14 h-14 shrink-0">
                     <AvatarImage src={profile.avatar_url || undefined} />
-                    <AvatarFallback className="text-sm font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                    <AvatarFallback className="text-lg font-bold bg-primary text-primary-foreground">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{profile.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
+                    <p className="text-base font-bold text-foreground truncate">{profile.name?.toUpperCase()}</p>
+                    <p className="text-sm text-muted-foreground truncate">{profile.airline || ''}</p>
                   </div>
                 </AppNavLink>
               )}
-              <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+              <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
                 {navItems.map((item) => {
                   const active = pathname === item.path;
                   return (
@@ -281,11 +281,11 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
                       key={item.path}
                       to={item.path}
                       onClick={() => setDrawerOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                        active ? 'bg-primary/10 text-primary' : 'text-foreground/70 hover:bg-secondary hover:text-foreground'
                       }`}
                     >
-                      <item.icon className="w-4 h-4 shrink-0" />
+                      <item.icon className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
                       {item.label}
                     </AppNavLink>
                   );
@@ -293,17 +293,17 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
                 <AppNavLink
                   to="/support"
                   onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-foreground/70 hover:bg-secondary hover:text-foreground"
                 >
-                  <HelpCircle className="w-4 h-4 shrink-0" /> Suporte
+                  <HelpCircle className="w-[18px] h-[18px] shrink-0 text-muted-foreground" /> Suporte
                 </AppNavLink>
               </nav>
-              <div className="p-2 border-t border-border safe-area-bottom">
+              <div className="px-3 py-3 border-t border-border safe-area-bottom">
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-destructive/80 hover:bg-destructive/8 hover:text-destructive transition-colors w-full"
                 >
-                  <LogOut className="w-4 h-4 shrink-0" /> Sair da conta
+                  <LogOut className="w-[18px] h-[18px] shrink-0" /> Sair da conta
                 </button>
               </div>
             </SheetContent>
@@ -504,25 +504,25 @@ function AppLayoutRouterFallback({
 
           {/* Mobile drawer */}
           <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <SheetContent side="right" className="w-[280px] bg-background border-border p-0 flex flex-col max-h-dvh">
+            <SheetContent side="right" className="w-[85vw] max-w-[320px] bg-background border-border p-0 flex flex-col max-h-dvh">
               <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
               {profile && (
                 <a
                   href="/profile"
                   onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-3 p-4 border-b border-border bg-card safe-area-top shrink-0"
+                  className="flex items-center gap-4 px-5 py-5 border-b border-border bg-card safe-area-top shrink-0"
                 >
-                  <Avatar className="w-10 h-10 shrink-0">
+                  <Avatar className="w-14 h-14 shrink-0">
                     <AvatarImage src={profile.avatar_url || undefined} />
-                    <AvatarFallback className="text-sm font-bold bg-primary/10 text-primary">{initials}</AvatarFallback>
+                    <AvatarFallback className="text-lg font-bold bg-primary text-primary-foreground">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{profile.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{profile.airline || profile.email}</p>
+                    <p className="text-base font-bold text-foreground truncate">{profile.name?.toUpperCase()}</p>
+                    <p className="text-sm text-muted-foreground truncate">{profile.airline || ''}</p>
                   </div>
                 </a>
               )}
-              <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+              <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
                 {navItems.map((item) => {
                   const active = pathname === item.path;
                   return (
@@ -530,11 +530,11 @@ function AppLayoutRouterFallback({
                       key={item.path}
                       href={item.path}
                       onClick={() => setDrawerOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                        active ? 'bg-primary/10 text-primary' : 'text-foreground/70 hover:bg-secondary hover:text-foreground'
                       }`}
                     >
-                      <item.icon className="w-4 h-4 shrink-0" />
+                      <item.icon className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
                       {item.label}
                     </a>
                   );
@@ -542,17 +542,17 @@ function AppLayoutRouterFallback({
                 <a
                   href="/support"
                   onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-foreground/70 hover:bg-secondary hover:text-foreground"
                 >
-                  <HelpCircle className="w-4 h-4 shrink-0" /> Suporte
+                  <HelpCircle className="w-[18px] h-[18px] shrink-0 text-muted-foreground" /> Suporte
                 </a>
               </nav>
-              <div className="p-2 border-t border-border safe-area-bottom">
+              <div className="px-3 py-3 border-t border-border safe-area-bottom">
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-destructive/80 hover:bg-destructive/8 hover:text-destructive transition-colors w-full"
                 >
-                  <LogOut className="w-4 h-4 shrink-0" /> Sair da conta
+                  <LogOut className="w-[18px] h-[18px] shrink-0" /> Sair da conta
                 </button>
               </div>
             </SheetContent>
