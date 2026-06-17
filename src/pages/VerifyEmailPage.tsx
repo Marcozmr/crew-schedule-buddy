@@ -99,11 +99,17 @@ export default function VerifyEmailPage() {
             <h1 className="text-2xl font-extrabold tracking-tight text-white">Confirme o seu email</h1>
           </div>
 
-          <div className="mb-6 flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-4">
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-4">
             <Mail className="mt-0.5 h-5 w-5 shrink-0 text-white/70" />
-            <p className="text-sm leading-relaxed text-white/80">
-              Para aceder à aplicação, confirme o endereço de email através do link que enviámos. Verifique
-              também a pasta de spam.
+            <div className="text-sm leading-relaxed text-white/80 space-y-1">
+              <p>Enviamos um link de confirmação para o seu email. Clique nele para ativar sua conta.</p>
+              <p className="text-white/50">⚠️ <strong className="text-white/70">Verifique a pasta de spam/lixo eletrônico</strong> — o email pode ter ido para lá.</p>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
+            <p className="text-xs text-yellow-300/80 leading-relaxed">
+              <strong>Não recebeu?</strong> Aguarde até 5 minutos, verifique o spam e use o botão abaixo para reenviar. Se continuar sem receber, tente com outro email (Gmail, Outlook).
             </p>
           </div>
 

@@ -54,19 +54,65 @@ const AIRLINES = [
   { name: 'GOL', color: 'bg-orange-500', initial: 'G' },
   { name: 'LATAM', color: 'bg-red-600', initial: 'L' },
   { name: 'Azul', color: 'bg-cyan-500', initial: 'A' },
-  { name: 'Avianca', color: 'bg-red-700', initial: 'V' },
-  { name: 'MAP', color: 'bg-blue-600', initial: 'M' },
-  { name: 'Passaredo', color: 'bg-green-600', initial: 'P' },
-  { name: 'Two Flex', color: 'bg-purple-600', initial: 'T' },
-  { name: 'Sideral', color: 'bg-indigo-600', initial: 'S' },
+  { name: 'ABX Air', color: 'bg-blue-700', initial: 'A' },
 ];
 
-const ROLES = [
-  { value: 'Comandante', label: 'Comandante', emoji: '✈️', desc: 'Piloto em comando' },
-  { value: 'Copiloto', label: 'Copiloto', emoji: '🛫', desc: 'Segundo em comando' },
-  { value: 'Comissário', label: 'Comissário', emoji: '👨‍✈️', desc: 'Tripulante de cabine' },
-  { value: 'Comissária', label: 'Comissária', emoji: '👩‍✈️', desc: 'Tripulante de cabine' },
+const PILOT_ROLES = [
+  { value: 'Piloto', label: 'Piloto' },
+  { value: 'Piloto mulher', label: 'Piloto mulher' },
 ];
+
+const CREW_ROLES = [
+  { value: 'Comissário', label: 'Comissário' },
+  { value: 'Comissária', label: 'Comissária' },
+];
+
+// SVG icons — line-art style
+const PilotMaleIcon = () => (
+  <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="26" cy="15" r="8" />
+    <path d="M16 13h20" />
+    <path d="M20 9l6-3 6 3" />
+    <path d="M14 51c0-10 5-17 12-17s12 7 12 17" />
+    <path d="M20 36h2M30 36h2" />
+    <line x1="26" y1="38" x2="26" y2="46" />
+    <line x1="23" y1="40" x2="29" y2="40" />
+    <line x1="23" y1="43" x2="29" y2="43" />
+  </svg>
+);
+
+const PilotFemaleIcon = () => (
+  <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="26" cy="15" r="8" />
+    <path d="M16 13h20" />
+    <path d="M20 9l6-3 6 3" />
+    <path d="M13 51c0-10 5.5-17 13-17s13 7 13 17" />
+    <path d="M20 36h2M30 36h2" />
+    <path d="M21 38c0 2.8 2.2 5 5 5s5-2.2 5-5" />
+  </svg>
+);
+
+const CrewMaleIcon = () => (
+  <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="26" cy="14" r="8" />
+    <path d="M14 51c0-10 5.4-17 12-17s12 7 12 17" />
+    <path d="M22 30l-2 6h12l-2-6" />
+    <line x1="26" y1="30" x2="26" y2="22" />
+    <path d="M20 24h12" />
+    <line x1="26" y1="36" x2="26" y2="44" />
+    <line x1="23" y1="40" x2="29" y2="40" />
+  </svg>
+);
+
+const CrewFemaleIcon = () => (
+  <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="26" cy="14" r="8" />
+    <path d="M16 8c0 0 2-3 10-3s10 3 10 3" />
+    <path d="M13 51c0-10 5.5-17 13-17s13 7 13 17" />
+    <path d="M20 30l-3 8h18l-3-8" />
+    <path d="M20 24h12" />
+  </svg>
+);
 
 const APP_FEATURES = [
   { icon: FileText, label: 'Importação automática', desc: 'Leitura da escala a partir do PDF oficial da companhia.' },
@@ -288,28 +334,53 @@ export function OnboardingModal({ open, onClose }: Props) {
 
             {/* ── Step 1a: Role selection ── */}
             {step === 1 && profileSub === 'role' && (
-              <div className="flex-1 flex flex-col px-6 py-10 max-w-lg mx-auto w-full">
-                <div className="text-center mb-8">
+              <div className="flex-1 flex flex-col px-6 py-8 max-w-lg mx-auto w-full">
+                <div className="text-center mb-6">
                   <h2 className="text-3xl font-extrabold text-foreground">Qual é a sua função?</h2>
-                  <p className="text-muted-foreground mt-2">Usamos isso para personalizar a experiência.</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3 flex-1">
-                  {ROLES.map(r => (
+
+                {/* Avatar placeholder */}
+                <div className="flex flex-col items-center mb-7">
+                  <div className="w-24 h-24 rounded-full border-2 border-primary/50 bg-muted/60 flex items-center justify-center">
+                    <Users className="w-11 h-11 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Adicionar foto (opcional)</p>
+                </div>
+
+                {/* Pilots */}
+                <p className="text-primary text-sm font-bold mb-3">Pilotos</p>
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  {PILOT_ROLES.map(r => (
                     <button
                       key={r.value}
                       onClick={() => setProfileForm(f => ({ ...f, crewRole: r.value }))}
-                      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border-2 p-5 transition-all ${
+                      className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 py-5 px-3 transition-all ${
                         profileForm.crewRole === r.value
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/40 hover:bg-muted/50'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/40'
                       }`}
                     >
-                      <span className="text-4xl">{r.emoji}</span>
+                      {r.value === 'Piloto' ? <PilotMaleIcon /> : <PilotFemaleIcon />}
                       <span className="text-sm font-semibold text-foreground">{r.label}</span>
-                      <span className="text-[10px] text-muted-foreground text-center">{r.desc}</span>
-                      {profileForm.crewRole === r.value && (
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Cabin crew */}
+                <p className="text-primary text-sm font-bold mb-3">Comissários</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {CREW_ROLES.map(r => (
+                    <button
+                      key={r.value}
+                      onClick={() => setProfileForm(f => ({ ...f, crewRole: r.value }))}
+                      className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 py-5 px-3 transition-all ${
+                        profileForm.crewRole === r.value
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/40'
+                      }`}
+                    >
+                      {r.value === 'Comissário' ? <CrewMaleIcon /> : <CrewFemaleIcon />}
+                      <span className="text-sm font-semibold text-foreground">{r.label}</span>
                     </button>
                   ))}
                 </div>
@@ -321,29 +392,30 @@ export function OnboardingModal({ open, onClose }: Props) {
               <div className="flex-1 flex flex-col px-6 py-10 max-w-lg mx-auto w-full">
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-extrabold text-foreground">Qual é a sua companhia aérea?</h2>
-                  <p className="text-muted-foreground mt-2">Usamos isso para liberar os recursos específicos.</p>
+                  <p className="text-muted-foreground mt-2 text-sm">Usamos isso para liberar os recursos específicos da sua companhia.</p>
                 </div>
-                <div className="space-y-3 flex-1">
-                  {AIRLINES.map(a => (
-                    <button
-                      key={a.name}
-                      onClick={() => setProfileForm(f => ({ ...f, airline: a.name }))}
-                      className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl border-2 transition-all ${
-                        profileForm.airline === a.name
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/30 hover:bg-muted/40'
-                      }`}
-                    >
-                      <div className={`w-10 h-10 rounded-full ${a.color} flex items-center justify-center shrink-0`}>
-                        <span className="text-white text-sm font-bold">{a.initial}</span>
-                      </div>
-                      <span className="text-base font-semibold text-foreground">{a.name}</span>
-                      {profileForm.airline === a.name && (
-                        <CheckCircle2 className="w-5 h-5 text-primary ml-auto" />
-                      )}
-                    </button>
-                  ))}
-                  <div className="pt-2">
+                <div className="space-y-2.5 flex-1">
+                  {AIRLINES.map(a => {
+                    const selected = profileForm.airline === a.name;
+                    return (
+                      <button
+                        key={a.name}
+                        onClick={() => setProfileForm(f => ({ ...f, airline: a.name }))}
+                        className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl border-2 transition-all ${
+                          selected
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border/60 bg-card hover:border-primary/30 hover:bg-muted/40'
+                        }`}
+                      >
+                        <div className={`w-11 h-11 rounded-full ${a.color} flex items-center justify-center shrink-0`}>
+                          <span className="text-white text-base font-bold">{a.initial}</span>
+                        </div>
+                        <span className={`text-base font-semibold flex-1 text-left ${selected ? 'text-primary' : 'text-foreground'}`}>{a.name}</span>
+                        {selected && <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+                  <div className="pt-1">
                     <Input
                       value={!AIRLINES.map(a => a.name).includes(profileForm.airline) ? profileForm.airline : ''}
                       onChange={e => setProfileForm(f => ({ ...f, airline: e.target.value }))}
