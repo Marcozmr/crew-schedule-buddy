@@ -10,9 +10,11 @@ interface Props {
   todayStr: string;
   /** Animate delay multiplier */
   delay?: number;
+  /** Suppress the "Hoje / Amanhã" date header (when parent already shows it) */
+  hideDateLabel?: boolean;
 }
 
-export function DutyFlightsSection({ duty, todayStr, delay = 0 }: Props) {
+export function DutyFlightsSection({ duty, todayStr, delay = 0, hideDateLabel = false }: Props) {
   const flightLegs = useMemo(
     () => duty.legs.filter(l => l.is_flight && l.departure && l.arrival),
     [duty]
@@ -48,12 +50,14 @@ export function DutyFlightsSection({ duty, todayStr, delay = 0 }: Props) {
       className="space-y-3"
     >
       {/* Date header */}
-      <div className="flex items-center gap-2">
-        <p className="text-sm font-bold text-primary">{dateLabel}</p>
-        {duty.reportTime && (
-          <span className="text-xs text-muted-foreground">· Apresentação {duty.reportTime}</span>
-        )}
-      </div>
+      {!hideDateLabel && (
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-bold text-primary">{dateLabel}</p>
+          {duty.reportTime && (
+            <span className="text-xs text-muted-foreground">· Apresentação {duty.reportTime}</span>
+          )}
+        </div>
+      )}
 
       {/* Flight cards */}
       {flightLegs.map((leg, i) => {

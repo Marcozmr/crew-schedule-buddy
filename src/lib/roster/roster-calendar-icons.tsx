@@ -70,30 +70,30 @@ export function getRosterCalendarCellPillClass(entry: ScheduleEntry): string {
   const t = getRosterEventVisualType(entry);
   switch (t) {
     case 'flight':
-      return 'bg-primary/10 text-primary font-medium';
+      return 'bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold';
     case 'rest':
-      return 'bg-success/10 text-success';
+      return 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-medium';
     case 'extra':
-      return 'bg-amber-500/15 text-amber-900 dark:text-amber-200';
+      return 'bg-amber-500/20 text-amber-800 dark:text-amber-300 font-medium';
     case 'standby':
-      return 'bg-warning/10 text-warning';
+      return 'bg-orange-500/20 text-orange-700 dark:text-orange-300';
     case 'course':
     case 'simulator':
-      return 'bg-sky-500/12 text-sky-900 dark:text-sky-200';
+      return 'bg-sky-500/20 text-sky-700 dark:text-sky-300';
     case 'crm':
     case 'cma':
-      return 'bg-secondary text-foreground';
+      return 'bg-slate-400/20 text-slate-700 dark:text-slate-300';
     case 'lgpd':
-      return 'bg-primary/8 text-foreground';
+      return 'bg-blue-400/15 text-blue-700 dark:text-blue-300';
     case 'medical':
-      return 'bg-rose-500/12 text-rose-900 dark:text-rose-200';
+      return 'bg-rose-500/20 text-rose-700 dark:text-rose-300';
     case 'hotel':
-      return 'bg-secondary text-muted-foreground';
+      return 'bg-violet-400/15 text-violet-700 dark:text-violet-300';
     case 'presentation':
-      return 'bg-primary/10 text-primary';
+      return 'bg-blue-500/20 text-blue-700 dark:text-blue-300';
     case 'generic':
     default:
-      return 'bg-secondary/80 text-muted-foreground';
+      return 'bg-slate-400/15 text-slate-600 dark:text-slate-400';
   }
 }
 

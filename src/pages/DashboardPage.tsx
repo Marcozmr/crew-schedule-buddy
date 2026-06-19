@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -16,9 +16,7 @@ import {
 } from "lucide-react";
 
 import { AppLayout } from "../components/AppLayout";
-import { SurfacePanel } from "@/components/presentation/PremiumChrome";
 import { PdfImportDialog } from "../components/PdfImportDialog";
-import { DashboardPersonalStrip } from "../components/dashboard/DashboardPersonalStrip";
 import { DashboardNextPresentationCard } from "../components/dashboard/DashboardNextPresentationCard";
 import { DashboardRosterUpdatedHint } from "../components/dashboard/DashboardRosterUpdatedHint";
 import {
@@ -203,20 +201,6 @@ export default function DashboardPage() {
     return () => window.clearTimeout(t);
   }, [analysis, nextDuty, user]);
 
-  const greeting = () => {
-    const hourStr = new Intl.DateTimeFormat("pt-BR", {
-      hour: "2-digit",
-      hour12: false,
-      timeZone: safeTz,
-    }).format(now);
-
-    const hour = Number(hourStr);
-
-    if (hour < 12) return "Bom dia";
-    if (hour < 18) return "Boa tarde";
-    return "Boa noite";
-  };
-
   const fade = (delay: number) => ({
     initial: { opacity: 0, y: 6 },
     animate: { opacity: 1, y: 0 },
@@ -243,18 +227,6 @@ export default function DashboardPage() {
     monthlyStatus.tone === "critical"
       ? `Excedente de ${formatHoursMinutes(Math.abs(monthlyBalanceHours))}.`
       : `Restam ${formatHoursMinutes(Math.max(monthlyBalanceHours, 0))}.`;
-
-  const operationalDateLabel = useMemo(
-    () =>
-      now.toLocaleDateString("pt-BR", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        timeZone: safeTz,
-      }),
-    [now, safeTz]
-  );
 
   const dutyStatusByKey = useMemo(
     () =>
@@ -323,7 +295,7 @@ export default function DashboardPage() {
           >
             <h2 className="text-[17px] font-bold text-foreground px-0.5">Hoje</h2>
             {todayDuties.map((duty, i) => (
-              <DutyFlightsSection key={duty.id} duty={duty} todayStr={todayStr} delay={i * 0.05} />
+              <DutyFlightsSection key={duty.id} duty={duty} todayStr={todayStr} delay={i * 0.05} hideDateLabel />
             ))}
           </motion.div>
         )}
@@ -337,7 +309,7 @@ export default function DashboardPage() {
             className="space-y-3"
           >
             <h2 className="text-[17px] font-bold text-foreground px-0.5">Amanhã</h2>
-            <DutyFlightsSection duty={nextDuty} todayStr={todayStr} />
+            <DutyFlightsSection duty={nextDuty} todayStr={todayStr} hideDateLabel />
           </motion.div>
         )}
 

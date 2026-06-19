@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Cloud, Wind } from 'lucide-react';
+import { Cloud, Wind, Users, Clock, ChevronRight, CheckCircle2, Plane } from 'lucide-react';
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
 import type { AirportWeather } from '@/hooks/useAirportWeather';
 import { FC_COLOR } from '@/hooks/useAirportWeather';
@@ -20,18 +20,18 @@ function parseFlightNum(flightNumber: string): string {
   return flightNumber?.replace(/^[A-Z]{2}|^[A-Z][0-9]|^[0-9][A-Z]/, '') || flightNumber || '—';
 }
 
-const AIRLINE_COLORS: Record<string, string> = {
-  LA: 'bg-red-600',
-  G3: 'bg-orange-500',
-  AD: 'bg-cyan-600',
-  O6: 'bg-red-800',
-  '7M': 'bg-blue-600',
-  '2Z': 'bg-purple-600',
-  M3: 'bg-green-600',
+const AIRLINE_COLORS: Record<string, { bg: string; text: string }> = {
+  LA: { bg: 'bg-red-600',    text: 'text-white' },
+  G3: { bg: 'bg-orange-500', text: 'text-white' },
+  AD: { bg: 'bg-cyan-600',   text: 'text-white' },
+  O6: { bg: 'bg-red-800',    text: 'text-white' },
+  '7M':{ bg: 'bg-blue-600',  text: 'text-white' },
+  '2Z':{ bg: 'bg-purple-600',text: 'text-white' },
+  M3: { bg: 'bg-green-600',  text: 'text-white' },
 };
 
-function airlineBg(code: string) {
-  return AIRLINE_COLORS[code] || 'bg-primary';
+function airlineStyle(code: string) {
+  return AIRLINE_COLORS[code] || { bg: 'bg-primary', text: 'text-primary-foreground' };
 }
 
 function calcDuration(depTime?: string | null, arrTime?: string | null): string {
@@ -39,7 +39,7 @@ function calcDuration(depTime?: string | null, arrTime?: string | null): string 
   const [dh, dm] = depTime.split(':').map(Number);
   let [ah, am] = arrTime.split(':').map(Number);
   let mins = ah * 60 + am - (dh * 60 + dm);
-  if (mins < 0) mins += 24 * 60; // overnight
+  if (mins < 0) mins += 24 * 60;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${h}h${m > 0 ? ` ${m}min` : ''}`;
@@ -49,11 +49,8 @@ function calcDuration(depTime?: string | null, arrTime?: string | null): string 
 
 export interface FlightCardProps {
   leg: ScheduleEntry;
-  /** Weather at the ARRIVAL airport */
   weather?: AirportWeather;
-  /** Show check-in badge (first leg of duty) */
   reportTime?: string | null;
-  /** Show check-out badge (last leg of duty) */
   debriefTime?: string | null;
   showMetButton?: boolean;
   className?: string;
@@ -72,103 +69,117 @@ export function FlightCard({
   const duration = calcDuration(leg.departure_time, leg.arrival_time);
   const arrIata = leg.arrival?.trim().toUpperCase().slice(0, 3);
   const arrIcao = AIRPORTS_DB[arrIata]?.icao;
+  const style = airlineStyle(airlineCode);
 
   return (
-    <div className={`rounded-2xl border border-border/70 bg-card overflow-hidden ${className}`}>
-      {/* Header row: airline + flight number + aircraft + duration */}
-      <div className="flex items-center gap-2 px-4 pt-4 pb-2">
-        <div className={`flex h-7 w-9 items-center justify-center rounded-md ${airlineBg(airlineCode)} shrink-0`}>
-          <span className="text-white text-[10px] font-bold leading-none">{airlineCode}</span>
+    <div className={`rounded-2xl border border-border/60 bg-card overflow-hidden shadow-sm ${className}`}>
+
+      {/* ── Linha 1: Badge + número + duração ── */}
+      <div className="flex items-center gap-2.5 px-4 pt-4 pb-1.5">
+        <div className={`flex h-7 w-9 items-center justify-center rounded-lg ${style.bg} shrink-0`}>
+          <span className={`${style.text} text-[10px] font-bold leading-none`}>{airlineCode}</span>
         </div>
-        <span className="text-base font-bold text-foreground">{flightNum}</span>
-        {leg.aircraft_type && (
-          <span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-            {leg.aircraft_type}
-          </span>
-        )}
-        <span className="ml-auto text-xs font-medium text-muted-foreground whitespace-nowrap">{duration}</span>
+        <span className="text-[15px] font-bold text-foreground">{flightNum}</span>
+        <span className="ml-auto text-xs font-medium text-muted-foreground">{duration}</span>
       </div>
 
-      {/* Route: origin → destination */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-1">
+      {/* ── Linha 2: Tripulação ── */}
+      <div className="flex items-center gap-1.5 px-4 pb-2.5">
+        <Users className="w-3.5 h-3.5 text-muted-foreground/50" />
+        <span className="text-xs text-muted-foreground">Tripulação</span>
+        {leg.aircraft_type && (
+          <>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="text-[10px] font-mono text-muted-foreground">{leg.aircraft_type}</span>
+          </>
+        )}
+      </div>
+
+      {/* ── Linha 3: Rota ── */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pb-3">
         <div>
           <p className="text-2xl font-extrabold text-foreground tracking-tight">{leg.departure?.slice(0, 3)}</p>
           <p className="font-mono text-sm text-muted-foreground">{leg.departure_time}</p>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <div className="w-12 h-px bg-border relative">
-            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-muted-foreground">
-              ✈
-            </span>
-          </div>
-        </div>
+        <Plane className="w-4 h-4 text-muted-foreground/40 rotate-90" />
         <div className="text-right">
           <p className="text-2xl font-extrabold text-foreground tracking-tight">{leg.arrival?.slice(0, 3)}</p>
           <p className="font-mono text-sm text-muted-foreground">{leg.arrival_time}</p>
         </div>
       </div>
 
-      {/* Check-in / Check-out badges */}
-      {(reportTime || debriefTime) && (
-        <div className="flex gap-2 px-4 pb-2 flex-wrap">
-          {reportTime && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2.5 py-0.5 text-xs font-semibold">
-              ✓ Check-in: {reportTime}
-            </span>
-          )}
-          {debriefTime && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 px-2.5 py-0.5 text-xs font-semibold">
-              Check-out: {debriefTime}
-            </span>
-          )}
+      {/* ── Linha 4: Check-in (laranja) ── */}
+      {reportTime && (
+        <div className="flex items-center gap-1.5 px-4 pb-2">
+          <Clock className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+          <span className="text-xs font-semibold text-orange-500">Check-in {reportTime}</span>
         </div>
       )}
 
-      {/* METAR row */}
+      {/* ── Linha 5: Badges MET ── */}
       {weather && (
-        <div className="border-t border-border/50 px-4 py-2 flex items-center gap-2">
-          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
-            METAR {arrIata}
-          </span>
-          <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold ${FC_COLOR[weather.flightCategory]}`}>
+        <div className="flex items-center gap-2 px-4 pb-2.5 flex-wrap">
+          <span className="text-[10px] font-mono text-muted-foreground uppercase">MET</span>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${FC_COLOR[weather.flightCategory]}`}>
             {weather.flightCategory}
           </span>
           {weather.temp != null && (
-            <span className="text-xs text-foreground font-medium">{Math.round(weather.temp)}°C</span>
+            <span className="text-[11px] font-semibold text-foreground">{Math.round(weather.temp)}°C</span>
           )}
           {weather.windSpeed != null && (
-            <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
               <Wind className="w-3 h-3" />{Math.round(weather.windSpeed)}kt
             </span>
           )}
         </div>
       )}
 
-      {/* Weather details card */}
+      {/* ── Mini-card de clima ── */}
       {weather && (
-        <div className="mx-3 mb-3 rounded-xl bg-muted/40 border border-border/40 p-3 flex items-center gap-3">
-          <span className="text-2xl shrink-0">{weather.conditionEmoji}</span>
+        <div className="mx-3 mb-3 rounded-xl bg-secondary/60 border border-border/30 px-3 py-2.5 flex items-center gap-3">
+          <span className="text-xl shrink-0">{weather.conditionEmoji}</span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">
               {weather.temp != null ? `${Math.round(weather.temp)}°C` : ''}{' '}
               <span className="font-normal text-muted-foreground">{weather.condition}</span>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Pouso em {arrIcao || arrIata}
-              {leg.arrival_time ? ` às ${leg.arrival_time}` : ''}
+              Pouso em {arrIcao || arrIata}{leg.arrival_time ? ` às ${leg.arrival_time}` : ''}
             </p>
           </div>
         </div>
       )}
 
-      {/* MetCenter button */}
-      {showMetButton && weather && (
+      {/* ── Botão verde "Fazer check-in" (estilo CrewSync) ── */}
+      {reportTime && (
+        <Link
+          to="/schedule"
+          className="flex items-center justify-between w-full px-4 py-3 bg-green-500 hover:bg-green-600 transition-colors"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-white">
+            <CheckCircle2 className="w-4 h-4" />
+            Fazer check-in
+          </span>
+          <ChevronRight className="w-4 h-4 text-white/80" />
+        </Link>
+      )}
+
+      {/* ── Link MetCenter (quando não tem check-in) ── */}
+      {showMetButton && weather && !reportTime && (
         <Link
           to="/weather"
-          className="flex items-center justify-center gap-2 border-t border-border/50 py-2.5 text-xs font-semibold text-primary/80 hover:text-primary transition-colors tracking-wide uppercase"
+          className="flex items-center justify-center gap-2 border-t border-border/40 py-2.5 text-xs font-semibold text-primary/80 hover:text-primary transition-colors"
         >
-          <Cloud className="w-3.5 h-3.5" /> Meteorologia
+          <Cloud className="w-3.5 h-3.5" /> Ver no MetCenter
         </Link>
+      )}
+
+      {/* ── Check-out badge (debrief) ── */}
+      {debriefTime && !reportTime && (
+        <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border/40">
+          <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground">Debrief: {debriefTime}</span>
+        </div>
       )}
     </div>
   );
