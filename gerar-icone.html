@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Gerador de Ícone — EscalaX</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1e293b;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 24px;
+    font-family: -apple-system, system-ui, sans-serif;
+    color: white;
+  }
+  h1 { font-size: 16px; color: #94a3b8; }
+  .preview { display: flex; gap: 32px; align-items: flex-end; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .label { font-size: 13px; color: #64748b; }
+  canvas { border-radius: 0; }
+  #iconCanvas { border-radius: 22%; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
+  .buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  button {
+    padding: 14px 28px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  button:hover { opacity: 0.8; }
+  .btn-icon   { background: #0ea5e9; color: white; }
+  .btn-banner { background: #6366f1; color: white; }
+  small { font-size: 12px; color: #475569; }
+</style>
+</head>
+<body>
+
+<h1>Pré-visualização</h1>
+
+<div class="preview">
+  <div class="item">
+    <canvas id="iconCanvas" width="512" height="512"></canvas>
+    <span class="label">Ícone 512 × 512</span>
+  </div>
+  <div class="item">
+    <canvas id="bannerCanvas" width="512" height="250"></canvas>
+    <span class="label">Banner 1024 × 500 (escala 50%)</span>
+  </div>
+</div>
+
+<div class="buttons">
+  <button class="btn-icon"   onclick="downloadIcon()">⬇ Ícone 512×512</button>
+  <button class="btn-banner" onclick="downloadBanner()">⬇ Gráfico 1024×500</button>
+</div>
+<small>Use o Chrome para o download funcionar automaticamente</small>
+
+<!-- canvas real do banner em resolução total (oculto) -->
+<canvas id="bannerReal" width="1024" height="500" style="display:none"></canvas>
+
+<script>
+/* ── AVIÃO (path central, sem rotação — deixamos o ctx rotacionado) ── */
+function drawPlane(ctx, cx, cy, size, color) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-Math.PI / 4);           // 45° apontando canto sup-dir
+  ctx.scale(size, size);
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+
+  // Fuselagem
+  ctx.moveTo(0, -1.1);
+  ctx.bezierCurveTo( 0.18, -0.9,  0.18,  0.55,  0.08,  0.95);
+  ctx.lineTo(-0.08, 0.95);
+  ctx.bezierCurveTo(-0.18,  0.55, -0.18, -0.9,  0, -1.1);
+  ctx.closePath();
+  ctx.fill();
+
+  // Asa principal
+  ctx.beginPath();
+  ctx.moveTo(-0.16, -0.08);
+  ctx.lineTo(-1.18,  0.52);
+  ctx.bezierCurveTo(-1.26, 0.68, -1.1, 0.74, -0.95, 0.68);
+  ctx.lineTo(-0.03,  0.28);
+  ctx.lineTo( 0.03,  0.28);
+  ctx.lineTo( 0.95,  0.68);
+  ctx.bezierCurveTo( 1.1,  0.74,  1.26, 0.68, 1.18, 0.52);
+  ctx.lineTo( 0.16, -0.08);
+  ctx.closePath();
+  ctx.fill();
+
+  // Cauda
+  ctx.beginPath();
+  ctx.moveTo(-0.12,  0.65);
+  ctx.lineTo(-0.58,  1.02);
+  ctx.bezierCurveTo(-0.65, 1.12, -0.54, 1.18, -0.44, 1.12);
+  ctx.lineTo(-0.04,  0.88);
+  ctx.lineTo( 0.04,  0.88);
+  ctx.lineTo( 0.44,  1.12);
+  ctx.bezierCurveTo( 0.54, 1.18,  0.65, 1.12,  0.58, 1.02);
+  ctx.lineTo( 0.12,  0.65);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ── ÍCONE 512×512 ── */
+function drawIcon(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  // Fundo preto sólido
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+
+  // Avião branco centralizado
+  drawPlane(ctx, w / 2, h / 2 + 10, 140, '#ffffff');
+}
+
+/* ── BANNER 1024×500 ── */
+function drawBanner(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const scale = w / 1024;
+
+  // Fundo preto
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+
+  // Avião à esquerda
+  drawPlane(ctx, w * 0.26, h * 0.50, 105 * scale, '#ffffff');
+
+  // Linha divisória
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1 * scale;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.45, h * 0.15);
+  ctx.lineTo(w * 0.45, h * 0.85);
+  ctx.stroke();
+
+  // Nome
+  ctx.font = `bold ${Math.round(88 * scale)}px -apple-system, "Helvetica Neue", sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('EscalaX', w * 0.49, h * 0.36);
+
+  // Tagline
+  ctx.font = `${Math.round(26 * scale)}px -apple-system, sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillText('Escala de voo para tripulantes', w * 0.49, h * 0.58);
+
+  // Badge RBAC
+  const bx = w * 0.49, by = h * 0.76, bw = 260 * scale, bh = 34 * scale;
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(bx, by - bh / 2, bw, bh, bh / 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.font = `bold ${Math.round(14 * scale)}px -apple-system, sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.textAlign = 'center';
+  ctx.fillText('RBAC 117 · LATAM · GOL · AZUL', bx + bw / 2, by);
+}
+
+/* ── RENDER ── */
+drawIcon(document.getElementById('iconCanvas'));
+drawBanner(document.getElementById('bannerCanvas'));
+drawBanner(document.getElementById('bannerReal'));
+
+/* ── DOWNLOADS ── */
+function downloadIcon() {
+  const a = document.createElement('a');
+  a.download = 'escalax-icon-512x512.png';
+  a.href = document.getElementById('iconCanvas').toDataURL('image/png');
+  a.click();
+}
+
+function downloadBanner() {
+  const a = document.createElement('a');
+  a.download = 'escalax-banner-1024x500.png';
+  a.href = document.getElementById('bannerReal').toDataURL('image/png');
+  a.click();
+}
+</script>
+</body>
+</html>
