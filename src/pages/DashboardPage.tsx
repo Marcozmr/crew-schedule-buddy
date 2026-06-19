@@ -35,6 +35,7 @@ import {
 } from "../components/ui/tooltip";
 
 import { useAuth } from "../lib/auth-context";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   formatDateBR,
   formatHoursMinutes,
@@ -271,47 +272,72 @@ export default function DashboardPage() {
       <div className="space-y-8 pb-12">
         <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} />
 
-        <motion.div {...fade(0)} className="mb-2 min-w-0">
-          <SurfacePanel className="space-y-5 p-6 md:space-y-6 md:p-8">
-            <div>
-              <h1 className="break-words text-2xl font-semibold tracking-tight text-slate-900 dark:text-foreground lg:text-3xl">
-                {greeting()},{" "}
-                <span className="text-primary">
-                  {profile?.name?.split(" ")[0] || "Tripulante"}
-                </span>
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">Seu dia operacional</p>
+        {/* ── Card de perfil estilo CrewSync ── */}
+        <motion.div {...fade(0)} className="min-w-0">
+          <div className="flex items-center gap-4 px-1 py-2">
+            <Avatar className="w-14 h-14 shrink-0 border-2 border-border shadow-sm">
+              <AvatarImage src={profile?.avatar_url || undefined} />
+              <AvatarFallback className="text-lg font-bold bg-primary text-primary-foreground">
+                {profile?.name?.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() || 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-primary uppercase tracking-widest">EscalaX</p>
+              <p className="text-lg font-bold text-foreground truncate leading-tight">
+                {profile?.name || 'Tripulante'}
+              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-muted-foreground">{profile?.airline || '—'}</span>
+                {homeBase && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-xs font-mono font-semibold text-foreground">🏠 {homeBase}</span>
+                  </>
+                )}
+              </div>
             </div>
-
-            <DashboardRosterUpdatedHint
-              lastUpdatedIso={activeRosterMeta?.synced_at ?? activeRosterMeta?.updated_at}
-              operationalTodayIso={todayStr}
-              operationalTimezone={safeTz}
-            />
-
-            <DashboardPersonalStrip dateLabel={operationalDateLabel} homeBase={homeBase} />
-
-            {!loading && (
-              <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
-            )}
-          </SurfacePanel>
+            <div className="shrink-0">
+              <DashboardRosterUpdatedHint
+                lastUpdatedIso={activeRosterMeta?.synced_at ?? activeRosterMeta?.updated_at}
+                operationalTodayIso={todayStr}
+                operationalTimezone={safeTz}
+              />
+            </div>
+          </div>
         </motion.div>
 
-        {/* ── Voos detalhados (hoje ou próximos) ── */}
-        {!loading && (todayDuties.length > 0 || nextDuty) && (
+        {/* ── Próxima apresentação ── */}
+        {!loading && nextDuty && (
+          <motion.div {...fade(0.04)}>
+            <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
+          </motion.div>
+        )}
+
+        {/* ── Voos hoje ── */}
+        {!loading && todayDuties.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.06, duration: 0.3 }}
+            className="space-y-3"
+          >
+            <h2 className="text-[17px] font-bold text-foreground px-0.5">Hoje</h2>
+            {todayDuties.map((duty, i) => (
+              <DutyFlightsSection key={duty.id} duty={duty} todayStr={todayStr} delay={i * 0.05} />
+            ))}
+          </motion.div>
+        )}
+
+        {/* ── Próxima jornada (amanhã / futuro) ── */}
+        {!loading && todayDuties.length === 0 && nextDuty && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08, duration: 0.3 }}
-            className="space-y-6"
+            className="space-y-3"
           >
-            {todayDuties.length > 0 ? (
-              todayDuties.map((duty, i) => (
-                <DutyFlightsSection key={duty.id} duty={duty} todayStr={todayStr} delay={i * 0.05} />
-              ))
-            ) : nextDuty ? (
-              <DutyFlightsSection duty={nextDuty} todayStr={todayStr} />
-            ) : null}
+            <h2 className="text-[17px] font-bold text-foreground px-0.5">Amanhã</h2>
+            <DutyFlightsSection duty={nextDuty} todayStr={todayStr} />
           </motion.div>
         )}
 

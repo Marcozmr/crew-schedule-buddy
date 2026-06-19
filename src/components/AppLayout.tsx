@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, Menu, ChevronLeft, HelpCircle, Cloud, CalendarClock, MessageCircle, Users } from 'lucide-react';
+import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, ChevronLeft, HelpCircle, Cloud, CalendarClock, Users, Home, Map, BarChart2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,11 +24,14 @@ const navItems = [
 ];
 
 const bottomNavItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/minha-escala', label: 'Escala', icon: CalendarClock },
-  { path: '/weather', label: 'MetCenter', icon: Cloud },
-  { path: '/connections', label: 'Conexões', icon: Users },
+  { path: '/dashboard', label: 'Início', icon: Home },
+  { path: '/schedule', label: 'Escala', icon: Calendar },
+  { path: '/weather', label: 'MetCenter', icon: Map },
+  { path: '/salary', label: 'Stats', icon: BarChart2 },
+  { path: '/settings', label: 'Ajustes', icon: Settings },
 ];
+
+const mainTabPaths = new Set(['/dashboard', '/schedule', '/weather', '/salary', '/settings']);
 
 function desktopNavLinkClass(active: boolean) {
   return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${
@@ -53,52 +56,30 @@ function AppNavLink({ children, className, onClick, to }: AppNavLinkProps) {
   return <RouterLink to={to} className={className} onClick={onClick}>{children}</RouterLink>;
 }
 
-function MobileBottomNav({
-  pathname,
-  onMenuOpen,
-  onFeedbackOpen,
-}: {
-  pathname: string;
-  onMenuOpen: () => void;
-  onFeedbackOpen: () => void;
-}) {
+function MobileBottomNav({ pathname }: { pathname: string }) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card/95 backdrop-blur-xl border-t border-border"
+      className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card border-t border-border"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="flex items-stretch h-14">
+      <div className="flex items-stretch h-[54px]">
         {bottomNavItems.map((item) => {
           const active = pathname === item.path;
           return (
             <AppNavLink
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 transition-colors ${
-                active ? 'text-primary' : 'text-muted-foreground'
+              className={`flex flex-col items-center justify-center gap-[3px] flex-1 transition-colors ${
+                active ? 'text-primary' : 'text-muted-foreground/60'
               }`}
             >
-              <item.icon className={`w-[17px] h-[17px] ${active ? 'stroke-[2.5]' : 'stroke-2'}`} />
-              <span className={`text-[8px] leading-none mt-0.5 ${active ? 'font-semibold' : 'font-medium'}`}>
+              <item.icon className={`w-[22px] h-[22px] ${active ? 'stroke-[2.5]' : 'stroke-[1.5]'}`} />
+              <span className={`text-[10px] leading-none ${active ? 'font-semibold' : 'font-medium'}`}>
                 {item.label}
               </span>
             </AppNavLink>
           );
         })}
-        <button
-          onClick={onFeedbackOpen}
-          className="flex flex-col items-center justify-center gap-0.5 flex-1 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <MessageCircle className="w-[17px] h-[17px] stroke-2" />
-          <span className="text-[8px] font-medium leading-none mt-0.5">Suporte</span>
-        </button>
-        <button
-          onClick={onMenuOpen}
-          className="flex flex-col items-center justify-center gap-0.5 flex-1 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Menu className="w-[17px] h-[17px] stroke-2" />
-          <span className="text-[8px] font-medium leading-none mt-0.5">Menu</span>
-        </button>
       </div>
     </nav>
   );
@@ -183,35 +164,35 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
           {/* Mobile top header */}
-          <header className="sticky top-0 z-40 min-h-[3.5rem] px-3 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
-            <div className="flex items-center gap-1 min-w-0">
+          {mainTabPaths.has(pathname) ? (
+            <header className="sticky top-0 z-40 h-11 px-4 flex items-center justify-between bg-card/95 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
+              <div className="w-8" />
+              <span className="text-[15px] font-semibold text-foreground">EscalaX</span>
+              <AppNavLink
+                to="/notifications"
+                className="relative p-1 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Bell className="w-[18px] h-[18px]" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </AppNavLink>
+            </header>
+          ) : (
+            <header className="sticky top-0 z-40 h-11 px-1 flex items-center bg-card/95 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
               <button
                 onClick={() => navigate(-1)}
-                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
+                className="p-2 text-primary hover:text-foreground rounded-lg transition-colors shrink-0"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-2 ml-0.5 min-w-0">
-                <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center shrink-0">
-                  <Plane className="w-3 h-3 text-primary-foreground" />
-                </div>
-                <span className="text-sm font-semibold text-foreground truncate">
-                  {pageTitle || 'EscalaX'}
-                </span>
-              </div>
-            </div>
-            <AppNavLink
-              to="/notifications"
-              className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
-            </AppNavLink>
-          </header>
+              <span className="flex-1 text-center text-[15px] font-semibold text-foreground pr-9 truncate">
+                {pageTitle || 'EscalaX'}
+              </span>
+            </header>
+          )}
 
           {/* Desktop top header */}
           <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
@@ -319,11 +300,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
           <PWAInstallPrompt />
         </div>
 
-        <MobileBottomNav
-          pathname={pathname}
-          onMenuOpen={() => setDrawerOpen(true)}
-          onFeedbackOpen={() => setFeedbackOpen(true)}
-        />
+        <MobileBottomNav pathname={pathname} />
       </div>
     </AppShell>
   );
@@ -432,35 +409,32 @@ function AppLayoutRouterFallback({
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip bg-background">
           {/* Mobile top header */}
-          <header className="sticky top-0 z-40 min-h-[3.5rem] px-3 flex items-center justify-between bg-card/90 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
-            <div className="flex items-center gap-1 min-w-0">
+          {mainTabPaths.has(pathname) ? (
+            <header className="sticky top-0 z-40 h-11 px-4 flex items-center justify-between bg-card/95 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
+              <div className="w-8" />
+              <span className="text-[15px] font-semibold text-foreground">EscalaX</span>
+              <a href="/notifications" className="relative p-1 text-muted-foreground hover:text-foreground transition-colors">
+                <Bell className="w-[18px] h-[18px]" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </a>
+            </header>
+          ) : (
+            <header className="sticky top-0 z-40 h-11 px-1 flex items-center bg-card/95 backdrop-blur-xl border-b border-border lg:hidden safe-area-top">
               <button
                 onClick={() => navigate(-1)}
-                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
+                className="p-2 text-primary hover:text-foreground rounded-lg transition-colors shrink-0"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-2 ml-0.5 min-w-0">
-                <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center shrink-0">
-                  <Plane className="w-3 h-3 text-primary-foreground" />
-                </div>
-                <span className="text-sm font-semibold text-foreground truncate">
-                  {pageTitle || 'EscalaX'}
-                </span>
-              </div>
-            </div>
-            <a
-              href="/notifications"
-              className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg transition-colors shrink-0"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
-            </a>
-          </header>
+              <span className="flex-1 text-center text-[15px] font-semibold text-foreground pr-9 truncate">
+                {pageTitle || 'EscalaX'}
+              </span>
+            </header>
+          )}
 
           {/* Desktop top header */}
           <header className="hidden h-[4.25rem] items-center justify-between border-b border-border/80 bg-card/90 px-4 backdrop-blur-xl dark:border-border dark:bg-card/30 sm:px-5 lg:flex lg:px-6 xl:px-8 2xl:px-12">
@@ -568,11 +542,7 @@ function AppLayoutRouterFallback({
           <PWAInstallPrompt />
         </div>
 
-        <MobileBottomNav
-          pathname={pathname}
-          onMenuOpen={() => setDrawerOpen(true)}
-          onFeedbackOpen={() => setFeedbackOpen(true)}
-        />
+        <MobileBottomNav pathname={pathname} />
       </div>
     </AppShell>
   );
