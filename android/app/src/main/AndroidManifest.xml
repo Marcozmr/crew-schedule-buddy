@@ -24,13 +24,6 @@
 
         </activity>
 
-        <activity
-            android:name=".plugins.LatamWebViewActivity"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
-            android:exported="false"
-            android:hardwareAccelerated="true"
-            android:theme="@style/AppTheme.NoActionBar" />
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

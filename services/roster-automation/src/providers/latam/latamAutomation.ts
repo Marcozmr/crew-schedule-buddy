@@ -17,6 +17,7 @@ import { runLatamGoldPathRosterImport } from './latam-production-pipeline.js';
 import type { CorporateFsmState } from './fsm-types.js';
 import { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
 import { decryptSession } from '../../session-crypto.js';
+import { attachRemoteSession, detachRemoteSession } from '../../remote-session/registry.js';
 
 const SCOPE = 'latam';
 
@@ -200,6 +201,9 @@ export async function startConnectFlow(params: {
           last_surface: info.surface,
         });
         if (info.fsmHint !== 'waiting_sso') return;
+        // Liga o navegador remoto (screencast + input) assim que o SSO real é detetado —
+        // idempotente, a página só é anexada uma vez mesmo com múltiplos polls.
+        void attachRemoteSession(runId, page);
         if (info.surface === lastSsoSurface) return;
         lastSsoSurface = info.surface;
         await persistFsmTransition({
@@ -220,6 +224,8 @@ export async function startConnectFlow(params: {
         });
       },
     });
+
+    await detachRemoteSession(runId, authed ? 'authenticated' : 'failed');
 
     if (!authed) {
       await appendRunLog(runId, { step: 'session_validated', ok: false, message: 'Timeout — home autenticada não detetada' });
@@ -361,6 +367,7 @@ export async function startConnectFlow(params: {
       .eq('id', runId);
     await setSessionStatus(sessionId, 'error', msg);
   } finally {
+    await detachRemoteSession(runId, 'failed');
     postLoginInstrument?.dispose();
     await context?.close();
   }

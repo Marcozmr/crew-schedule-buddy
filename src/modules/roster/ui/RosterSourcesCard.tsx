@@ -15,7 +15,6 @@ import {
   Link2,
   Unlink,
   ExternalLink,
-  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
@@ -32,10 +31,10 @@ import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
-import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
+import { isRosterAutomationConfigured, postLatamConnect } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
-import { isLatamWebViewAvailable, openLatamPortalWebView, processMobilePdf } from '@/lib/roster/latam-mobile-webview-service';
-import type { PdfImportResult } from '@/lib/pdf-import';
+import { RemoteBrowserViewer } from './RemoteBrowserViewer';
+import { Capacitor } from '@capacitor/core';
 
 interface RosterSourcesCardProps {
   onImportComplete?: () => void;
@@ -63,9 +62,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [automationError, setAutomationError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
-  const [mobileAuthenticated, setMobileAuthenticated] = useState(false);
-  const [mobileImportResult, setMobileImportResult] = useState<PdfImportResult | null>(null);
-  const [latamEmail, setLatamEmail] = useState('');
+  const [remoteRunId, setRemoteRunId] = useState<string | null>(null);
   const iflightOpenUrl =
     corporatePortalConfig.iflightModuleUrl || 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
 
@@ -122,43 +119,15 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const handleConnectPortal = useCallback(async () => {
     setAutomationError(null);
 
-    // Android nativo: usa WebView controlada para login/SSO/MFA e captura automática do PDF
-    if (isLatamWebViewAvailable()) {
+    // Android nativo: navegador remoto (Chromium real do worker) — login Google fora do WebView,
+    // sem bloqueio da política do Google; app só exibe a tela e repassa toques/teclado.
+    if (automationConfigured && Capacitor.isNativePlatform()) {
       setPortalConnecting(true);
-      setMobileImportResult(null);
       try {
-        const result = await openLatamPortalWebView(latamEmail.trim() || undefined);
-
-        if (result.pdfDownloaded && result.pdfBase64 && user) {
-          // PDF capturado automaticamente — importar via parser existente
-          try {
-            const importResult = await processMobilePdf({
-              pdfBase64: result.pdfBase64,
-              fileName: result.fileName ?? 'CrewRosterReport.pdf',
-              userId: user.id,
-            });
-            setMobileImportResult(importResult);
-            setMobileAuthenticated(true);
-            if (importResult.success) {
-              emitRosterUpdated({ userId: user.id, reason: 'active_roster_changed', at: new Date().toISOString() });
-              void refreshConnection();
-              void loadLastSync();
-            }
-          } catch {
-            setMobileAuthenticated(true); // Mostra fallback manual
-          }
-        } else if (result.authenticated) {
-          // Autenticado mas sem PDF — mostra fallback para importação manual
-          setMobileAuthenticated(true);
-          if (user) {
-            void UserRosterConnectionService.advancePortalToAwaitingIFlight(user.id).then(() => {
-              emitRosterUpdated({ userId: user.id, reason: 'active_roster_changed', at: new Date().toISOString() });
-              void refreshConnection();
-            });
-          }
-        }
-      } catch {
-        // Utilizador fechou o WebView — sem erro
+        const { runId } = await postLatamConnect(getAccessToken);
+        setRemoteRunId(runId);
+      } catch (e) {
+        setAutomationError(e instanceof Error ? e.message : String(e));
       } finally {
         setPortalConnecting(false);
         bump();
@@ -180,7 +149,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       bump();
       void refreshConnection();
     }
-  }, [automationConfigured, bump, iflightOpenUrl, refreshConnection, user]);
+  }, [automationConfigured, bump, getAccessToken, iflightOpenUrl, refreshConnection, user]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
@@ -326,19 +295,6 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
               </div>
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0 min-w-0 w-full sm:w-auto">
-              {/* Email input — só exibe no Android nativo e quando ainda não conectado */}
-              {isLatamWebViewAvailable() && !portalIsConnected && !portalConnecting && (
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <input
-                    type="email"
-                    value={latamEmail}
-                    onChange={(e) => setLatamEmail(e.target.value)}
-                    placeholder="seu.email@latam.com"
-                    className="text-xs bg-muted border border-border rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary w-full sm:w-48"
-                  />
-                </div>
-              )}
               <div className="flex items-center gap-2">
                 <span
                   className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 ${
@@ -386,72 +342,6 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                   Marcar como conectado (teste)
                 </Button>
               )}
-            </div>
-          )}
-
-          {mobileAuthenticated && (
-            <div className="rounded-xl border p-4 space-y-3
-              border-success/20 bg-success/5">
-              {mobileImportResult?.success && mobileImportResult.insertedCount > 0 && (
-                <>
-                  <p className="text-sm font-semibold text-foreground">Escala importada automaticamente!</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {mobileImportResult.insertedCount} registro(s) importado(s) do CrewRosterReport.
-                  </p>
-                </>
-              )}
-              {mobileImportResult?.duplicate && (
-                <>
-                  <p className="text-sm font-semibold text-foreground">Escala já importada</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Esses dados já estavam no EscalaX — nenhuma alteração foi feita.
-                  </p>
-                </>
-              )}
-              {mobileImportResult?.success === false && (
-                <>
-                  <p className="text-sm font-semibold text-destructive">Falha na importação do PDF</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {mobileImportResult.error ?? 'Erro ao processar o PDF. Tente importar manualmente.'}
-                  </p>
-                  <PdfImportDialog
-                    onImportComplete={handleImportComplete}
-                    trigger={
-                      <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
-                        <Upload className="w-4 h-4" />
-                        Importar PDF manualmente
-                      </Button>
-                    }
-                  />
-                </>
-              )}
-              {!mobileImportResult && (
-                <>
-                  <p className="text-sm font-semibold text-foreground">iFlight detectado!</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Autenticado no iFlight. Navegue até CrewRosterReport — o download será capturado automaticamente,
-                    ou importe o PDF manualmente.
-                  </p>
-                  <PdfImportDialog
-                    onImportComplete={handleImportComplete}
-                    trigger={
-                      <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
-                        <Upload className="w-4 h-4" />
-                        Importar Roster Report (PDF)
-                      </Button>
-                    }
-                  />
-                </>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="w-full text-muted-foreground"
-                onClick={() => { setMobileAuthenticated(false); setMobileImportResult(null); }}
-              >
-                Fechar
-              </Button>
             </div>
           )}
 
@@ -658,6 +548,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   );
 
   return (
+    <>
     <div className="glass p-5 sm:p-6 min-w-0 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
         <div className="flex items-start gap-3 min-w-0">
@@ -803,5 +694,13 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         )}
       </div>
     </div>
+    <RemoteBrowserViewer
+      open={Boolean(remoteRunId)}
+      runId={remoteRunId}
+      getAccessToken={getAccessToken}
+      onImportComplete={handleImportComplete}
+      onClose={() => setRemoteRunId(null)}
+    />
+    </>
   );
 }

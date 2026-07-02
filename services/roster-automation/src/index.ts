@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import fastifyWebsocket from '@fastify/websocket';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
@@ -9,8 +10,11 @@ import { startConnectFlow, runSyncFlow } from './providers/latam/latamAutomation
 import { startGolConnectFlow } from './providers/gol/golAutomation.js';
 import { startAzulConnectFlow } from './providers/azul/azulAutomation.js';
 import { encryptSession } from './session-crypto.js';
+import { registerRemoteSessionRoute } from './remote-session/ws-route.js';
 
 const app = Fastify({ logger: false });
+await app.register(fastifyWebsocket);
+registerRemoteSessionRoute(app);
 
 app.addHook('onRequest', async (req, reply) => {
   const origin = req.headers.origin;
