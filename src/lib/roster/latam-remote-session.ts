@@ -11,6 +11,17 @@ function wsBaseUrl(): string | undefined {
   return httpBase.replace(/^http/, 'ws');
 }
 
+/**
+ * Navegadores móveis (Android/iOS, nativo ou apenas o site aberto no Chrome/Safari do celular)
+ * não suportam extensões de browser — por isso não podem usar o fluxo de captura de cookies
+ * via extensão (só funciona em Chrome desktop). Nesses casos o navegador remoto é o único
+ * caminho automático disponível.
+ */
+export function isMobileDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 export type RemoteSessionStatus = string;
 
 export interface RemoteSessionHandlers {

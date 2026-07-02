@@ -34,6 +34,7 @@ import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
 import { isRosterAutomationConfigured, postLatamConnect } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 import { RemoteBrowserViewer } from './RemoteBrowserViewer';
+import { isMobileDevice } from '@/lib/roster/latam-remote-session';
 import { Capacitor } from '@capacitor/core';
 
 interface RosterSourcesCardProps {
@@ -119,9 +120,10 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const handleConnectPortal = useCallback(async () => {
     setAutomationError(null);
 
-    // Android nativo: navegador remoto (Chromium real do worker) — login Google fora do WebView,
-    // sem bloqueio da política do Google; app só exibe a tela e repassa toques/teclado.
-    if (automationConfigured && Capacitor.isNativePlatform()) {
+    // Celular (app nativo ou apenas o navegador do telefone — sem suporte a extensões):
+    // navegador remoto (Chromium real do worker) faz o login Google fora do WebView/extensão,
+    // sem bloqueio da política do Google; o app só exibe a tela e repassa toques/teclado.
+    if (automationConfigured && (Capacitor.isNativePlatform() || isMobileDevice())) {
       setPortalConnecting(true);
       try {
         const { runId } = await postLatamConnect(getAccessToken);
