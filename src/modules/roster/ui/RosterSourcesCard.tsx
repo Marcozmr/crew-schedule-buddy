@@ -64,8 +64,13 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
   const [remoteRunId, setRemoteRunId] = useState<string | null>(null);
-  const iflightOpenUrl =
-    corporatePortalConfig.iflightModuleUrl || 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
+  /**
+   * Entrar direto pelo deep link do iFlight Neo costuma bater em 403 do Google SAML
+   * (app_not_configured_for_user) — o mesmo problema que o worker Playwright já contorna
+   * entrando primeiro pelo Portal SAB (ver services/roster-automation .../iflight-launcher.ts).
+   * Por isso o fluxo manual (desktop) abre o SAB, não o link direto do iFlight.
+   */
+  const iflightOpenUrl = corporatePortalConfig.iflightModuleUrl || 'https://portal.latam.com/pt/web/portalsab';
 
   const loadLastSync = useCallback(async () => {
     if (!user) return;
@@ -280,7 +285,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 {isLoginUrlConfigured() ? (
                   <p className="text-xs text-muted-foreground break-words">
                     {automationConfigured
-                      ? 'Clique em Conectar para abrir o iFlight Neo. Após fazer login, baixe o Roster Report e importe aqui.'
+                      ? 'Clique em Conectar para abrir o Portal SAB. Faça login, clique no ícone iFlightNeo, baixe o Roster Report e importe aqui.'
                       : 'Toque em Conectar para abrir o portal. Depois volte ao EscalaX e siga os passos indicados — SAB, iFlight e importação do CrewRosterReport (o app não fecha o portal automaticamente).'}
                   </p>
                 ) : (
