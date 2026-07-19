@@ -87,9 +87,9 @@ export async function attachRemoteSession(runId: string, page: Page): Promise<vo
     });
     await cdp.send('Page.startScreencast', {
       format: 'jpeg',
-      quality: 55,
-      maxWidth: 480,
-      maxHeight: 900,
+      quality: 80,
+      maxWidth: 900,
+      maxHeight: 1400,
       everyNthFrame: 1,
     });
     log(SCOPE, 'info', 'remote_session_attached', { runId });
