@@ -95,7 +95,7 @@ export const config = {
    */
   iflightDeepLinkUrl: () =>
     process.env.LATAM_IFLIGHT_DEEP_LINK_URL?.trim() ||
-    'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage',
+    'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage?companyId=LA',
   /** GOL e-Component — portal de escala (login CPF/ANAC no browser). */
   golPortalUrl: () =>
     process.env.GOL_PORTAL_URL?.trim() || 'https://portal-escala.voegol.com.br',
