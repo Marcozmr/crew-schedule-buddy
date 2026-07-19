@@ -107,10 +107,21 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
   const handleTap = useCallback((e: React.PointerEvent<HTMLImageElement>) => {
     const client = clientRef.current;
     const img = imgRef.current;
-    if (!client || !img) return;
+    if (!client || !img || !img.naturalWidth || !img.naturalHeight) return;
     const rect = img.getBoundingClientRect();
-    const xFraction = (e.clientX - rect.left) / rect.width;
-    const yFraction = (e.clientY - rect.top) / rect.height;
+
+    // object-contain deixa faixas vazias (letterbox) quando a proporção da imagem não bate
+    // com a do container — sem isso, o toque calcula a posição errada dentro da tela remota.
+    const scale = Math.min(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
+    const renderedWidth = img.naturalWidth * scale;
+    const renderedHeight = img.naturalHeight * scale;
+    const offsetX = (rect.width - renderedWidth) / 2;
+    const offsetY = (rect.height - renderedHeight) / 2;
+
+    const xFraction = (e.clientX - rect.left - offsetX) / renderedWidth;
+    const yFraction = (e.clientY - rect.top - offsetY) / renderedHeight;
+    if (xFraction < 0 || xFraction > 1 || yFraction < 0 || yFraction > 1) return; // toque no letterbox
+
     client.sendTap(xFraction, yFraction);
     // Toca na tela remota (ex.: campo de e-mail) já abre o teclado do celular, sem precisar
     // procurar a barra de texto separada embaixo.
