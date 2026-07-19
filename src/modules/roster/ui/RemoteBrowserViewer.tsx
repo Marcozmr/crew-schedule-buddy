@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   connectRemoteSession,
@@ -144,28 +144,39 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
-        <DialogHeader className="p-4 pb-2">
-          <DialogTitle className="text-sm font-medium flex items-center gap-2">
-            {!TERMINAL_STATUSES.has(status) && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-            {STATUS_LABEL[status]}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        hideClose
+        className="fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-black p-0 shadow-none"
+      >
+        <DialogTitle className="sr-only">{STATUS_LABEL[status]}</DialogTitle>
+
+        {/* Status discreto sobreposto — não ocupa espaço da tela remota */}
+        <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur-sm">
+          {!TERMINAL_STATUSES.has(status) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {STATUS_LABEL[status]}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm"
+        >
+          <X className="w-4 h-4" />
+        </button>
 
         {showRemoteScreen && (
-          <div className="relative bg-black">
+          <div className="relative flex-1 overflow-hidden bg-black">
             {frame ? (
               <img
                 ref={imgRef}
                 src={`data:image/jpeg;base64,${frame}`}
                 alt="Portal LATAM (sessão remota)"
-                className="w-full h-auto select-none"
+                className="h-full w-full select-none object-contain"
                 style={{ touchAction: 'pinch-zoom' }}
                 onPointerDown={handleTap}
                 draggable={false}
               />
             ) : (
-              <div className="w-full aspect-[9/16] flex items-center justify-center">
+              <div className="flex h-full w-full items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-white/60" />
               </div>
             )}
@@ -173,7 +184,7 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
         )}
 
         {status === 'waiting_sso' && (
-          <div className="p-3 border-t border-border">
+          <div className="shrink-0 border-t border-white/10 bg-black p-3">
             <Input
               ref={inputRef}
               value={inputValue}
@@ -188,27 +199,27 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
         )}
 
         {!showRemoteScreen && (
-          <div className="p-6 flex flex-col items-center gap-3 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             {status === 'completed' ? (
-              <p className="text-sm text-muted-foreground">Sua escala foi importada automaticamente.</p>
+              <p className="text-sm text-white/80">Sua escala foi importada automaticamente.</p>
             ) : status === 'failed' ? (
               <>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/80">
                   Tente novamente ou use a importação manual do CrewRosterReport.
                 </p>
                 {errorDetail && (
-                  <p className="text-xs text-destructive font-mono break-all whitespace-pre-wrap">{errorDetail}</p>
+                  <p className="text-xs text-destructive font-mono break-all whitespace-pre-wrap max-w-sm">{errorDetail}</p>
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-white/80">
                 Aguarde — o restante da importação acontece automaticamente, sem mais ações suas.
               </p>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="text-xs text-muted-foreground underline underline-offset-2 flex items-center gap-1"
+              className="text-xs text-white/60 underline underline-offset-2 flex items-center gap-1"
             >
               <X className="w-3 h-3" /> Fechar
             </button>
