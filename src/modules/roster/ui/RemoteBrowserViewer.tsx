@@ -104,7 +104,7 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
     };
   }, [open, runId, getAccessToken, onImportComplete]);
 
-  const handleTap = useCallback((e: React.PointerEvent<HTMLImageElement>) => {
+  const handleTap = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     const client = clientRef.current;
     const img = imgRef.current;
     if (!client || !img || !img.naturalWidth || !img.naturalHeight) return;
@@ -182,7 +182,7 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
                 alt="Portal LATAM (sessão remota)"
                 className="h-full w-full select-none object-contain"
                 style={{ touchAction: 'pinch-zoom' }}
-                onPointerDown={handleTap}
+                onClick={handleTap}
                 draggable={false}
               />
             ) : (
