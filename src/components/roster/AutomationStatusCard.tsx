@@ -9,7 +9,7 @@ import {
   decideLatamAutomationKick,
   mapAutomationToUiPhase,
 } from '@/lib/roster/automation-ui-phase';
-import { postLatamSync, deleteLatamSession } from '@/lib/roster-automation-api';
+import { postLatamSync, deleteLatamSession, postLatamCancelRun } from '@/lib/roster-automation-api';
 import { formatDateTimeBR } from '@/lib/date-utils';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { reportOperationalEvent } from '@/lib/monitoring/errorReporting';
@@ -39,6 +39,7 @@ export function AutomationStatusCard({
   const [retryNonce, setRetryNonce] = useState(0);
   const [manualRetryBusy, setManualRetryBusy] = useState(false);
   const [revokeBusy, setRevokeBusy] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const successHandled = useRef(false);
 
   useEffect(() => {
@@ -102,6 +103,20 @@ export function AutomationStatusCard({
     }
   }, [user, session, latestRun, getAccessToken, refresh]);
 
+  const handleCancelRun = useCallback(async () => {
+    if (!latestRun?.id) return;
+    setCancelBusy(true);
+    try {
+      await postLatamCancelRun(getAccessToken, latestRun.id);
+      toast.message('Cancelando…', { description: 'A tentativa atual será encerrada em alguns segundos.' });
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível cancelar agora.');
+    } finally {
+      setCancelBusy(false);
+    }
+  }, [latestRun?.id, getAccessToken, refresh]);
+
   const handleRevokeSession = useCallback(async () => {
     if (!user) return;
     setRevokeBusy(true);
@@ -155,6 +170,21 @@ export function AutomationStatusCard({
         </div>
       </div>
 
+      {(ui.phase === 'connecting' || ui.phase === 'searching') && latestRun?.id && (
+        <div className="flex justify-end pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="gap-2 text-muted-foreground hover:text-destructive"
+            disabled={cancelBusy}
+            onClick={() => void handleCancelRun()}
+          >
+            {cancelBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
+            Cancelar tentativa
+          </Button>
+        </div>
+      )}
       {ui.phase === 'recoverable' && (
         <div className="flex flex-col gap-2 pt-1">
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">

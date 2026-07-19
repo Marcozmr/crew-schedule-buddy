@@ -90,6 +90,19 @@ export async function getLatamSession(
   return res.json() as Promise<{ session: Record<string, unknown>; recentRuns: Record<string, unknown>[] }>;
 }
 
+/** Cancela um run em curso (ex.: navegador remoto travado) — encerra o Chromium no servidor. */
+export async function postLatamCancelRun(
+  getAccessToken: () => Promise<string | null>,
+  runId: string,
+): Promise<void> {
+  const b = baseUrl();
+  if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
+  await fetchWorker(`${b}/v1/latam/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST',
+    headers: await authHeader(getAccessToken),
+  });
+}
+
 /** Revoga a sessão LATAM no worker (apaga blob cifrado e volta a disconnected). */
 export async function deleteLatamSession(getAccessToken: () => Promise<string | null>): Promise<void> {
   const b = baseUrl();

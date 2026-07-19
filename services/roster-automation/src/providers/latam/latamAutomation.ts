@@ -18,6 +18,7 @@ import type { CorporateFsmState } from './fsm-types.js';
 import { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
 import { decryptSession } from '../../session-crypto.js';
 import { attachRemoteSession, detachRemoteSession } from '../../remote-session/registry.js';
+import { isRunCancelled, clearCancelledRun } from './run-cancellation.js';
 
 const SCOPE = 'latam';
 
@@ -158,6 +159,13 @@ export async function startConnectFlow(params: {
   await appendRunLog(runId, { step: 'portal_connecting', message: 'A abrir Chromium e navegar ao portal' });
   await persistFsmTransition({ runId, sessionId, fsm: 'starting' });
 
+  // Um restart/crash do processo anterior pode deixar o profile do Chromium com lock órfão
+  // (SingletonLock/SingletonCookie) — sem isto, launchPersistentContext falha indefinidamente
+  // para este usuário até alguém apagar o ficheiro manualmente no disco do servidor.
+  for (const lockFile of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    await fs.unlink(path.join(sessionDir(userId), lockFile)).catch(() => {});
+  }
+
   let context: BrowserContext | null = null;
   let postLoginInstrument: PostLoginNavigationInstrument | null = null;
   try {
@@ -194,6 +202,7 @@ export async function startConnectFlow(params: {
       deadlineMs: 25 * 60_000,
       waitForUrlTimeoutMs: 120_000,
       appendLog: (e) => appendRunLog(runId, e),
+      isCancelled: () => isRunCancelled(runId),
       onPoll: async (info) => {
         await patchOrchestrationSnapshot(runId, {
           current_url: info.url,
@@ -367,6 +376,7 @@ export async function startConnectFlow(params: {
       .eq('id', runId);
     await setSessionStatus(sessionId, 'error', msg);
   } finally {
+    clearCancelledRun(runId);
     await detachRemoteSession(runId, 'failed');
     postLoginInstrument?.dispose();
     await context?.close();

@@ -11,6 +11,7 @@ import { startGolConnectFlow } from './providers/gol/golAutomation.js';
 import { startAzulConnectFlow } from './providers/azul/azulAutomation.js';
 import { encryptSession } from './session-crypto.js';
 import { registerRemoteSessionRoute } from './remote-session/ws-route.js';
+import { requestCancelRun } from './providers/latam/run-cancellation.js';
 
 const app = Fastify({ logger: false });
 await app.register(fastifyWebsocket);
@@ -689,6 +690,32 @@ app.delete('/v1/latam/session', async (req, reply) => {
   return { ok: true };
 });
 
+/** Cancela um run em curso (ex.: navegador remoto travado) — encerra o Chromium e libera o usuário para tentar de novo. */
+app.post('/v1/latam/runs/:runId/cancel', async (req, reply) => {
+  const userId = await requireUser(req.headers.authorization);
+  if (!userId) return reply.status(401).send({ error: 'Não autorizado' });
+
+  const { runId } = req.params as { runId: string };
+  const supabase = getServiceClient();
+  const { data: run } = await supabase
+    .from('automation_runs')
+    .select('id, user_id, finished_at')
+    .eq('id', runId)
+    .maybeSingle();
+
+  const r = run as { id: string; user_id: string; finished_at: string | null } | null;
+  if (!r || r.user_id !== userId) {
+    return reply.status(404).send({ error: 'Execução não encontrada' });
+  }
+  if (r.finished_at) {
+    return { ok: true, alreadyFinished: true };
+  }
+
+  requestCancelRun(runId);
+  log('api', 'info', 'run_cancel_requested', { runId, userId });
+  return { ok: true };
+});
+
 app.get('/health', async () => ({ ok: true }));
 
 /** Diagnóstico de configuração — sem segredos (nenhuma chave ou password). */
@@ -705,7 +732,44 @@ app.get('/v1/status', async () => ({
   dataDir: config.dataDir(),
 }));
 
+/**
+ * Ao reiniciar (deploy, crash), qualquer Chromium em memória morre — mas as linhas de
+ * automation_runs/automation_sessions continuam marcadas como "em curso" na base de dados.
+ * Sem isto, o app mostra "aguardando autenticação" para sempre num run que já não existe.
+ */
+const BUSY_SESSION_STATUSES = ['portal_connecting', 'iflight_detected', 'roster_downloading', 'roster_importing'];
+
+async function reconcileOrphanedRunsOnBoot(): Promise<void> {
+  try {
+    const supabase = getServiceClient();
+    const now = new Date().toISOString();
+    const msg = 'Processo do servidor foi reiniciado — tente conectar novamente';
+
+    const { data: orphaned } = await supabase.from('automation_runs').select('id, session_id').is('finished_at', null);
+    if (!orphaned || orphaned.length === 0) return;
+
+    const rows = orphaned as { id: string; session_id: string }[];
+    const runIds = rows.map((r) => r.id);
+    const sessionIds = [...new Set(rows.map((r) => r.session_id))];
+
+    await supabase
+      .from('automation_runs')
+      .update({ status: 'error', error_message: msg, finished_at: now, updated_at: now })
+      .in('id', runIds);
+    await supabase
+      .from('automation_sessions')
+      .update({ status: 'error', last_error: msg, updated_at: now })
+      .in('id', sessionIds)
+      .in('status', BUSY_SESSION_STATUSES);
+
+    log('server', 'warn', 'orphaned_runs_reconciled', { count: runIds.length });
+  } catch (e) {
+    log('server', 'error', 'orphaned_runs_reconcile_failed', { message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 const port = config.port;
+await reconcileOrphanedRunsOnBoot();
 app.listen({ port, host: '0.0.0.0' }).then(() => {
   log('server', 'info', 'listening', { port });
 });

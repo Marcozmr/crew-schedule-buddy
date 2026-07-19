@@ -36,6 +36,7 @@ interface RemoteBrowserViewerProps {
 
 export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportComplete, onClose }: RemoteBrowserViewerProps) {
   const [status, setStatus] = useState<ViewerStatus>('connecting');
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [frame, setFrame] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const clientRef = useRef<RemoteSessionClient | null>(null);
@@ -47,6 +48,7 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
     let cancelled = false;
     completedRef.current = false;
     setStatus('connecting');
+    setErrorDetail(null);
     setFrame(null);
 
     connectRemoteSession(runId, getAccessToken, {
@@ -64,11 +66,21 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
         } else if (fsm === 'failed') setStatus('failed');
         else setStatus('waiting_sso');
       },
-      onClose: () => {
+      onClose: (reason) => {
         if (cancelled) return;
         // Servidor fecha o socket ao sair do waiting_sso — o pipeline autônomo continua sozinho;
         // se ainda não chegou a um estado terminal, mostra "importando" até o usuário fechar.
-        if (!completedRef.current) setStatus((prev) => (prev === 'connecting' ? 'failed' : 'importing_report'));
+        setStatus((prev) => {
+          if (completedRef.current) return prev;
+          if (prev === 'connecting') {
+            setErrorDetail(reason && reason !== 'closed' ? `Conexão encerrada: ${reason}` : 'Conexão encerrada antes de iniciar (verifique sessão/rede)');
+            return 'failed';
+          }
+          return 'importing_report';
+        });
+      },
+      onError: () => {
+        if (!cancelled) setErrorDetail((prev) => prev ?? 'Erro na ligação com o navegador remoto (rede ou WebSocket bloqueado)');
       },
     })
       .then((client) => {
@@ -78,8 +90,11 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
         }
         clientRef.current = client;
       })
-      .catch(() => {
-        if (!cancelled) setStatus('failed');
+      .catch((e) => {
+        if (!cancelled) {
+          setErrorDetail(e instanceof Error ? e.message : String(e));
+          setStatus('failed');
+        }
       });
 
     return () => {
@@ -171,9 +186,14 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
             {status === 'completed' ? (
               <p className="text-sm text-muted-foreground">Sua escala foi importada automaticamente.</p>
             ) : status === 'failed' ? (
-              <p className="text-sm text-muted-foreground">
-                Tente novamente ou use a importação manual do CrewRosterReport.
-              </p>
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Tente novamente ou use a importação manual do CrewRosterReport.
+                </p>
+                {errorDetail && (
+                  <p className="text-xs text-destructive font-mono break-all whitespace-pre-wrap">{errorDetail}</p>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Aguarde — o restante da importação acontece automaticamente, sem mais ações suas.

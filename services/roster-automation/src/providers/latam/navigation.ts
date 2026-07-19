@@ -69,9 +69,11 @@ export async function waitForAuthenticationAfterSso(
     waitForUrlTimeoutMs?: number;
     /** Chamado ~2s em ~2s durante a espera — para FSM (waiting_sso) e observabilidade. */
     onPoll?: (info: SsoPollInfo) => void | Promise<void>;
+    /** Checado a cada iteração do polling — permite abortar quando o usuário cancela pelo app. */
+    isCancelled?: () => boolean;
   },
 ): Promise<boolean> {
-  const { deadlineMs, appendLog, waitForUrlTimeoutMs = 120_000, onPoll } = opts;
+  const { deadlineMs, appendLog, waitForUrlTimeoutMs = 120_000, onPoll, isCancelled } = opts;
   const deadline = Date.now() + deadlineMs;
 
   appendLog?.({
@@ -102,6 +104,10 @@ export async function waitForAuthenticationAfterSso(
   }
 
   while (Date.now() < deadline) {
+    if (isCancelled?.()) {
+      appendLog?.({ step: 'cancelled', message: 'Conexão cancelada pelo usuário' });
+      throw new Error('Conexão cancelada pelo usuário');
+    }
     try {
       const det = await detectCorporateSurface(page);
       const ssoActive = det.surface === 'microsoft_auth' || det.surface === 'google_auth';
