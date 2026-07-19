@@ -18,6 +18,14 @@ await app.register(fastifyWebsocket);
 registerRemoteSessionRoute(app);
 
 app.addHook('onRequest', async (req, reply) => {
+  // O upgrade de WebSocket (navegador remoto) não deve passar por manipulação de headers
+  // aqui — o ws-route.ts já faz sua própria validação de origem, e mexer em reply.header()
+  // numa requisição de upgrade pode atrapalhar o hijack que o @fastify/websocket faz do socket.
+  if (req.headers.upgrade?.toLowerCase() === 'websocket') {
+    log('api', 'info', 'ws_upgrade_seen', { url: req.url, origin: req.headers.origin ?? null });
+    return;
+  }
+
   const origin = req.headers.origin;
   const allowed = config.corsOrigins();
   if (origin && allowed.includes(origin)) {
