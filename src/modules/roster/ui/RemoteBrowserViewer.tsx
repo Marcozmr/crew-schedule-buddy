@@ -41,6 +41,7 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
   const [inputValue, setInputValue] = useState('');
   const clientRef = useRef<RemoteSessionClient | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const completedRef = useRef(false);
 
   useEffect(() => {
@@ -112,6 +113,9 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
     const xFraction = (e.clientX - rect.left) / rect.width;
     const yFraction = (e.clientY - rect.top) / rect.height;
     client.sendTap(xFraction, yFraction);
+    // Toca na tela remota (ex.: campo de e-mail) já abre o teclado do celular, sem precisar
+    // procurar a barra de texto separada embaixo.
+    inputRef.current?.focus();
   }, []);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,7 +159,8 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
                 ref={imgRef}
                 src={`data:image/jpeg;base64,${frame}`}
                 alt="Portal LATAM (sessão remota)"
-                className="w-full h-auto select-none touch-none"
+                className="w-full h-auto select-none"
+                style={{ touchAction: 'pinch-zoom' }}
                 onPointerDown={handleTap}
                 draggable={false}
               />
@@ -170,10 +175,11 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
         {status === 'waiting_sso' && (
           <div className="p-3 border-t border-border">
             <Input
+              ref={inputRef}
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
-              placeholder="Toque na tela acima e digite aqui (e-mail, senha, código)"
+              placeholder="Toque num campo na tela acima — o teclado abre aqui sozinho"
               autoComplete="off"
               autoCapitalize="off"
               autoCorrect="off"
