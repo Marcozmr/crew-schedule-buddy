@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import {
   connectRemoteSession,
   type RemoteSessionClient,
@@ -184,18 +183,17 @@ export function RemoteBrowserViewer({ open, runId, getAccessToken, onImportCompl
         )}
 
         {status === 'waiting_sso' && (
-          <div className="shrink-0 border-t border-white/10 bg-black p-3">
-            <Input
-              ref={inputRef}
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              placeholder="Toque num campo na tela acima — o teclado abre aqui sozinho"
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-            />
-          </div>
+          <input
+            ref={inputRef}
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            aria-label="Entrada de texto para a tela remota"
+            className="absolute h-px w-px opacity-0"
+          />
         )}
 
         {!showRemoteScreen && (
