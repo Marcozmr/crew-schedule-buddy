@@ -7,7 +7,7 @@ import type { BrowserContext, Frame, Page } from 'playwright';
 import { log } from '../../logger.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { withRetries } from '../../retry.js';
-import { waitForSabPortalSurface } from './navigation.js';
+import { waitForSabPortalSurface, openCrewRosterCalendar } from './navigation.js';
 import { clickSabCrewHeaderContext } from './sab-crew-header.js';
 import { openIFlightNeoWithFallbacks } from './iflight-launcher.js';
 import type { LocatorRoot } from './latam-shared-dom.js';
@@ -120,6 +120,8 @@ export async function runSabToCrewRosterPdf(params: {
 
   try {
     await onFsmPhase?.('locating_roster');
+    const navigatedToCalendar = await openCrewRosterCalendar(root);
+    await appendLog({ step: 'roster_calendar_nav', ok: navigatedToCalendar });
     await waitForRosterShell(root, appendLog);
     await appendLog({ step: 'roster_report_candidate', ok: true, note: 'shell_text_matched' });
     if (instrument) {

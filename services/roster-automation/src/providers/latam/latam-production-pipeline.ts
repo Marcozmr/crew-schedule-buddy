@@ -13,6 +13,7 @@ import { getServiceClient } from '../../db.js';
 import { importLatamEcrewCaptureFiles, importDownloadedPdf } from '../../importAdapter.js';
 import { ensurePortalSabSurface } from './portal-sab-navigation.js';
 import { runSabToCrewRosterPdf, waitForRosterShell } from './sab-iflight-pipeline.js';
+import { openCrewRosterCalendar } from './navigation.js';
 import { tryIFlightDirectDeepLink } from './iflight-launcher.js';
 import { capturePdfDownloadOrResponse } from './pdf-capture-hybrid.js';
 import type { CorporateFsmState } from './fsm-types.js';
@@ -145,6 +146,7 @@ export async function runLatamGoldPathRosterImport(params: {
     await onFsmPhase?.('iflight_loaded');
     try {
       await onFsmPhase?.('locating_roster');
+      await openCrewRosterCalendar(direct.root);
       await waitForRosterShell(direct.root, appendLog, 30_000);
       await onFsmPhase?.('downloading_report');
       const { buffer: directBuf, suggestedName: directName } = await capturePdfDownloadOrResponse(

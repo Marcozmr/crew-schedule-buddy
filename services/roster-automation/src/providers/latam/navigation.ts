@@ -189,6 +189,39 @@ export async function clickFirstMatching(
   return false;
 }
 
+async function clickFirstMatchingAnyRole(root: LocatorRoot, patterns: RegExp[]): Promise<boolean> {
+  for (const role of ['link', 'button', 'tab', 'menuitem'] as const) {
+    if (await clickFirstMatching(root, patterns, role)) return true;
+  }
+  return false;
+}
+
+const ROSTER_CALENDAR_MARKERS = /calend[aá]rio\s*do\s*elenco|roster\s*calendar|crew\s*roster\s*calendar/i;
+
+/**
+ * O iFlight Neo abre em "Casa" (painel genérico, sem dados de escala) — é preciso navegar
+ * explicitamente até Elenco → Calendário do Elenco para ver a grade de voos/escala.
+ * Idempotente: se o marcador já estiver na página, não clica em nada.
+ */
+export async function openCrewRosterCalendar(root: LocatorRoot): Promise<boolean> {
+  const bodyText = await root.locator('body').innerText({ timeout: 8_000 }).catch(() => '');
+  if (ROSTER_CALENDAR_MARKERS.test(bodyText)) return true;
+
+  const openedElenco = await clickFirstMatchingAnyRole(root, [/^Elenco$/i, /Elenco/i, /^Crew$/i, /^Roster$/i]);
+  if (!openedElenco) return false;
+
+  await new Promise((r) => setTimeout(r, 1_500));
+
+  await clickFirstMatchingAnyRole(root, [
+    /Calend[aá]rio\s*do\s*Elenco/i,
+    /Roster\s*Calendar/i,
+    /Crew\s*Roster\s*Calendar/i,
+    /Calend[aá]rio/i,
+  ]);
+
+  return true;
+}
+
 export async function expectAuthenticatedHome(page: Page, context?: BrowserContext): Promise<boolean> {
   const url = page.url();
   if (isMicrosoftSsoHost(url)) return false;
