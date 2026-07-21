@@ -135,11 +135,14 @@ export async function startConnectFlow(params: {
 }): Promise<void> {
   const { userId, sessionId, runId } = params;
 
-  // Ordem de tentativa: SAB direto → corporativo-latam → iFlight (nunca a raiz do portal, que causa ERR_HTTP2)
+  // Ordem de tentativa: iFlight direto primeiro — observado em produção que portal.latam.com
+  // (SAB e corporativo-latam) falha consistentemente com ERR_HTTP2_PROTOCOL_ERROR a partir do
+  // IP do servidor (provável bloqueio anti-bot), enquanto iflightla.ibsplc.aero funciona normal.
+  // Mantém os dois como fallback caso o bloqueio do portal.latam.com seja resolvido/mude.
   const entryUrls = [
+    config.iflightDeepLinkUrl(),
     config.latamPortalSabUrl(),
     'https://portal.latam.com/pt/group/corporativo-latam',
-    config.iflightDeepLinkUrl(),
   ].filter(Boolean);
 
   await fs.mkdir(sessionDir(userId), { recursive: true });
