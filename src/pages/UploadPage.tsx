@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
+import { importPdfFile } from '@/lib/pdf-import';
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -143,11 +144,40 @@ export default function UploadPage() {
     setTimeout(() => navigate('/download-roster'), 1500);
   }, [user, refreshProfile, navigate, fileName]);
 
+  /**
+   * PDF é binário — lê-lo como texto (FileReader.readAsText) produz lixo e o parser de texto
+   * mock (parseMockSchedule) nunca reconhece nada. PDF precisa do mesmo caminho real usado em
+   * PdfImportDialog (pdf.js + crew-roster-parser.ts), que entende o formato oficial da LATAM.
+   */
+  const handlePdfUpload = useCallback(async (file: File) => {
+    if (!user) return;
+    setProcessing(true);
+    setResult(null);
+    try {
+      const res = await importPdfFile(file, user.id);
+      if (!res.success) {
+        toast.error(res.error ?? 'Não foi possível importar o PDF.');
+        return;
+      }
+      setResult({ count: res.insertedCount, airline: res.header?.baseAirport ? `Base ${res.header.baseAirport}` : 'LATAM' });
+      toast.success(`✅ ${res.insertedCount} registros importados! Redirecionando...`);
+      setTimeout(() => navigate('/download-roster'), 1500);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao importar o PDF');
+    } finally {
+      setProcessing(false);
+    }
+  }, [user, navigate]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
     setResult(null);
+    if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+      void handlePdfUpload(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (loadEvent) => processText(loadEvent.target?.result as string);
     reader.readAsText(file);
