@@ -26,12 +26,6 @@ import {
 import { DutyPeriodCard } from "../components/dashboard/DutyPeriodCard";
 import { DutyFlightsSection } from "@/components/flight/DutyFlightsSection";
 import { Button } from "../components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../components/ui/tooltip";
-
 import { useAuth } from "../lib/auth-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -140,6 +134,9 @@ export default function DashboardPage() {
     [schedule, safeTz, homeBase]
   );
 
+  const statusResult = analysis?.focus ?? null;
+  const monthlyStatus = getMonthlyStatusSummary(statusResult);
+
   const monthDutyHours = useMemo(() => {
     if (!analysis?.results?.length) return 0;
     return analysis.results
@@ -193,13 +190,33 @@ export default function DashboardPage() {
           )}.`
         );
       }
+
+      // Limite mensal de horas — sem card fixo no Dashboard, só avisa quando relevante.
+      if (monthlyStatus.tone === "critical") {
+        await NotificationService.notifyOperationalWarning(
+          user.id,
+          `Limite mensal de horas de voo excedido: ${formatHoursMinutes(
+            monthlyStatus.usedHours
+          )} de ${formatHoursMinutes(monthlyStatus.limitHours)}.`
+        );
+      } else if (
+        monthlyStatus.tone === "attention" ||
+        monthlyStatus.tone === "review"
+      ) {
+        await NotificationService.notifyOperationalWarning(
+          user.id,
+          `Você está próximo do limite mensal de horas de voo: ${formatHoursMinutes(
+            monthlyStatus.usedHours
+          )} de ${formatHoursMinutes(monthlyStatus.limitHours)}.`
+        );
+      }
     };
 
     const t = window.setTimeout(() => {
       void run();
     }, 500);
     return () => window.clearTimeout(t);
-  }, [analysis, nextDuty, user]);
+  }, [analysis, nextDuty, user, monthlyStatus]);
 
   const fade = (delay: number) => ({
     initial: { opacity: 0, y: 6 },
@@ -207,26 +224,8 @@ export default function DashboardPage() {
     transition: { delay, duration: 0.3, ease: "easeOut" as const },
   });
 
-  const statusResult = analysis?.focus ?? null;
   const operationalStatus = getOperationalStatusSummary(statusResult);
-  const monthlyStatus = getMonthlyStatusSummary(statusResult);
   const operationalMeta = statusCardMeta[operationalStatus.tone];
-  const monthlyMeta = statusCardMeta[monthlyStatus.tone];
-
-  const monthlyShortText =
-    monthlyStatus.tone === "critical"
-      ? "Limite excedido"
-      : monthlyStatus.tone === "attention" || monthlyStatus.tone === "review"
-      ? "Próximo do limite"
-      : "Dentro do limite";
-
-  const monthlyBalanceHours =
-    monthlyStatus.limitHours - monthlyStatus.usedHours;
-
-  const monthlyTooltipDetail =
-    monthlyStatus.tone === "critical"
-      ? `Excedente de ${formatHoursMinutes(Math.abs(monthlyBalanceHours))}.`
-      : `Restam ${formatHoursMinutes(Math.max(monthlyBalanceHours, 0))}.`;
 
   const dutyStatusByKey = useMemo(
     () =>
@@ -484,60 +483,8 @@ export default function DashboardPage() {
           <div className="space-y-8">
             <motion.div
               {...fade(0.05)}
-              className="grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-4"
+              className="grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-3"
             >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className={`glass hover-lift flex min-w-0 cursor-help items-start gap-3 border p-4 ${monthlyMeta.border}`}
-                  >
-                    <div
-                      className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${monthlyMeta.iconBg}`}
-                    >
-                      <Clock className={`h-5 w-5 ${monthlyMeta.iconColor}`} />
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="break-words text-[11px] font-medium text-muted-foreground">
-                        Horas de voo (30 dias)
-                      </p>
-                      <p className="break-words font-mono text-base font-semibold text-foreground sm:text-lg">
-                        {formatHoursMinutes(monthlyStatus.usedHours)}
-                      </p>
-                      <p
-                        className={`mt-0.5 text-[11px] font-medium ${monthlyMeta.textColor}`}
-                      >
-                        Status: {monthlyStatus.label}
-                      </p>
-                      <p className="mt-0.5 break-words text-[11px] text-muted-foreground">
-                        {monthlyShortText}
-                      </p>
-                    </div>
-                  </div>
-                </TooltipTrigger>
-
-                <TooltipContent side="top" align="start" className="max-w-[280px]">
-                  <div className="space-y-1.5">
-                    <p className="text-sm font-semibold">
-                      {formatHoursMinutes(monthlyStatus.usedHours)} de{" "}
-                      {formatHoursMinutes(monthlyStatus.limitHours)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Tempo de voo acumulado nos últimos 30 dias.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Limite aplicado: {formatHoursMinutes(monthlyStatus.limitHours)}
-                    </p>
-                    <p className={`text-xs font-medium ${monthlyMeta.textColor}`}>
-                      Status mensal: {monthlyStatus.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {monthlyTooltipDetail}
-                    </p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-
               <div className="glass flex min-w-0 items-start gap-3 p-4 hover-lift">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/8">
                   <Gauge className="h-5 w-5 text-primary" />
