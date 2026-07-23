@@ -66,4 +66,6 @@ export interface AutomationRunRow {
     last_surface?: string;
     last_title?: string;
   } | null;
+  /** Migração `automation_runs_requested_month` — mês (YYYY-MM) escolhido pelo utilizador, nulo em kicks automáticos. */
+  requested_month?: string | null;
 }

@@ -106,4 +106,15 @@ export const config = {
   /** Azul CAE — base do portal; MonthlySchedule pode ser composto ou sobrescrito. */
   azulCaeBaseUrl: () => process.env.AZUL_CAE_BASE_URL?.trim() || 'https://cae.voeazul.com.br',
   azulMonthlyScheduleUrl: () => process.env.AZUL_MONTHLY_SCHEDULE_URL?.trim() || '',
+  /**
+   * Atalho HTTP leve para `runSyncFlow` (sem abrir Chromium): endpoint direto do CrewRosterReport
+   * no iFlight Neo, descoberto inspecionando `step_logs` (steps `response_pdf_candidate` /
+   * `pdf_api_ok`) de uma execução real bem-sucedida. Vazio desativa o atalho (fallback sempre
+   * usa o navegador completo, comportamento atual).
+   */
+  latamLightweightPdfUrl: () => process.env.LATAM_LIGHTWEIGHT_PDF_URL?.trim() || '',
+  /** Template de query string opcional, ex. "month={YYYY-MM}&companyId=LA" — {YYYY-MM} é substituído em runtime pelo mês pedido. */
+  latamLightweightPdfQueryTemplate: () => process.env.LATAM_LIGHTWEIGHT_PDF_QUERY_TEMPLATE?.trim() || '',
+  /** Kill switch — força sempre o fluxo completo de navegador mesmo com a URL configurada (rollback rápido). */
+  latamLightweightFastPathEnabled: () => process.env.LATAM_LIGHTWEIGHT_FASTPATH !== '0',
 };

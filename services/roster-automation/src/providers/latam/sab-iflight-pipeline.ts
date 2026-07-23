@@ -7,7 +7,7 @@ import type { BrowserContext, Frame, Page } from 'playwright';
 import { log } from '../../logger.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { withRetries } from '../../retry.js';
-import { waitForSabPortalSurface, openCrewRosterCalendar } from './navigation.js';
+import { waitForSabPortalSurface, openCrewRosterCalendar, navigateCalendarToMonth } from './navigation.js';
 import { clickSabCrewHeaderContext } from './sab-crew-header.js';
 import { openIFlightNeoWithFallbacks } from './iflight-launcher.js';
 import type { LocatorRoot } from './latam-shared-dom.js';
@@ -75,8 +75,10 @@ export async function runSabToCrewRosterPdf(params: {
   instrument?: PostLoginNavigationInstrument;
   /** Persiste snapshot técnico em `orchestration_snapshot.navigation_debug`. */
   persistNavigationDebug?: (payload: NavigationDebugPayload) => Promise<void>;
+  /** Mês escolhido pelo usuário (YYYY-MM) — omitido em kicks automáticos, mantém comportamento atual. */
+  requestedMonth?: string;
 }): Promise<SabPipelineResult> {
-  const { context, page, runId, failDir, appendLog, onFsmPhase, instrument, persistNavigationDebug } = params;
+  const { context, page, runId, failDir, appendLog, onFsmPhase, instrument, persistNavigationDebug, requestedMonth } = params;
 
   await appendLog({ step: 'pipeline_start', runId, phase: 'sab_iflight_crewroster' });
 
@@ -122,6 +124,9 @@ export async function runSabToCrewRosterPdf(params: {
     await onFsmPhase?.('locating_roster');
     const navigatedToCalendar = await openCrewRosterCalendar(root);
     await appendLog({ step: 'roster_calendar_nav', ok: navigatedToCalendar });
+    if (requestedMonth) {
+      await navigateCalendarToMonth(root, requestedMonth, appendLog);
+    }
     await waitForRosterShell(root, appendLog);
     await appendLog({ step: 'roster_report_candidate', ok: true, note: 'shell_text_matched' });
     if (instrument) {

@@ -13,6 +13,9 @@ import { encryptSession } from './session-crypto.js';
 import { registerRemoteSessionRoute } from './remote-session/ws-route.js';
 import { requestCancelRun } from './providers/latam/run-cancellation.js';
 
+/** Formato aceito para o mês escolhido pelo usuário no diálogo de importação (Fase 5/frontend). */
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 const app = Fastify({ logger: false });
 await app.register(fastifyWebsocket);
 registerRemoteSessionRoute(app);
@@ -135,6 +138,12 @@ app.post('/v1/latam/connect', async (req, reply) => {
   }
   log('api', 'info', 'connect_auth_ok', { userId });
 
+  const connectBody = (req.body ?? {}) as { month?: string };
+  const month = connectBody.month?.trim() || undefined;
+  if (month && !MONTH_RE.test(month)) {
+    return reply.status(400).send({ error: 'month inválido — use o formato YYYY-MM' });
+  }
+
   const supabase = getServiceClient();
 
   const { data: existingSess, error: sessLookupErr } = await supabase
@@ -196,6 +205,7 @@ app.post('/v1/latam/connect', async (req, reply) => {
       user_id: userId,
       status: 'portal_connecting',
       step_logs: [],
+      requested_month: month ?? null,
     })
     .select('id')
     .single();
@@ -206,10 +216,10 @@ app.post('/v1/latam/connect', async (req, reply) => {
   }
 
   const runId = (run as { id: string }).id;
-  log('api', 'info', 'connect_run_created', { sessionId, runId });
+  log('api', 'info', 'connect_run_created', { sessionId, runId, month: month ?? null });
 
   log('api', 'info', 'connect_flow_dispatched', { sessionId, runId });
-  void startConnectFlow({ userId, sessionId, runId }).catch(async (e) => {
+  void startConnectFlow({ userId, sessionId, runId, month }).catch(async (e) => {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? (e.stack ?? '').slice(0, 800) : '';
     log('api', 'error', 'connect_flow_unhandled', { sessionId, runId, message: msg, stack });
@@ -239,13 +249,17 @@ app.post('/v1/latam/sync', async (req, reply) => {
   }
   log('api', 'info', 'sync_auth_ok', { userId });
 
-  const body = (req.body ?? {}) as { sessionId?: string };
+  const body = (req.body ?? {}) as { sessionId?: string; month?: string };
   const sessionId = body.sessionId?.trim();
   if (!sessionId) {
     log('api', 'warn', 'sync_missing_session_id', { bodyKeys: Object.keys(body) });
     return reply.status(400).send({ error: 'sessionId obrigatório' });
   }
-  log('api', 'info', 'sync_body_parsed', { sessionId });
+  const month = body.month?.trim() || undefined;
+  if (month && !MONTH_RE.test(month)) {
+    return reply.status(400).send({ error: 'month inválido — use o formato YYYY-MM' });
+  }
+  log('api', 'info', 'sync_body_parsed', { sessionId, month: month ?? null });
 
   const supabase = getServiceClient();
   const { data: sess, error } = await supabase
@@ -284,6 +298,7 @@ app.post('/v1/latam/sync', async (req, reply) => {
       user_id: userId,
       status: 'roster_downloading',
       step_logs: [],
+      requested_month: month ?? null,
     })
     .select('id')
     .single();
@@ -294,10 +309,10 @@ app.post('/v1/latam/sync', async (req, reply) => {
   }
 
   const runId = (run as { id: string }).id;
-  log('api', 'info', 'sync_run_created', { sessionId, runId });
+  log('api', 'info', 'sync_run_created', { sessionId, runId, month: month ?? null });
 
   log('api', 'info', 'sync_flow_dispatched', { sessionId, runId });
-  void runSyncFlow({ userId, sessionId, runId }).catch(async (e) => {
+  void runSyncFlow({ userId, sessionId, runId, month }).catch(async (e) => {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? (e.stack ?? '').slice(0, 800) : '';
     log('api', 'error', 'sync_flow_unhandled', { sessionId, runId, message: msg, stack });

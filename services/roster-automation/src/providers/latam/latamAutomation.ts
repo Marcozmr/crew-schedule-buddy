@@ -13,7 +13,8 @@ import { log } from '../../logger.js';
 import { expectAuthenticatedHome, waitForAuthenticationAfterSso } from './navigation.js';
 import { persistFsmTransition, patchOrchestrationSnapshot } from './corporate-automation-orchestrator.js';
 import { detectCorporateSurface } from './surface-detector.js';
-import { runLatamGoldPathRosterImport } from './latam-production-pipeline.js';
+import { runLatamGoldPathRosterImport, importPdfBuffer } from './latam-production-pipeline.js';
+import { tryLightweightPdfFetch } from './lightweight-pdf-fetch.js';
 import type { CorporateFsmState } from './fsm-types.js';
 import { PostLoginNavigationInstrument } from './post-login-navigation-instrumentation.js';
 import { decryptSession } from '../../session-crypto.js';
@@ -132,8 +133,10 @@ export async function startConnectFlow(params: {
   userId: string;
   sessionId: string;
   runId: string;
+  /** Mês escolhido pelo usuário (YYYY-MM) — omitido em kicks automáticos. */
+  month?: string;
 }): Promise<void> {
-  const { userId, sessionId, runId } = params;
+  const { userId, sessionId, runId, month } = params;
 
   // Ordem de tentativa: iFlight direto primeiro — observado em produção que portal.latam.com
   // (SAB e corporativo-latam) falha consistentemente com ERR_HTTP2_PROTOCOL_ERROR a partir do
@@ -174,6 +177,10 @@ export async function startConnectFlow(params: {
   try {
     context = await chromium.launchPersistentContext(sessionDir(userId), {
       headless: config.headless(),
+      // Docker limita /dev/shm a 64MB por padrão — o Chromium estoura isso e o processo cai
+      // sozinho no meio da navegação (visto em produção como "context or browser has been
+      // closed"). Sem --disable-dev-shm-usage ele usa /tmp em vez de shm, mais lento mas estável.
+      args: ['--disable-dev-shm-usage'],
       viewport: { width: 1400, height: 900 },
       locale: 'pt-BR',
       timezoneId: 'America/Sao_Paulo',
@@ -314,6 +321,7 @@ export async function startConnectFlow(params: {
             navigation_debug: payload as unknown as Record<string, unknown>,
           });
         },
+        requestedMonth: month,
       });
 
       await appendRunLog(runId, {
@@ -389,8 +397,14 @@ export async function startConnectFlow(params: {
 /**
  * Sincronização com storage já gravado (nova aba Chromium + storageState).
  */
-export async function runSyncFlow(params: { userId: string; sessionId: string; runId: string }): Promise<void> {
-  const { userId, sessionId, runId } = params;
+export async function runSyncFlow(params: {
+  userId: string;
+  sessionId: string;
+  runId: string;
+  /** Mês escolhido pelo usuário (YYYY-MM) — omitido em kicks automáticos. */
+  month?: string;
+}): Promise<void> {
+  const { userId, sessionId, runId, month } = params;
   const storePath = storageStatePath(userId);
   const failDir = path.join(sessionDir(userId), 'failures');
 
@@ -448,7 +462,38 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
   await appendRunLog(runId, { step: 'sync_start', message: 'Sincronização com storageState restaurado' });
   await persistFsmTransition({ runId, sessionId, fsm: 'starting' });
 
-  browser = await chromium.launch({ headless: config.headless() });
+  // Atalho HTTP leve: reaproveita cookies da sessão salva pra buscar o PDF direto, sem abrir
+  // Chromium — só ativa com LATAM_LIGHTWEIGHT_PDF_URL configurada (ver config.ts). Qualquer falha
+  // cai automaticamente no fluxo completo abaixo, sem diferença de comportamento.
+  const fast = await tryLightweightPdfFetch({
+    storageStateArg,
+    appendLog: (e) => appendRunLog(runId, e),
+    targetMonth: month,
+  });
+  if (fast) {
+    try {
+      const { rosterId } = await importPdfBuffer({ userId, runId, fileName: fast.fileName, buffer: fast.buffer });
+      await appendRunLog(runId, { step: 'roster_importing', message: 'Importação concluída no EscalaX (atalho HTTP)' });
+      await persistFsmTransition({ runId, sessionId, fsm: 'importing_report' });
+      await getServiceClient().from('automation_runs').update({ imported_roster_id: rosterId }).eq('id', runId);
+      await persistFsmTransition({ runId, sessionId, fsm: 'completed', markSuccess: true, finished: true });
+      await appendRunLog(runId, { step: 'roster_imported', rosterId });
+      await appendRunLog(runId, { step: 'completed', message: 'Sincronização concluída (atalho HTTP, sem Chromium)' });
+      await appendRunLog(runId, { step: 'roster_connected', rosterId });
+      log(SCOPE, 'info', 'sync_ok_lightweight', { userId, rosterId });
+      return;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await appendRunLog(runId, {
+        step: 'lightweight_fetch_import_failed',
+        message: msg,
+        note: 'PDF baixado via atalho não pôde ser importado — caindo para fluxo completo com Chromium',
+      });
+    }
+  }
+
+  // Ver comentário em startConnectFlow sobre --disable-dev-shm-usage (Chromium caindo em Docker).
+  browser = await chromium.launch({ headless: config.headless(), args: ['--disable-dev-shm-usage'] });
 
   try {
     context = await browser.newContext({
@@ -542,6 +587,7 @@ export async function runSyncFlow(params: { userId: string; sessionId: string; r
           navigation_debug: payload as unknown as Record<string, unknown>,
         });
       },
+      requestedMonth: month,
     });
 
     await appendRunLog(runId, { step: 'roster_importing', message: 'Importação concluída no EscalaX' });

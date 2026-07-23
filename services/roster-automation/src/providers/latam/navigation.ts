@@ -82,6 +82,23 @@ export async function waitForAuthenticationAfterSso(
     url: page.url(),
   });
 
+  // Chama onPoll já aqui, antes do waitForURL abaixo — sem isto, o navegador remoto (screencast)
+  // só liga depois que waitForURL resolve ou estoura (até 2 min), mesmo com o formulário de login
+  // do Google já pronto na página real do servidor. Resultado: tela preta "carregando" por minutos
+  // enquanto o usuário já poderia estar digitando o login.
+  try {
+    const det = await detectCorporateSurface(page);
+    const ssoActive = det.surface === 'microsoft_auth' || det.surface === 'google_auth';
+    await onPoll?.({
+      surface: det.surface,
+      url: det.url,
+      host: det.host,
+      fsmHint: ssoActive ? 'waiting_sso' : 'authenticated_pending',
+    });
+  } catch {
+    /* página em transição — próxima iteração do loop tenta de novo */
+  }
+
   const urlPhaseTimeout = Math.min(waitForUrlTimeoutMs, Math.max(10_000, deadline - Date.now() - 5_000));
 
   try {
@@ -220,6 +237,102 @@ export async function openCrewRosterCalendar(root: LocatorRoot): Promise<boolean
   ]);
 
   return true;
+}
+
+const MONTH_NAMES_PT = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
+const MONTH_NAMES_EN = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/** Lê "YYYY-MM" a partir do nome do mês (PT/EN, com ou sem acento) + ano visíveis no texto da página. */
+function readDisplayedMonth(bodyText: string): string | null {
+  const names = [...MONTH_NAMES_PT, ...MONTH_NAMES_EN];
+  const re = new RegExp(`(${names.join('|')})\\.?\\s*(?:de\\s*)?(\\d{4})`, 'i');
+  const m = bodyText.match(re);
+  if (!m) return null;
+  const idx = names.findIndex((n) => n.toLowerCase() === m[1].toLowerCase()) % 12;
+  if (idx < 0) return null;
+  return `${m[2]}-${String(idx + 1).padStart(2, '0')}`;
+}
+
+/** Diferença em meses entre "YYYY-MM" alvo e atual (positivo = avançar / next). */
+function monthDiff(target: string, current: string): number {
+  const [ty, tm] = target.split('-').map(Number);
+  const [cy, cm] = current.split('-').map(Number);
+  return (ty - cy) * 12 + (tm - cm);
+}
+
+const NEXT_MONTH_PATTERNS = [/pr[oó]ximo\s*m[eê]s/i, /next\s*month/i, /^»$/, /^>$/, /^›$/];
+const PREV_MONTH_PATTERNS = [/m[eê]s\s*anterior/i, /previous\s*month/i, /^«$/, /^<$/, /^‹$/];
+
+async function clickMonthNav(root: LocatorRoot, patterns: RegExp[]): Promise<boolean> {
+  if (await clickFirstMatchingAnyRole(root, patterns)) return true;
+  // Ícones de navegação costumam ser botões sem role/texto claro — tenta aria-label/title diretos.
+  for (const attr of ['aria-label', 'title']) {
+    for (const re of patterns) {
+      try {
+        const loc = root.locator(`[${attr}]`).filter({ hasText: re });
+        if ((await loc.count()) > 0) {
+          await loc.first().click({ timeout: STEP_TIMEOUT_MS });
+          return true;
+        }
+      } catch {
+        /* tenta próximo padrão/atributo */
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Navega o calendário do iFlight Neo até o mês pedido (YYYY-MM), clicando em "mês
+ * anterior/próximo". Os controles reais do calendário nunca foram verificados contra uma
+ * sessão de produção — por isso esta função é best-effort: nunca lança erro, só registra
+ * cada passo em step_logs (para corrigir os seletores depois de uma execução real) e segue
+ * com o que estiver na tela se não conseguir confirmar o mês certo. Chamar só quando o
+ * usuário escolheu um mês explicitamente — sem isso, o comportamento fica inalterado.
+ */
+export async function navigateCalendarToMonth(
+  root: LocatorRoot,
+  targetMonth: string,
+  appendLog: (entry: Record<string, unknown>) => Promise<void>,
+): Promise<{ ok: boolean; reachedMonth: string | null }> {
+  await appendLog({ step: 'month_nav_attempt', targetMonth });
+
+  const MAX_STEPS = 14;
+  let reached: string | null = null;
+
+  for (let i = 0; i < MAX_STEPS; i++) {
+    const bodyText = await root.locator('body').innerText({ timeout: 8_000 }).catch(() => '');
+    const current = readDisplayedMonth(bodyText);
+    reached = current;
+
+    if (!current) {
+      await appendLog({ step: 'month_nav_failed', targetMonth, reason: 'mês exibido não identificado no texto da página' });
+      return { ok: false, reachedMonth: null };
+    }
+    if (current === targetMonth) {
+      await appendLog({ step: 'month_nav_result', ok: true, targetMonth, reachedMonth: current });
+      return { ok: true, reachedMonth: current };
+    }
+
+    const diff = monthDiff(targetMonth, current);
+    const patterns = diff > 0 ? NEXT_MONTH_PATTERNS : PREV_MONTH_PATTERNS;
+    const clicked = await clickMonthNav(root, patterns);
+    await appendLog({ step: 'month_nav_click', direction: diff > 0 ? 'next' : 'prev', current, targetMonth, clicked });
+    if (!clicked) {
+      await appendLog({ step: 'month_nav_failed', targetMonth, reachedMonth: current, reason: 'controle de navegação de mês não encontrado' });
+      return { ok: false, reachedMonth: current };
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+
+  await appendLog({ step: 'month_nav_failed', targetMonth, reachedMonth: reached, reason: 'excedeu tentativas de navegação' });
+  return { ok: false, reachedMonth: reached };
 }
 
 export async function expectAuthenticatedHome(page: Page, context?: BrowserContext): Promise<boolean> {

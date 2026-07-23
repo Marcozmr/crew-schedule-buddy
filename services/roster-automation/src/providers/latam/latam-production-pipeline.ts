@@ -13,7 +13,7 @@ import { getServiceClient } from '../../db.js';
 import { importLatamEcrewCaptureFiles, importDownloadedPdf } from '../../importAdapter.js';
 import { ensurePortalSabSurface } from './portal-sab-navigation.js';
 import { runSabToCrewRosterPdf, waitForRosterShell } from './sab-iflight-pipeline.js';
-import { openCrewRosterCalendar } from './navigation.js';
+import { openCrewRosterCalendar, navigateCalendarToMonth } from './navigation.js';
 import { tryIFlightDirectDeepLink } from './iflight-launcher.js';
 import { capturePdfDownloadOrResponse } from './pdf-capture-hybrid.js';
 import type { CorporateFsmState } from './fsm-types.js';
@@ -23,7 +23,8 @@ import { runEcrewRosterCaptureSequence } from './ecrew-roster-flow.js';
 
 export type LatamPipelineLog = (entry: Record<string, unknown>) => Promise<void>;
 
-async function importPdfBuffer(params: {
+/** Exportada para reuso pelo atalho HTTP leve (lightweight-pdf-fetch.ts) — mesma lógica de import/duplicata. */
+export async function importPdfBuffer(params: {
   userId: string;
   runId: string;
   fileName: string;
@@ -64,8 +65,10 @@ export async function runLatamGoldPathRosterImport(params: {
   onFsmPhase?: (phase: CorporateFsmState) => void | Promise<void>;
   instrument?: PostLoginNavigationInstrument;
   persistNavigationDebug?: (payload: NavigationDebugPayload) => Promise<void>;
+  /** Mês escolhido pelo usuário (YYYY-MM) — omitido em kicks automáticos, mantém comportamento atual. */
+  requestedMonth?: string;
 }): Promise<{ rosterId: string; mode: 'ecrew' | 'sab_iflight' }> {
-  const { context, page, userId, runId, sessionUserDir, appendLog, onFsmPhase, instrument, persistNavigationDebug } = params;
+  const { context, page, userId, runId, sessionUserDir, appendLog, onFsmPhase, instrument, persistNavigationDebug, requestedMonth } = params;
 
   const captureDir = path.join(sessionUserDir, 'captures');
   await fs.mkdir(captureDir, { recursive: true });
@@ -147,6 +150,9 @@ export async function runLatamGoldPathRosterImport(params: {
     try {
       await onFsmPhase?.('locating_roster');
       await openCrewRosterCalendar(direct.root);
+      if (requestedMonth) {
+        await navigateCalendarToMonth(direct.root, requestedMonth, appendLog);
+      }
       await waitForRosterShell(direct.root, appendLog, 30_000);
       await onFsmPhase?.('downloading_report');
       const { buffer: directBuf, suggestedName: directName } = await capturePdfDownloadOrResponse(
@@ -185,6 +191,7 @@ export async function runLatamGoldPathRosterImport(params: {
     onFsmPhase,
     instrument,
     persistNavigationDebug,
+    requestedMonth,
   });
   const { rosterId } = await importPdfBuffer({ userId, runId, fileName, buffer });
   return { rosterId, mode: 'sab_iflight' };

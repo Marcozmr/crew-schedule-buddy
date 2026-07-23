@@ -34,6 +34,7 @@ import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
 import { isRosterAutomationConfigured, postLatamConnect } from '@/lib/roster-automation-api';
 import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 import { RemoteBrowserViewer } from './RemoteBrowserViewer';
+import { LatamMonthPickerDialog } from '@/components/roster/LatamMonthPickerDialog';
 import { isMobileDevice } from '@/lib/roster/latam-remote-session';
 import { Capacitor } from '@capacitor/core';
 
@@ -64,6 +65,8 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
   const [remoteRunId, setRemoteRunId] = useState<string | null>(null);
+  const [monthDialogOpen, setMonthDialogOpen] = useState(false);
+  const [monthDialogBusy, setMonthDialogBusy] = useState(false);
   /**
    * O 403 do Google SAML (app_not_configured_for_user) não era sobre a rota de entrada (SAB vs
    * deep link) — era a falta do parâmetro `companyId=LA`, exigido pela plataforma iFlight (IBS)
@@ -127,19 +130,10 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
     setAutomationError(null);
 
     // Celular (app nativo ou apenas o navegador do telefone — sem suporte a extensões):
-    // navegador remoto (Chromium real do worker) faz o login Google fora do WebView/extensão,
-    // sem bloqueio da política do Google; o app só exibe a tela e repassa toques/teclado.
+    // pede o mês antes de abrir o navegador remoto (Chromium real do worker faz o login
+    // Google fora do WebView/extensão, sem bloqueio da política do Google).
     if (automationConfigured && (Capacitor.isNativePlatform() || isMobileDevice())) {
-      setPortalConnecting(true);
-      try {
-        const { runId } = await postLatamConnect(getAccessToken);
-        setRemoteRunId(runId);
-      } catch (e) {
-        setAutomationError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setPortalConnecting(false);
-        bump();
-      }
+      setMonthDialogOpen(true);
       return;
     }
 
@@ -157,7 +151,22 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       bump();
       void refreshConnection();
     }
-  }, [automationConfigured, bump, getAccessToken, iflightOpenUrl, refreshConnection, user]);
+  }, [automationConfigured, bump, iflightOpenUrl, refreshConnection]);
+
+  const handleConfirmMonth = useCallback(async (month: string) => {
+    setMonthDialogBusy(true);
+    setAutomationError(null);
+    try {
+      const { runId } = await postLatamConnect(getAccessToken, month);
+      setRemoteRunId(runId);
+      setMonthDialogOpen(false);
+    } catch (e) {
+      setAutomationError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMonthDialogBusy(false);
+      bump();
+    }
+  }, [bump, getAccessToken]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
@@ -708,6 +717,12 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       getAccessToken={getAccessToken}
       onImportComplete={handleImportComplete}
       onClose={() => setRemoteRunId(null)}
+    />
+    <LatamMonthPickerDialog
+      open={monthDialogOpen}
+      onOpenChange={setMonthDialogOpen}
+      onConfirm={(month) => void handleConfirmMonth(month)}
+      busy={monthDialogBusy}
     />
     </>
   );

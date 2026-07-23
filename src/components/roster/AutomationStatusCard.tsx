@@ -10,6 +10,7 @@ import {
   mapAutomationToUiPhase,
 } from '@/lib/roster/automation-ui-phase';
 import { postLatamSync, deleteLatamSession, postLatamCancelRun } from '@/lib/roster-automation-api';
+import { LatamMonthPickerDialog } from '@/components/roster/LatamMonthPickerDialog';
 import { formatDateTimeBR } from '@/lib/date-utils';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { reportOperationalEvent } from '@/lib/monitoring/errorReporting';
@@ -40,6 +41,7 @@ export function AutomationStatusCard({
   const [manualRetryBusy, setManualRetryBusy] = useState(false);
   const [revokeBusy, setRevokeBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [monthDialogOpen, setMonthDialogOpen] = useState(false);
   const successHandled = useRef(false);
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export function AutomationStatusCard({
     onRosterActivated?.();
   }, [session?.status, session?.id, user, onRosterActivated]);
 
-  const handleManualRetry = useCallback(async () => {
+  const handleManualRetry = useCallback(() => {
     if (!user) return;
     const kick = decideLatamAutomationKick(session, latestRun);
     if (!kick || kick.action === 'connect' || !session?.id) {
@@ -90,18 +92,24 @@ export function AutomationStatusCard({
       });
       return;
     }
+    setMonthDialogOpen(true);
+  }, [user, session, latestRun]);
+
+  const handleConfirmRetryMonth = useCallback(async (month: string) => {
+    if (!session?.id) return;
     setManualRetryBusy(true);
     setRetryNonce((n) => n + 1);
     try {
-      await postLatamSync(getAccessToken, session.id);
+      await postLatamSync(getAccessToken, session.id, month);
       toast.message('Tentando novamente', { description: 'Retomamos a busca da sua escala.' });
+      setMonthDialogOpen(false);
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível retomar agora.');
     } finally {
       setManualRetryBusy(false);
     }
-  }, [user, session, latestRun, getAccessToken, refresh]);
+  }, [session?.id, getAccessToken, refresh]);
 
   const handleCancelRun = useCallback(async () => {
     if (!latestRun?.id) return;
@@ -193,7 +201,7 @@ export function AutomationStatusCard({
               size="sm"
               className="w-full sm:w-auto gap-2"
               disabled={manualRetryBusy}
-              onClick={() => void handleManualRetry()}
+              onClick={handleManualRetry}
             >
               {manualRetryBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Tentar novamente
@@ -232,6 +240,12 @@ export function AutomationStatusCard({
           </Button>
         </div>
       )}
+      <LatamMonthPickerDialog
+        open={monthDialogOpen}
+        onOpenChange={setMonthDialogOpen}
+        onConfirm={(month) => void handleConfirmRetryMonth(month)}
+        busy={manualRetryBusy}
+      />
     </div>
   );
 }

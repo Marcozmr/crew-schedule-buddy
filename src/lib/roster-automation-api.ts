@@ -46,7 +46,11 @@ async function fetchWorker(url: string, options: RequestInit): Promise<Response>
   return res;
 }
 
-export async function postLatamConnect(getAccessToken: () => Promise<string | null>): Promise<{
+export async function postLatamConnect(
+  getAccessToken: () => Promise<string | null>,
+  /** Mês escolhido pelo usuário (YYYY-MM) — omitido em kicks automáticos. */
+  month?: string,
+): Promise<{
   sessionId: string;
   runId: string;
 }> {
@@ -56,7 +60,7 @@ export async function postLatamConnect(getAccessToken: () => Promise<string | nu
   const res = await fetchWorker(url, {
     method: 'POST',
     headers: await authHeader(getAccessToken),
-    body: '{}',
+    body: JSON.stringify(month ? { month } : {}),
   });
   return res.json() as Promise<{ sessionId: string; runId: string }>;
 }
@@ -64,6 +68,8 @@ export async function postLatamConnect(getAccessToken: () => Promise<string | nu
 export async function postLatamSync(
   getAccessToken: () => Promise<string | null>,
   sessionId: string,
+  /** Mês escolhido pelo usuário (YYYY-MM) — omitido em kicks automáticos. */
+  month?: string,
 ): Promise<{ sessionId: string; runId: string }> {
   const b = baseUrl();
   if (!b) throw new Error('Automação não configurada — VITE_ROSTER_AUTOMATION_URL não definido');
@@ -71,7 +77,7 @@ export async function postLatamSync(
   const res = await fetchWorker(url, {
     method: 'POST',
     headers: await authHeader(getAccessToken),
-    body: JSON.stringify({ sessionId }),
+    body: JSON.stringify(month ? { sessionId, month } : { sessionId }),
   });
   return res.json() as Promise<{ sessionId: string; runId: string }>;
 }
