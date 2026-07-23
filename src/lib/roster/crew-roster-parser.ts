@@ -6,6 +6,8 @@
 import {
   resolveCrewStatusFromActivityCode,
   resolveCrewStatusFromFlightOperation,
+  KNOWN_ACTIVITY_CODES,
+  BASE_SUFFIXED_TOKENS,
   type NormalizedEntryType,
 } from '@/lib/roster/crew-status-labels';
 
@@ -82,21 +84,16 @@ export interface CrewRosterParsedEntry {
 const CREW_ROLES =
   'CC|CA|FO|SO|CM|FA|PUR|INS|CHK|OBS|CCP|TCA|TCP|CCM';
 
-const NON_FLIGHT_TOKEN = [
-  'DO',
-  'HSB',
-  'HSBE',
-  'ASB',
-  'APR',
-  'OFF',
-  'X',
-  'TRN',
-  'SIM',
-  'GND',
-  'VAC',
-  'ADM',
-  'FOLGA',
-].join('|');
+/**
+ * Todos os códigos de atividade (não-voo) reconhecidos — vem da tabela oficial de siglas
+ * iFlight Neo (crew-status-labels.ts), não de uma lista curta manual. Sem isto, dias inteiros da
+ * escala (treinamento, férias, folga pedida, artigos perigosos etc.) somem silenciosamente da
+ * importação por não estarem numa whitelist. Ordenado por tamanho decrescente pra evitar que um
+ * código menor "roube" o match de um maior no motor de regex.
+ */
+const NON_FLIGHT_TOKEN = [...KNOWN_ACTIVITY_CODES, ...BASE_SUFFIXED_TOKENS]
+  .sort((a, b) => b.length - a.length)
+  .join('|');
 
 const AIRCRAFT_RE = /^(319|320|321|330|340|350|380|737|738|747|757|767|777|787|E\d{2,3})$/i;
 

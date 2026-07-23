@@ -43,4 +43,48 @@ describe('CrewRosterReport LATAM', () => {
     const { entries } = parseCrewRosterEntries(n);
     expect(entries.some((e) => e.flightNumber === 'LA3387')).toBe(true);
   });
+
+  it('reconhece códigos de atividade além da whitelist antiga (CPER, DR, VC, CRMBSB)', () => {
+    const raw = `
+      06-Jul-2026 CPER 09:00 09:00 BSB 09:00 BSB 13:00 13:00 04:00
+      16-Jul-2026 CRMBSB 09:00 09:00 BSB 09:00 BSB 13:00 13:00 04:00
+      18-Jul-2026 DR 00:00 00:00 BSB 00:00 BSB 23:59 23:59 00:00
+      20-Jul-2026 VC 00:00 00:00 BSB 00:00 BSB 23:59 23:59 00:00
+    `;
+    const n = normalizeCrewRosterPdfText(raw);
+    const { entries } = parseCrewRosterEntries(n);
+
+    const cper = entries.find((e) => e.activityType === 'CPER');
+    expect(cper?.crewStatusLabel).toBe('Artigos perigosos');
+    expect(cper?.entryType).toBe('training');
+
+    const crm = entries.find((e) => e.activityType === 'CRMBSB');
+    expect(crm?.crewStatusLabel).toBe('Curso CRM (BSB)');
+    expect(crm?.entryType).toBe('training');
+
+    const dr = entries.find((e) => e.activityType === 'DR');
+    expect(dr?.crewStatusLabel).toBe('Folga pedida');
+    expect(dr?.entryType).toBe('day_off');
+
+    const vc = entries.find((e) => e.activityType === 'VC');
+    expect(vc?.crewStatusLabel).toBe('Férias');
+    expect(vc?.entryType).toBe('vacation');
+  });
+
+  it('mantém ASB como Reserva e HSB como Sobreaviso (não trocados)', () => {
+    const raw = `
+      02-Mar-2026 HSB
+      09-Mar-2026 ASB
+    `;
+    const n = normalizeCrewRosterPdfText(raw);
+    const { entries } = parseCrewRosterEntries(n);
+
+    const hsb = entries.find((e) => e.activityType === 'HSB');
+    expect(hsb?.crewStatusLabel).toBe('Sobreaviso');
+    expect(hsb?.entryType).toBe('standby');
+
+    const asb = entries.find((e) => e.activityType === 'ASB');
+    expect(asb?.crewStatusLabel).toBe('Reserva');
+    expect(asb?.entryType).toBe('reserve');
+  });
 });
