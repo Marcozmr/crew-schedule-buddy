@@ -374,8 +374,16 @@ export async function expectAuthenticatedHome(page: Page, context?: BrowserConte
 /**
  * Aguarda superfície do Portal SAB (URL ou texto) ou presença do tile iFlightNeo.
  */
-export async function waitForSabPortalSurface(page: Page, settleMs = 2_500): Promise<boolean> {
+export async function waitForSabPortalSurface(
+  page: Page,
+  appendLog?: (entry: Record<string, unknown>) => Promise<void>,
+  settleMs = 2_500,
+): Promise<boolean> {
   const deadline = Date.now() + 180_000;
+  // withRetries chama esta função de novo a cada tentativa (até 5x) — sem isto, uma falha em
+  // detetar a superfície do SAB ficava até 15min em silêncio total no step_logs, sem nenhuma
+  // pista do que a página realmente mostrava nesse tempo todo.
+  let loggedSample = false;
   while (Date.now() < deadline) {
     const url = page.url();
     const body = await page.locator('body').innerText({ timeout: 12_000 }).catch(() => '');
@@ -387,8 +395,13 @@ export async function waitForSabPortalSurface(page: Page, settleMs = 2_500): Pro
       await page.waitForTimeout(settleMs);
       return true;
     }
+    if (!loggedSample) {
+      loggedSample = true;
+      await appendLog?.({ step: 'sab_surface_wait', ok: false, url, bodySample: body.slice(0, 300) });
+    }
     await page.waitForTimeout(2_000);
   }
+  await appendLog?.({ step: 'sab_surface_wait_timeout', url: page.url() });
   return false;
 }
 

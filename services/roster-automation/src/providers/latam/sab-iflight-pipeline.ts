@@ -85,7 +85,7 @@ export async function runSabToCrewRosterPdf(params: {
   // ── Via SAB: aguardar portal → tile iFlight → roster ─────────────────────
   await onFsmPhase?.('opening_portal_sab');
   await withRetries('wait_sab', 5, 3_000, async () => {
-    const ok = await waitForSabPortalSurface(page);
+    const ok = await waitForSabPortalSurface(page, appendLog);
     if (!ok) throw new Error('SAB / tile iFlightNeo ainda não visível');
   });
   await appendLog({ step: 'sab_surface', ok: true, url: page.url(), step_tag: 'sab_entry_detected' });
