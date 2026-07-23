@@ -369,7 +369,8 @@ function dedupeScheduleEntryRows<T extends ScheduleEntryNaturalKeyInput>(
 
 // ─── crew-roster-parser ───────────────────────────────────────────────────────
 
-export const PARSER_VERSION = 'LATAM_ROSTER_V5';
+/** V6: reconhece todas as siglas iFlight Neo (antes só 13 hardcoded) + corrige ASB/HSB trocados. */
+export const PARSER_VERSION = 'LATAM_ROSTER_V6';
 
 const MONTH_MAP: Record<string, string> = {
   JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',

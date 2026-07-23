@@ -367,28 +367,33 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     const fileSizeBytes = arrayBuffer.byteLength;
     const contentSha256 = await sha256Hex(arrayBuffer);
 
+    // Duplicata só bloqueia reprocessamento se já foi importada com a versão ATUAL do parser —
+    // senão, um fix no parser (ex.: siglas que antes eram descartadas) nunca conseguiria corrigir
+    // escalas já salvas, porque reenviar o mesmo PDF seria sempre tratado como "nada mudou".
     const { data: dupByHash } = await supabaseClient
       .from('imported_rosters')
-      .select('id')
+      .select('id, parser_version')
       .eq('user_id', effectiveUserId)
       .eq('content_sha256', contentSha256)
       .limit(1)
       .maybeSingle();
-    if ((dupByHash as { id: string } | null)?.id) {
-      return duplicateResult(fileName, (dupByHash as { id: string }).id, emptyDebug, emptyStats);
+    const hashDup = dupByHash as { id: string; parser_version: string | null } | null;
+    if (hashDup?.id && hashDup.parser_version === PARSER_VERSION) {
+      return duplicateResult(fileName, hashDup.id, emptyDebug, emptyStats);
     }
 
     const { data: dupByMeta } = await supabaseClient
       .from('imported_rosters')
-      .select('id')
+      .select('id, parser_version')
       .eq('user_id', effectiveUserId)
       .eq('file_name', fileName)
       .eq('file_size_bytes', fileSizeBytes)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if ((dupByMeta as { id: string } | null)?.id) {
-      return duplicateResult(fileName, (dupByMeta as { id: string }).id, emptyDebug, emptyStats);
+    const metaDup = dupByMeta as { id: string; parser_version: string | null } | null;
+    if (metaDup?.id && metaDup.parser_version === PARSER_VERSION) {
+      return duplicateResult(fileName, metaDup.id, emptyDebug, emptyStats);
     }
 
     const storagePath = `${effectiveUserId}/${Date.now()}-${fileName}`;

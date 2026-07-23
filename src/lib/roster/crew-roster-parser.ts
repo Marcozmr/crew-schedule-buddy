@@ -12,7 +12,8 @@ import {
 } from '@/lib/roster/crew-status-labels';
 
 /** Versão única do parser — alinhar com `parser_version` em pdf-import. */
-export const PARSER_VERSION = 'LATAM_ROSTER_V5';
+/** V6: reconhece todas as siglas iFlight Neo (antes só 13 hardcoded) + corrige ASB/HSB trocados. */
+export const PARSER_VERSION = 'LATAM_ROSTER_V6';
 
 const MONTH_MAP: Record<string, string> = {
   JAN: '01',
