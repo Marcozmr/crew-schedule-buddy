@@ -31,12 +31,9 @@ import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
-import { isRosterAutomationConfigured, postLatamConnect } from '@/lib/roster-automation-api';
-import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
-import { RemoteBrowserViewer } from './RemoteBrowserViewer';
-import { LatamMonthPickerDialog } from '@/components/roster/LatamMonthPickerDialog';
-import { isMobileDevice } from '@/lib/roster/latam-remote-session';
+import { isRosterAutomationConfigured } from '@/lib/roster-automation-api';
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 
 interface RosterSourcesCardProps {
   onImportComplete?: () => void;
@@ -52,8 +49,7 @@ const PORTAL_BADGE: Record<string, string> = {
 
 export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) {
   const navigate = useNavigate();
-  const { user, session: authSession } = useAuth();
-  const getAccessToken = useCallback(async () => authSession?.access_token ?? null, [authSession?.access_token]);
+  const { user } = useAuth();
   // ENV estático — determina se o worker Playwright está disponível
   const automationConfigured = isRosterAutomationConfigured() && corporatePortalConfig.isEnabled;
   const { connection, activeRosterMeta, refresh: refreshConnection } = useUserRosterConnection();
@@ -64,9 +60,6 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const [automationError, setAutomationError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [iflightWindowOpened, setIflightWindowOpened] = useState(false);
-  const [remoteRunId, setRemoteRunId] = useState<string | null>(null);
-  const [monthDialogOpen, setMonthDialogOpen] = useState(false);
-  const [monthDialogBusy, setMonthDialogBusy] = useState(false);
   /**
    * O 403 do Google SAML (app_not_configured_for_user) não era sobre a rota de entrada (SAB vs
    * deep link) — era a falta do parâmetro `companyId=LA`, exigido pela plataforma iFlight (IBS)
@@ -129,16 +122,18 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   const handleConnectPortal = useCallback(async () => {
     setAutomationError(null);
 
-    // Celular (app nativo ou apenas o navegador do telefone — sem suporte a extensões):
-    // pede o mês antes de abrir o navegador remoto (Chromium real do worker faz o login
-    // Google fora do WebView/extensão, sem bloqueio da política do Google).
-    if (automationConfigured && (Capacitor.isNativePlatform() || isMobileDevice())) {
-      setMonthDialogOpen(true);
-      return;
-    }
-
     if (automationConfigured) {
-      window.open(iflightOpenUrl, '_blank', 'noopener,noreferrer');
+      // No app nativo (Capacitor), o app roda dentro do seu próprio WebView — window.open ali
+      // seria outro WebView embutido, sujeito ao mesmo bloqueio do Google. Browser.open abre um
+      // Custom Tab / SFSafariViewController de verdade (navegador real do sistema, não um
+      // WebView), que é o método que o próprio Google recomenda pra login em apps nativos.
+      // Fora do app (site aberto no Chrome/Safari comum, desktop ou mobile), window.open já
+      // abre uma aba de verdade — sem esse problema.
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: iflightOpenUrl });
+      } else {
+        window.open(iflightOpenUrl, '_blank', 'noopener,noreferrer');
+      }
       setIflightWindowOpened(true);
       return;
     }
@@ -152,21 +147,6 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       void refreshConnection();
     }
   }, [automationConfigured, bump, iflightOpenUrl, refreshConnection]);
-
-  const handleConfirmMonth = useCallback(async (month: string) => {
-    setMonthDialogBusy(true);
-    setAutomationError(null);
-    try {
-      const { runId } = await postLatamConnect(getAccessToken, month);
-      setRemoteRunId(runId);
-      setMonthDialogOpen(false);
-    } catch (e) {
-      setAutomationError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setMonthDialogBusy(false);
-      bump();
-    }
-  }, [bump, getAccessToken]);
 
   const handleDisconnectPortal = useCallback(async () => {
     const provider = RosterSyncService.getProviderById('corporate_portal');
@@ -380,28 +360,30 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 </p>
               </div>
 
-              {/* Opção A — extensão (recomendada) */}
-              <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-3 space-y-2">
-                <p className="text-xs font-semibold text-foreground">Opção A — Extensão Chrome (sincronização automática)</p>
-                <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
-                  <li>Instale a extensão <span className="font-medium text-foreground">EscalaX — Sessão iFlight</span> no Chrome.</li>
-                  <li>Faça login normalmente no iFlight Neo.</li>
-                  <li>Clique no ícone da extensão na barra do Chrome.</li>
-                  <li>Confirme o consentimento e clique em <span className="font-medium text-foreground">Autorizar sincronização</span>.</li>
-                  <li>O EscalaX importa sua escala automaticamente.</li>
-                </ol>
-                <p className="text-xs text-muted-foreground">
-                  A extensão captura apenas cookies de{' '}
-                  <span className="font-mono text-foreground/80">portal.latam.com</span> e{' '}
-                  <span className="font-mono text-foreground/80">iflightla.ibsplc.aero</span>.
-                  Nenhuma senha é capturada.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Para instalar: abra o Chrome → Menu → Mais ferramentas → Extensões → Modo desenvolvedor →
-                  {' '}Carregar sem compactação → selecione a pasta{' '}
-                  <span className="font-mono text-foreground/80">browser-extension/escalax-session-capture</span>.
-                </p>
-              </div>
+              {/* Opção A — extensão (recomendada, só faz sentido em Chrome desktop) */}
+              {!Capacitor.isNativePlatform() && (
+                <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-3 space-y-2">
+                  <p className="text-xs font-semibold text-foreground">Opção A — Extensão Chrome (sincronização automática)</p>
+                  <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                    <li>Instale a extensão <span className="font-medium text-foreground">EscalaX — Sessão iFlight</span> no Chrome.</li>
+                    <li>Faça login normalmente no iFlight Neo.</li>
+                    <li>Clique no ícone da extensão na barra do Chrome.</li>
+                    <li>Confirme o consentimento e clique em <span className="font-medium text-foreground">Autorizar sincronização</span>.</li>
+                    <li>O EscalaX importa sua escala automaticamente.</li>
+                  </ol>
+                  <p className="text-xs text-muted-foreground">
+                    A extensão captura apenas cookies de{' '}
+                    <span className="font-mono text-foreground/80">portal.latam.com</span> e{' '}
+                    <span className="font-mono text-foreground/80">iflightla.ibsplc.aero</span>.
+                    Nenhuma senha é capturada.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Para instalar: abra o Chrome → Menu → Mais ferramentas → Extensões → Modo desenvolvedor →
+                    {' '}Carregar sem compactação → selecione a pasta{' '}
+                    <span className="font-mono text-foreground/80">browser-extension/escalax-session-capture</span>.
+                  </p>
+                </div>
+              )}
 
               {/* Opção B — PDF manual */}
               <div className="space-y-2">
@@ -430,16 +412,6 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
                 Fechar
               </Button>
             </div>
-          )}
-
-          {automationConfigured && (
-            <AutomationStatusCard
-              active
-              onRosterActivated={() => {
-                void refreshConnection();
-                void loadLastSync();
-              }}
-            />
           )}
 
           {showAwaitingIFlightGuidance && !automationAsPrimary && (
@@ -565,7 +537,6 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
   );
 
   return (
-    <>
     <div className="glass p-5 sm:p-6 min-w-0 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 min-w-0">
         <div className="flex items-start gap-3 min-w-0">
@@ -711,19 +682,5 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
         )}
       </div>
     </div>
-    <RemoteBrowserViewer
-      open={Boolean(remoteRunId)}
-      runId={remoteRunId}
-      getAccessToken={getAccessToken}
-      onImportComplete={handleImportComplete}
-      onClose={() => setRemoteRunId(null)}
-    />
-    <LatamMonthPickerDialog
-      open={monthDialogOpen}
-      onOpenChange={setMonthDialogOpen}
-      onConfirm={(month) => void handleConfirmMonth(month)}
-      busy={monthDialogBusy}
-    />
-    </>
   );
 }

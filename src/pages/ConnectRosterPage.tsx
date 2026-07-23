@@ -13,7 +13,6 @@ import {
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
-import { AutomationStatusCard } from '@/components/roster/AutomationStatusCard';
 import { useAuth } from '@/lib/auth-context';
 import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
 import { RosterSyncService } from '@/modules/roster/services/RosterSyncService';
@@ -157,16 +156,6 @@ export default function ConnectRosterPage() {
           <div className="rounded-2xl border border-border/80 bg-muted/30 p-3 text-left">
             <p className="text-xs text-muted-foreground leading-relaxed">{copy.automationNote}</p>
           </div>
-        )}
-
-        {useAutomationCopy && (
-          <AutomationStatusCard
-            active
-            onRosterActivated={() => {
-              void refresh();
-              navigate('/dashboard', { replace: true });
-            }}
-          />
         )}
 
         {!useAutomationCopy ? (

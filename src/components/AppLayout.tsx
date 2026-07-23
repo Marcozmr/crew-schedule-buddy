@@ -10,6 +10,7 @@ import { ConnectedRosterLifecycle } from '@/components/roster/ConnectedRosterLif
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { AppShell } from '@/components/layout/AppShell';
 import { useFlightNotifications } from '@/hooks/useFlightNotifications';
+import { useRosterSyncReminder } from '@/hooks/useRosterSyncReminder';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -93,6 +94,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
   const { signOut, profile, user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   useFlightNotifications();
+  useRosterSyncReminder();
 
   useEffect(() => {
     if (!user) return;

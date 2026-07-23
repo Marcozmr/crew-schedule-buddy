@@ -14,6 +14,8 @@ export interface ActiveRosterMeta {
   synced_at: string | null;
   updated_at: string | null;
   is_official_crew_roster_pdf: boolean | null;
+  /** Fim do período da escala (YYYY-MM-DD quando o parser reconhece a data) — usado pro lembrete de sincronização. */
+  roster_end_date: string | null;
 }
 
 export function useUserRosterConnection() {
@@ -36,14 +38,14 @@ export function useUserRosterConnection() {
     if (row?.current_active_roster_id) {
       const { data } = await supabase
         .from('imported_rosters')
-        .select('id, file_name, storage_path, synced_at, updated_at, is_official_crew_roster_pdf')
+        .select('id, file_name, storage_path, synced_at, updated_at, is_official_crew_roster_pdf, roster_end_date')
         .eq('id', row.current_active_roster_id)
         .maybeSingle();
       setActiveRosterMeta((data as ActiveRosterMeta | null) ?? null);
     } else {
       const { data: active } = await supabase
         .from('imported_rosters')
-        .select('id, file_name, storage_path, synced_at, updated_at, is_official_crew_roster_pdf')
+        .select('id, file_name, storage_path, synced_at, updated_at, is_official_crew_roster_pdf, roster_end_date')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
