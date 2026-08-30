@@ -7,10 +7,17 @@ import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { ImportHistoryCard } from '@/components/ImportHistoryCard';
 import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
 import { ActiveRosterDownloadButton } from '@/components/roster/ActiveRosterDownloadButton';
+import { RosterCrewmatesCard } from '@/components/roster/RosterCrewmatesCard';
 
 export default function DownloadRosterPage() {
   const navigate = useNavigate();
   const [importDone, setImportDone] = useState(false);
+  const [crewmatesRefreshKey, setCrewmatesRefreshKey] = useState(0);
+
+  const handleImportComplete = () => {
+    setImportDone(true);
+    setCrewmatesRefreshKey((k) => k + 1);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,7 +57,9 @@ export default function DownloadRosterPage() {
           </motion.div>
         )}
 
-        <RosterSourcesCard onImportComplete={() => setImportDone(true)} />
+        <RosterSourcesCard onImportComplete={handleImportComplete} />
+
+        <RosterCrewmatesCard refreshKey={crewmatesRefreshKey} />
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6 shadow-card">
           <div className="flex items-center gap-3 mb-3">
@@ -66,7 +75,7 @@ export default function DownloadRosterPage() {
             Faça o upload do PDF oficial da sua escala. O sistema extrai automaticamente voos e eventos sem depender da conexão ativa.
           </p>
           <PdfImportDialog
-            onImportComplete={() => setImportDone(true)}
+            onImportComplete={handleImportComplete}
             trigger={
               <Button className="w-full">
                 <FileText className="w-4 h-4 mr-2" />Selecionar PDF da escala

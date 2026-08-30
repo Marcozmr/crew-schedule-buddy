@@ -1201,6 +1201,19 @@ export type Database = {
           city: string
         }[]
       }
+      get_roster_crewmates: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          flight_date: string
+          flight_number: string
+          departure: string | null
+          arrival: string | null
+          partner_user_id: string
+          partner_name: string
+          partner_airline: string | null
+          crew_role: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

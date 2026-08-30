@@ -37,7 +37,7 @@ export function FlightCrewmatesRow({ date, flightNumber, departure }: FlightCrew
     <div className="mt-2 flex items-center gap-2 rounded-lg bg-primary/5 px-2.5 py-2">
       <Users className="h-3.5 w-3.5 shrink-0 text-primary" />
       <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-        Também no EscalaX neste voo:{' '}
+        {crewmates.length === 1 ? 'Tripulante neste voo:' : 'Tripulantes neste voo:'}{' '}
         <span className="font-medium text-foreground">
           {crewmates.map((c) => c.name).join(', ')}
         </span>

@@ -7,6 +7,17 @@ export interface FlightCrewmate {
   crewRole: string | null;
 }
 
+export interface RosterCrewmateEntry {
+  flightDate: string;
+  flightNumber: string;
+  departure: string | null;
+  arrival: string | null;
+  partnerUserId: string;
+  partnerName: string;
+  partnerAirline: string | null;
+  crewRole: string | null;
+}
+
 /**
  * Descoberta entre colegas: tripulantes de um voo específico, e coincidências (folgas/pernoites)
  * com quem você já tem conexão confirmada (crew_flight_connections). Tudo via RPC SECURITY DEFINER
@@ -48,5 +59,24 @@ export const CrewDiscoveryService = {
       return [];
     }
     return (data ?? []).map((row) => ({ date: row.layover_date, city: row.city }));
+  },
+
+  /** Tripulantes de toda a escala ativa (voos futuros) — usado logo após importar. */
+  async getRosterCrewmates(): Promise<RosterCrewmateEntry[]> {
+    const { data, error } = await supabase.rpc('get_roster_crewmates');
+    if (error) {
+      console.error('[CrewDiscoveryService] getRosterCrewmates error:', error.message);
+      return [];
+    }
+    return (data ?? []).map((row) => ({
+      flightDate: row.flight_date,
+      flightNumber: row.flight_number,
+      departure: row.departure,
+      arrival: row.arrival,
+      partnerUserId: row.partner_user_id,
+      partnerName: row.partner_name,
+      partnerAirline: row.partner_airline,
+      crewRole: row.crew_role,
+    }));
   },
 };
