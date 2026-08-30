@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { google } from 'googleapis'
@@ -16,16 +16,17 @@ interface StoredGoogleCredentials {
   refreshToken?: string
 }
 
+/** Usa execFile (sem shell) com args em array — evita interpretação de shell mesmo sobre URLs geradas dinamicamente. */
 function openBrowser(url: string): Promise<void> {
-  const command =
+  const [command, args] =
     process.platform === 'win32'
-      ? `start "" "${url}"`
+      ? ['cmd', ['/c', 'start', '', url]]
       : process.platform === 'darwin'
-        ? `open "${url}"`
-        : `xdg-open "${url}"`
+        ? ['open', [url]]
+        : ['xdg-open', [url]]
 
   return new Promise((resolve, reject) => {
-    exec(command, (error) => {
+    execFile(command, args, (error) => {
       if (error) {
         reject(error)
         return
