@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Send, Plane } from 'lucide-react';
+import { ArrowLeft, Send, Plane, Calendar, MapPin, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -8,10 +8,16 @@ import {
   type CrewConversationSummary,
   type CrewMessage,
 } from '@/lib/services/crew-conversation-service';
+import { CrewDiscoveryService } from '@/lib/services/crew-discovery-service';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { formatDateTimeBR } from '@/lib/date-utils';
+
+function formatDateOnlyBR(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
 
 export default function CrewChatPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -23,6 +29,8 @@ export default function CrewChatPage() {
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sharedDaysOff, setSharedDaysOff] = useState<string[]>([]);
+  const [sharedLayovers, setSharedLayovers] = useState<{ date: string; city: string }[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback((smooth = true) => {
@@ -44,6 +52,17 @@ export default function CrewChatPage() {
       setMessages(msgs);
       setLoading(false);
       requestAnimationFrame(() => scrollToBottom(false));
+
+      if (conv) {
+        const [daysOff, layovers] = await Promise.all([
+          CrewDiscoveryService.getSharedDaysOff(conv.partnerId),
+          CrewDiscoveryService.getSharedLayovers(conv.partnerId),
+        ]);
+        if (!cancelled) {
+          setSharedDaysOff(daysOff);
+          setSharedLayovers(layovers);
+        }
+      }
     })();
 
     return () => {
@@ -120,6 +139,50 @@ export default function CrewChatPage() {
           </p>
         </div>
       </div>
+
+      {/* Coincidências: folgas e pernoites em comum */}
+      {(sharedDaysOff.length > 0 || sharedLayovers.length > 0) && (
+        <details className="group border-b border-border bg-muted/20">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 select-none [&::-webkit-details-marker]:hidden">
+            <span className="text-xs font-medium text-foreground">
+              {sharedDaysOff.length > 0 && `${sharedDaysOff.length} folga${sharedDaysOff.length === 1 ? '' : 's'} em comum`}
+              {sharedDaysOff.length > 0 && sharedLayovers.length > 0 && ' · '}
+              {sharedLayovers.length > 0 && `${sharedLayovers.length} pernoite${sharedLayovers.length === 1 ? '' : 's'} em comum`}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-2 px-4 pb-3">
+            {sharedDaysOff.length > 0 && (
+              <div>
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                  <Calendar className="h-3 w-3" /> Dias de folga em comum
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {sharedDaysOff.map((d) => (
+                    <span key={d} className="rounded-md bg-background px-2 py-0.5 text-[11px] text-foreground">
+                      {formatDateOnlyBR(d)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {sharedLayovers.length > 0 && (
+              <div>
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                  <MapPin className="h-3 w-3" /> Pernoites em comum
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {sharedLayovers.map((l) => (
+                    <span key={`${l.date}-${l.city}`} className="rounded-md bg-background px-2 py-0.5 text-[11px] text-foreground">
+                      {l.city} · {formatDateOnlyBR(l.date)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
 
       {/* Mensagens */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

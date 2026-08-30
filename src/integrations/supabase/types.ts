@@ -1171,6 +1171,36 @@ export type Database = {
         }
         Returns: undefined
       }
+      get_flight_crewmates: {
+        Args: {
+          p_date: string
+          p_flight_number: string
+          p_departure: string
+        }
+        Returns: {
+          user_id: string
+          name: string
+          airline: string | null
+          crew_role: string | null
+        }[]
+      }
+      get_shared_days_off: {
+        Args: {
+          p_partner_id: string
+        }
+        Returns: {
+          day_off: string
+        }[]
+      }
+      get_shared_layovers: {
+        Args: {
+          p_partner_id: string
+        }
+        Returns: {
+          layover_date: string
+          city: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

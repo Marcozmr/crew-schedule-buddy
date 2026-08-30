@@ -6,6 +6,7 @@ import type { ScheduleEntry } from '@/hooks/useScheduleData';
 import { CrewFunctionActivityBadge } from '@/components/roster/CrewFunctionActivityBadge';
 import { isPresentationEntry } from '@/lib/schedule-entry-sort';
 import { GroundIntervalSeparator } from './GroundIntervalSeparator';
+import { FlightCrewmatesRow } from './FlightCrewmatesRow';
 
 function CrewLegLine({ leg }: { leg: ScheduleEntry }) {
   return <CrewFunctionActivityBadge leg={leg} />;
@@ -96,6 +97,9 @@ export function DutyLegTimeline({ duty }: DutyLegTimelineProps) {
 
             <div className="mt-3 min-w-0 border-t border-border/40 pt-3">
               <CrewLegLine leg={leg} />
+              {leg.is_flight && (
+                <FlightCrewmatesRow date={leg.date} flightNumber={leg.flight_number} departure={leg.departure} />
+              )}
               {leg.report_time && (
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   Apresentação no trecho:{' '}
