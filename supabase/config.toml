@@ -23,3 +23,7 @@ verify_jwt = false
 
 [functions.flight-search]
 verify_jwt = false
+
+# Chamada agendada (GitHub Actions) com header secreto (sem JWT de utilizador).
+[functions.cleanup-roster-history]
+verify_jwt = false

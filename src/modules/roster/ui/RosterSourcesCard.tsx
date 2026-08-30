@@ -39,6 +39,12 @@ interface RosterSourcesCardProps {
   onImportComplete?: () => void;
 }
 
+/**
+ * Integração corporativa (portal LATAM + iFlight) escondida da UI por enquanto —
+ * ainda em estudo/decisão de abordagem. Reative trocando para `true` quando retomar.
+ */
+const SHOW_CORPORATE_INTEGRATION = false;
+
 const PORTAL_BADGE: Record<string, string> = {
   disconnected: 'Não conectado',
   connecting: 'Conectando',
@@ -244,6 +250,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
    * o login ocorre na janela do worker. Abrange todo o painel corporativo sem escala ativa.
    */
   const automationAsPrimary =
+    SHOW_CORPORATE_INTEGRATION &&
     isRosterAutomationConfigured() &&
     corporatePortalConfig.isEnabled &&
     !activeRosterMeta &&
@@ -669,17 +676,18 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
           </Link>
         )}
 
-        {dailyMode ? (
-          <details className="group rounded-xl border border-border/60 bg-muted/15 open:bg-muted/25 transition-colors">
-            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden select-none">
-              <span>Integração corporativa (portal LATAM e iFlight)</span>
-              <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90 text-muted-foreground" />
-            </summary>
-            <div className="px-3 pb-4 pt-1 space-y-3 border-t border-border/50">{integrationSection}</div>
-          </details>
-        ) : (
-          integrationSection
-        )}
+        {SHOW_CORPORATE_INTEGRATION &&
+          (dailyMode ? (
+            <details className="group rounded-xl border border-border/60 bg-muted/15 open:bg-muted/25 transition-colors">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden select-none">
+                <span>Integração corporativa (portal LATAM e iFlight)</span>
+                <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90 text-muted-foreground" />
+              </summary>
+              <div className="px-3 pb-4 pt-1 space-y-3 border-t border-border/50">{integrationSection}</div>
+            </details>
+          ) : (
+            integrationSection
+          ))}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@
     "deploy:auth-rate-limit": "npx supabase functions deploy auth-rate-limit --project-ref fbryqzwykdhnmskfectg",
     "deploy:keep-alive": "npx supabase functions deploy keep-alive --project-ref fbryqzwykdhnmskfectg",
     "deploy:flight-search": "npx supabase functions deploy flight-search --project-ref fbryqzwykdhnmskfectg",
+    "deploy:cleanup-roster-history": "npx supabase functions deploy cleanup-roster-history --project-ref fbryqzwykdhnmskfectg",
     "deploy:functions": "npm run deploy:flight-status && npm run deploy:send-support-email && npm run deploy:auth-rate-limit",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

@@ -1,0 +1,45 @@
+# Limpeza semanal do histórico de escalas importadas (Edge Function `cleanup-roster-history`).
+# Mantém pelo menos ~3 meses (ROSTER_HISTORY_RETENTION_DAYS) e apaga o resto automaticamente.
+# Requer secrets no repositório: ROSTER_CLEANUP_URL, ROSTER_CLEANUP_SECRET
+#
+# Ativar: Settings → Secrets and variables → Actions → adicionar os dois secrets.
+# O corpo da resposta e o header secreto NÃO são impressos no log (apenas código HTTP e ok:true).
+
+name: Roster history cleanup
+
+on:
+  schedule:
+    # Toda segunda-feira, ~06:30 UTC.
+    - cron: "30 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST cleanup-roster-history
+        env:
+          ROSTER_CLEANUP_SECRET: ${{ secrets.ROSTER_CLEANUP_SECRET }}
+          ROSTER_CLEANUP_URL: ${{ secrets.ROSTER_CLEANUP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ROSTER_CLEANUP_SECRET:-}" ] || [ -z "${ROSTER_CLEANUP_URL:-}" ]; then
+            echo "::error::Defina ROSTER_CLEANUP_SECRET e ROSTER_CLEANUP_URL nos secrets do repositório."
+            exit 1
+          fi
+          out="$(mktemp)"
+          trap 'rm -f "$out"' EXIT
+          code=$(curl -sS --max-time 45 -o "$out" -w "%{http_code}" -X POST "$ROSTER_CLEANUP_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-cleanup-secret: $ROSTER_CLEANUP_SECRET" \
+            -d '{}') || { echo "::error::curl falhou (rede/timeout)"; exit 1; }
+          if [ "$code" != "200" ]; then
+            echo "::error::HTTP esperado 200, obtido ${code}"
+            exit 1
+          fi
+          if ! grep -q '"ok":true' "$out" || ! grep -q '"status":"ok"' "$out"; then
+            echo "::error::Resposta JSON inválida (esperado ok:true e status ok)"
+            exit 1
+          fi
+          echo "::notice::roster history cleanup OK (HTTP 200)"
