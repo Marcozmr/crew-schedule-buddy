@@ -27,12 +27,13 @@ const navItems = [
 const bottomNavItems = [
   { path: '/dashboard', label: 'Início', icon: Home },
   { path: '/schedule', label: 'Escala', icon: Calendar },
+  { path: '/connections', label: 'Conexões', icon: Users },
   { path: '/weather', label: 'MetCenter', icon: Map },
   { path: '/salary', label: 'Stats', icon: BarChart2 },
   { path: '/settings', label: 'Ajustes', icon: Settings },
 ];
 
-const mainTabPaths = new Set(['/dashboard', '/schedule', '/weather', '/salary', '/settings']);
+const mainTabPaths = new Set(['/dashboard', '/schedule', '/connections', '/weather', '/salary', '/settings']);
 
 function desktopNavLinkClass(active: boolean) {
   return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${
