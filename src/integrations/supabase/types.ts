@@ -50,6 +50,57 @@ export type Database = {
         }
         Relationships: []
       }
+      crew_days_off_matches: {
+        Row: {
+          created_at: string
+          day_off: string
+          id: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_off: string
+          id?: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          created_at?: string
+          day_off?: string
+          id?: string
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: []
+      }
+      crew_layover_matches: {
+        Row: {
+          city: string
+          created_at: string
+          id: string
+          layover_date: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          id?: string
+          layover_date: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          id?: string
+          layover_date?: string
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: []
+      }
       crew_conversations: {
         Row: {
           created_at: string
@@ -1212,6 +1263,17 @@ export type Database = {
           partner_name: string
           partner_airline: string | null
           crew_role: string | null
+        }[]
+      }
+      list_crew_connections: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          partner_user_id: string
+          partner_name: string
+          partner_airline: string | null
+          flights_together_count: number
+          has_conversation: boolean
+          conversation_id: string | null
         }[]
       }
     }

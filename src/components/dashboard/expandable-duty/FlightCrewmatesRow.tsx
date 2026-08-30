@@ -42,7 +42,7 @@ export function FlightCrewmatesRow({ date, flightNumber, departure }: FlightCrew
           {crewmates.map((c) => c.name).join(', ')}
         </span>
       </p>
-      <Link to="/connections" className="shrink-0 text-[11px] font-medium text-primary hover:underline">
+      <Link to="/connections/colleagues" className="shrink-0 text-[11px] font-medium text-primary hover:underline">
         Ver
       </Link>
     </div>

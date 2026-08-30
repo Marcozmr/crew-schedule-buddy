@@ -53,6 +53,11 @@ const CorporateAuthCallbackPage = lazy(() => import("./pages/CorporateAuthCallba
 const ShareImportPlaceholderPage = lazy(() => import("./pages/ShareImportPlaceholderPage"));
 const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
 const CrewChatPage = lazy(() => import("./pages/CrewChatPage"));
+const ConnectionColleaguesPage = lazy(() => import("./pages/connections/ConnectionColleaguesPage"));
+const ConnectionDaysOffPage = lazy(() => import("./pages/connections/ConnectionDaysOffPage"));
+const ConnectionLayoversPage = lazy(() => import("./pages/connections/ConnectionLayoversPage"));
+const ConnectionSharePage = lazy(() => import("./pages/connections/ConnectionSharePage"));
+const ConnectionAlertsPage = lazy(() => import("./pages/connections/ConnectionAlertsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -289,6 +294,56 @@ export function AppRoutes() {
           <ProtectedRoute>
             <RouteErrorBoundary scope="Chat">
               <CrewChatPage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections/colleagues"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Conexões">
+              <ConnectionColleaguesPage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections/days-off"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Conexões">
+              <ConnectionDaysOffPage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections/layovers"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Conexões">
+              <ConnectionLayoversPage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections/share"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Conexões">
+              <ConnectionSharePage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections/alerts"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Conexões">
+              <ConnectionAlertsPage />
             </RouteErrorBoundary>
           </ProtectedRoute>
         }

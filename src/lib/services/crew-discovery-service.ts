@@ -7,6 +7,15 @@ export interface FlightCrewmate {
   crewRole: string | null;
 }
 
+export interface CrewConnectionEntry {
+  partnerUserId: string;
+  partnerName: string;
+  partnerAirline: string | null;
+  flightsTogetherCount: number;
+  hasConversation: boolean;
+  conversationId: string | null;
+}
+
 export interface RosterCrewmateEntry {
   flightDate: string;
   flightNumber: string;
@@ -59,6 +68,23 @@ export const CrewDiscoveryService = {
       return [];
     }
     return (data ?? []).map((row) => ({ date: row.layover_date, city: row.city }));
+  },
+
+  /** Todos os colegas com quem você já compartilhou voo (crew_flight_connections). */
+  async listConnections(): Promise<CrewConnectionEntry[]> {
+    const { data, error } = await supabase.rpc('list_crew_connections');
+    if (error) {
+      console.error('[CrewDiscoveryService] listConnections error:', error.message);
+      return [];
+    }
+    return (data ?? []).map((row) => ({
+      partnerUserId: row.partner_user_id,
+      partnerName: row.partner_name,
+      partnerAirline: row.partner_airline,
+      flightsTogetherCount: row.flights_together_count,
+      hasConversation: row.has_conversation,
+      conversationId: row.conversation_id,
+    }));
   },
 
   /** Tripulantes de toda a escala ativa (voos futuros) — usado logo após importar. */

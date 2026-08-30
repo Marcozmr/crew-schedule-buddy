@@ -1,55 +1,49 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { motion } from 'framer-motion';
-import { Users, Calendar, Share2, MapPin, Bell, Copy, Check, MessageCircle, Plane } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { AppCard, AppCardSection, FeatureRow, SectionLabel } from '@/components/ui/primitives';
-import { useAuth } from '@/lib/auth-context';
-import { toast } from 'sonner';
-import { CrewConversationService, type CrewConversationSummary } from '@/lib/services/crew-conversation-service';
-import { formatDateTimeBR } from '@/lib/date-utils';
+import { Users, Calendar, Share2, MapPin, Bell, ChevronRight } from 'lucide-react';
+import { AppCard, AppCardSection } from '@/components/ui/primitives';
 
-const FEATURES = [
+const MENU_ITEMS = [
   {
+    to: '/connections/colleagues',
     icon: Users,
     title: 'Conecte com tripulantes',
-    desc: 'Encontre colegas de outras bases ou companhias e veja quando suas escalas coincidem.',
+    desc: 'Encontre colegas com quem você já voou e veja quando suas escalas coincidem.',
     iconBg: 'bg-primary/10',
     iconColor: 'text-primary',
-    soon: false,
   },
   {
+    to: '/connections/days-off',
     icon: Calendar,
     title: 'Compare folgas',
     desc: 'Descubra quem tem os mesmos dias de folga para planejar atividades juntos.',
     iconBg: 'bg-green-500/10',
     iconColor: 'text-green-500',
-    soon: false,
   },
   {
+    to: '/connections/layovers',
     icon: MapPin,
     title: 'Pernoites em comum',
     desc: 'Saiba quais colegas estarão na mesma cidade durante layovers.',
     iconBg: 'bg-amber-500/10',
     iconColor: 'text-amber-500',
-    soon: false,
   },
   {
+    to: '/connections/share',
     icon: Share2,
     title: 'Compartilhar escala',
     desc: 'Compartilhe sua escala com familiares e amigos para acompanharem sua rotina.',
     iconBg: 'bg-blue-500/10',
     iconColor: 'text-blue-500',
-    soon: false,
   },
   {
+    to: '/connections/alerts',
     icon: Bell,
     title: 'Alertas de coincidência',
-    desc: 'Receba notificações quando um colega estiver na mesma rota ou cidade.',
+    desc: 'Notificações automáticas quando um colega estiver no mesmo voo, folga ou cidade.',
     iconBg: 'bg-purple-500/10',
     iconColor: 'text-purple-500',
-    soon: true,
   },
 ];
 
@@ -60,49 +54,6 @@ const fade = (delay = 0) => ({
 });
 
 export default function ConnectionsPage() {
-  const { profile, user } = useAuth();
-  const [copied, setCopied] = useState(false);
-  const [conversations, setConversations] = useState<CrewConversationSummary[]>([]);
-  const [loadingConversations, setLoadingConversations] = useState(true);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
-      const data = await CrewConversationService.listConversations(user.id);
-      if (!cancelled) {
-        setConversations(data);
-        setLoadingConversations(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  const shareUrl = user ? `${window.location.origin}/share/${user.id}` : '';
-
-  const copyLink = async () => {
-    if (!shareUrl) return;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    toast.success('Link copiado!');
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const shareNative = async () => {
-    if (!shareUrl) return;
-    if (navigator.share) {
-      await navigator.share({
-        title: 'Minha escala — EscalaX',
-        text: 'Acompanhe minha escala de voos no EscalaX',
-        url: shareUrl,
-      });
-    } else {
-      await copyLink();
-    }
-  };
-
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto space-y-5">
@@ -124,133 +75,27 @@ export default function ConnectionsPage() {
           </AppCard>
         </motion.div>
 
-        {/* Colegas de voo — chat com quem você vai voar de novo */}
-        <motion.div {...fade(0.04)}>
-          <SectionLabel>Colegas de voo</SectionLabel>
-          {loadingConversations ? (
-            <div className="flex justify-center py-8">
-              <div className="h-6 w-6 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-            </div>
-          ) : conversations.length === 0 ? (
-            <AppCard>
-              <AppCardSection className="flex flex-col items-center gap-2 py-8 text-center">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
-                  <Plane className="h-5 w-5 text-primary" strokeWidth={1.75} />
-                </div>
-                <p className="text-sm font-medium text-foreground">Nenhum colega ainda</p>
-                <p className="max-w-xs text-xs text-muted-foreground">
-                  Quando você voar de novo com alguém que também usa o EscalaX, uma conversa aparece aqui automaticamente.
-                </p>
-              </AppCardSection>
-            </AppCard>
-          ) : (
-            <div className="space-y-2">
-              {conversations.map((c, i) => (
-                <motion.div key={c.id} {...fade(0.02 * i)}>
-                  <Link to={`/connections/chat/${c.id}`}>
-                    <AppCard className="hover:bg-secondary/40 transition-colors">
-                      <div className="flex items-center gap-3 px-4 py-3.5">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                          <span className="text-sm font-bold text-primary">
-                            {c.partnerName.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-semibold text-foreground">{c.partnerName}</p>
-                            {c.lastMessageAt && (
-                              <span className="shrink-0 text-[11px] text-muted-foreground">
-                                {formatDateTimeBR(c.lastMessageAt)}
-                              </span>
-                            )}
-                          </div>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {c.lastMessagePreview ??
-                              `${c.flightsTogetherCount} voo${c.flightsTogetherCount === 1 ? '' : 's'} juntos`}
-                          </p>
-                        </div>
-                        <MessageCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      </div>
-                    </AppCard>
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Compartilhar escala */}
-        <motion.div {...fade(0.07)}>
-          <AppCard>
-            <AppCardSection>
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
-                  <Share2 className="h-5 w-5 text-blue-500" strokeWidth={1.75} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Compartilhar sua escala</p>
-                  <p className="text-xs text-muted-foreground">Permita que familiares acompanhem seus voos</p>
-                </div>
-              </div>
-
-              {profile && (
-                <div className="mb-4 flex items-center gap-3 rounded-xl bg-secondary/60 p-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                    <span className="text-sm font-bold text-primary">
-                      {(profile.name || 'U').charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{profile.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{profile.airline || 'Tripulante'}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button onClick={() => void shareNative()} className="flex-1 gap-2" size="sm">
-                  <Share2 className="h-4 w-4" />
-                  Compartilhar
-                </Button>
-                <Button onClick={() => void copyLink()} variant="outline" size="sm" className="gap-2">
-                  {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                  {copied ? 'Copiado' : 'Copiar link'}
-                </Button>
-              </div>
-            </AppCardSection>
-          </AppCard>
-        </motion.div>
-
-        {/* Features */}
-        <motion.div {...fade(0.12)}>
-          <SectionLabel>O que você pode fazer</SectionLabel>
-          <div className="space-y-2.5">
-            {FEATURES.map((f, i) => (
-              <motion.div key={i} {...fade(0.14 + i * 0.04)}>
-                <FeatureRow
-                  icon={f.icon}
-                  iconBg={f.iconBg}
-                  iconColor={f.iconColor}
-                  title={f.title}
-                  description={f.desc}
-                  badge={f.soon ? 'Em breve' : undefined}
-                />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Em desenvolvimento */}
-        <motion.div {...fade(0.38)}>
-          <AppCard>
-            <AppCardSection className="text-center py-6">
-              <p className="text-sm font-semibold text-foreground">Funcionalidades em desenvolvimento</p>
-              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground max-w-sm mx-auto">
-                A parte social do EscalaX está sendo construída. Em breve você poderá se conectar com outros tripulantes diretamente no app.
-              </p>
-            </AppCardSection>
-          </AppCard>
-        </motion.div>
+        {/* Menu */}
+        <div className="space-y-2.5">
+          {MENU_ITEMS.map((item, i) => (
+            <motion.div key={item.to} {...fade(0.05 + i * 0.04)}>
+              <Link to={item.to}>
+                <AppCard className="hover:bg-secondary/40 transition-colors">
+                  <AppCardSection className="flex items-center gap-3">
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.iconBg}`}>
+                      <item.icon className={`h-5 w-5 ${item.iconColor}`} strokeWidth={1.75} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </AppCardSection>
+                </AppCard>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
 
       </div>
     </AppLayout>
