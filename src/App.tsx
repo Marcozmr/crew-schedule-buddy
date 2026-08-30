@@ -52,6 +52,7 @@ const SupportPage = lazy(() => import("./pages/SupportPage"));
 const CorporateAuthCallbackPage = lazy(() => import("./pages/CorporateAuthCallbackPage"));
 const ShareImportPlaceholderPage = lazy(() => import("./pages/ShareImportPlaceholderPage"));
 const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
+const CrewChatPage = lazy(() => import("./pages/CrewChatPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -278,6 +279,16 @@ export function AppRoutes() {
           <ProtectedRoute>
             <RouteErrorBoundary scope="Conexões">
               <ConnectionsPage />
+            </RouteErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/connections/chat/:conversationId"
+        element={
+          <ProtectedRoute>
+            <RouteErrorBoundary scope="Chat">
+              <CrewChatPage />
             </RouteErrorBoundary>
           </ProtectedRoute>
         }

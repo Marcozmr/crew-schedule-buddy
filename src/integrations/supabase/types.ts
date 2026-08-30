@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      crew_flight_connections: {
+        Row: {
+          airline: string | null
+          arrival: string | null
+          created_at: string
+          departure: string | null
+          flight_date: string
+          flight_number: string
+          id: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          airline?: string | null
+          arrival?: string | null
+          created_at?: string
+          departure?: string | null
+          flight_date: string
+          flight_number: string
+          id?: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          airline?: string | null
+          arrival?: string | null
+          created_at?: string
+          departure?: string | null
+          flight_date?: string
+          flight_number?: string
+          id?: string
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: []
+      }
+      crew_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: []
+      }
+      crew_conversation_messages: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          message: string
+          sender_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          message: string
+          sender_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crew_conversation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "crew_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           category: string

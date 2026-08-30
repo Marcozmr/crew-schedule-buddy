@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { motion } from 'framer-motion';
-import { Users, Calendar, Share2, MapPin, Bell, Copy, Check } from 'lucide-react';
+import { Users, Calendar, Share2, MapPin, Bell, Copy, Check, MessageCircle, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AppCard, AppCardSection, FeatureRow, SectionLabel, EmptyState } from '@/components/ui/primitives';
+import { AppCard, AppCardSection, FeatureRow, SectionLabel } from '@/components/ui/primitives';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
+import { CrewConversationService, type CrewConversationSummary } from '@/lib/services/crew-conversation-service';
+import { formatDateTimeBR } from '@/lib/date-utils';
 
 const FEATURES = [
   {
@@ -59,6 +62,23 @@ const fade = (delay = 0) => ({
 export default function ConnectionsPage() {
   const { profile, user } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [conversations, setConversations] = useState<CrewConversationSummary[]>([]);
+  const [loadingConversations, setLoadingConversations] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const data = await CrewConversationService.listConversations(user.id);
+      if (!cancelled) {
+        setConversations(data);
+        setLoadingConversations(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const shareUrl = user ? `${window.location.origin}/share/${user.id}` : '';
 
@@ -102,6 +122,61 @@ export default function ConnectionsPage() {
               </p>
             </AppCardSection>
           </AppCard>
+        </motion.div>
+
+        {/* Colegas de voo — chat com quem você vai voar de novo */}
+        <motion.div {...fade(0.04)}>
+          <SectionLabel>Colegas de voo</SectionLabel>
+          {loadingConversations ? (
+            <div className="flex justify-center py-8">
+              <div className="h-6 w-6 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <AppCard>
+              <AppCardSection className="flex flex-col items-center gap-2 py-8 text-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
+                  <Plane className="h-5 w-5 text-primary" strokeWidth={1.75} />
+                </div>
+                <p className="text-sm font-medium text-foreground">Nenhum colega ainda</p>
+                <p className="max-w-xs text-xs text-muted-foreground">
+                  Quando você voar de novo com alguém que também usa o EscalaX, uma conversa aparece aqui automaticamente.
+                </p>
+              </AppCardSection>
+            </AppCard>
+          ) : (
+            <div className="space-y-2">
+              {conversations.map((c, i) => (
+                <motion.div key={c.id} {...fade(0.02 * i)}>
+                  <Link to={`/connections/chat/${c.id}`}>
+                    <AppCard className="hover:bg-secondary/40 transition-colors">
+                      <div className="flex items-center gap-3 px-4 py-3.5">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                          <span className="text-sm font-bold text-primary">
+                            {c.partnerName.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-semibold text-foreground">{c.partnerName}</p>
+                            {c.lastMessageAt && (
+                              <span className="shrink-0 text-[11px] text-muted-foreground">
+                                {formatDateTimeBR(c.lastMessageAt)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {c.lastMessagePreview ??
+                              `${c.flightsTogetherCount} voo${c.flightsTogetherCount === 1 ? '' : 's'} juntos`}
+                          </p>
+                        </div>
+                        <MessageCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </div>
+                    </AppCard>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </motion.div>
 
         {/* Compartilhar escala */}
