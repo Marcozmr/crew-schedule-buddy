@@ -189,4 +189,37 @@ describe('duty grouping', () => {
     expect(duties[0].totalDutyHours).toBeGreaterThan(0);
     expect(duties[0].totalDutyHours).toBeGreaterThan(5);
   });
+
+  it('não junta duas jornadas com pernoite real só porque o parser repetiu a mesma `date` (conexão de 5min seria implausível)', () => {
+    // Cenário real reportado: GRU→BEL (chega 00:15) e, no dia seguinte de verdade (com
+    // pernoite em BEL), BEL→MCP (sai 00:20). Se o roster atribuiu a mesma `date` às duas
+    // pernas, a virada de meia-noite ingênua computaria só 5min de conexão — impossível — e
+    // juntaria as duas jornadas erradamente numa só ("uma programação só").
+    const leg1 = makeFlight({
+      id: 'gru-bel',
+      date: '2026-09-05',
+      flight_number: 'LA3232',
+      departure: 'GRU',
+      arrival: 'BEL',
+      departure_time: '20:35',
+      arrival_time: '00:15',
+      report_time: '19:48',
+      crosses_midnight: true,
+      flight_hours: 3.67,
+    });
+    const leg2 = makeFlight({
+      id: 'bel-mcp',
+      date: '2026-09-05', // bug do parser: deveria ser o dia seguinte (há pernoite real)
+      flight_number: 'LA3571',
+      departure: 'BEL',
+      arrival: 'MCP',
+      departure_time: '00:20',
+      arrival_time: '01:15',
+      report_time: null,
+      flight_hours: 0.92,
+    });
+
+    const duties = groupIntoDutyPeriods([leg1, leg2]);
+    expect(duties).toHaveLength(2);
+  });
 });

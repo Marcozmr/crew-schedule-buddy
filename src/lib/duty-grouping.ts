@@ -170,6 +170,15 @@ function computeTotalDutyMinutes(legs: ScheduleEntry[]): number {
 
 // ── Chaining validation ──
 
+/**
+ * Nenhuma conexão real de tripulação (mesmo aeroporto, próximo trecho) existe abaixo disso —
+ * embarque/desembarque não cabem em menos tempo. Serve de trava contra o parser do roster
+ * atribuindo por engano a mesma `date` a uma perna que na verdade só ocorre após um pernoite:
+ * sem essa trava, o "+1 dia" de virada de meia-noite abaixo mascara um descanso real (ex.: 1
+ * dia inteiro) como uma conexão de poucos minutos, juntando duas jornadas distintas em uma só.
+ */
+const MIN_PLAUSIBLE_CONNECTION_MINUTES = 15;
+
 function getConnectionGapMinutes(
   prevLeg: ScheduleEntry,
   nextLeg: ScheduleEntry,
@@ -192,15 +201,20 @@ function getConnectionGapMinutes(
   let nextDepAbs = absoluteMinutes(nextLeg.date, nextLeg.departure_time, refDate);
   if (nextDepAbs < 0 || prevArrAbs < 0) return null;
 
+  let wrapped = false;
   if (nextDepAbs < prevArrAbs) {
     const dayDiff = Math.round((toDateStartMs(nextLeg.date) - toDateStartMs(prevLeg.date)) / 86400000);
     if (dayDiff === 0 || dayDiff === 1) {
       nextDepAbs += 1440;
+      wrapped = true;
     }
   }
 
   const gap = nextDepAbs - prevArrAbs;
   if (gap < 0 || gap >= maxConnectionMinutes) return null;
+  // Uma virada de dia que resulta numa conexão implausivelmente curta é sinal de que as duas
+  // pernas não são a mesma jornada (há descanso real no meio) — não encadear.
+  if (wrapped && gap < MIN_PLAUSIBLE_CONNECTION_MINUTES) return null;
 
   return gap;
 }
