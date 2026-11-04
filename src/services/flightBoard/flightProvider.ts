@@ -407,7 +407,7 @@ async function fetchFlightStatusFromEdge(
   });
 
   try {
-    const { data, error } = await supabase.functions.invoke("flight-status", {
+    const { data, error, response } = await supabase.functions.invoke("flight-status", {
       method: "POST",
       body: {
         airportCode: options.airportCode.toUpperCase(),
@@ -491,7 +491,7 @@ async function fetchFlightStatusFromEdge(
       date: options.date,
       carrierCode: options.airlineCode ?? undefined,
       flightNumber: options.flightNumber ?? undefined,
-      httpStatus: response.status,
+      httpStatus: response?.status,
       flightCount: summary.count,
       openSkyMatchCount,
       fallbackReason: fallbackReason ?? (summary.count === 0 ? "empty_response" : null),
@@ -505,7 +505,7 @@ async function fetchFlightStatusFromEdge(
       meta: {
         skipped: false,
         reason: "ok" as const,
-        httpStatus: response.status,
+        httpStatus: response?.status,
         airportBaseReason,
         payloadSent,
         flightCount: summary.count,
