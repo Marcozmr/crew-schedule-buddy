@@ -7,7 +7,8 @@ import type { BrowserContext, Frame, Page } from 'playwright';
 import { log } from '../../logger.js';
 import { saveFailureArtifacts } from '../../artifacts.js';
 import { withRetries } from '../../retry.js';
-import { waitForSabPortalSurface, openCrewRosterCalendar, navigateCalendarToMonth } from './navigation.js';
+import { waitForSabPortalSurface, openCrewRosterCalendar, navigateCalendarToMonth, ROSTER_CALENDAR_MARKERS } from './navigation.js';
+import { detectCorporateSurface, isIFlightSurface } from './surface-detector.js';
 import { clickSabCrewHeaderContext } from './sab-crew-header.js';
 import { openIFlightNeoWithFallbacks } from './iflight-launcher.js';
 import type { LocatorRoot } from './latam-shared-dom.js';
@@ -34,19 +35,27 @@ async function artifact(page: Page | null, failDir: string, tag: string, appendL
   log(SCOPE, 'warn', 'failure_artifact', { tag, ...out });
 }
 
+/** O calendário e os voos também contam: antes só o relatório era aceito como tela de escala. */
+export function looksLikeRosterScreen(text: string): boolean {
+  return (
+    ROSTER_CALENDAR_MARKERS.test(text) ||
+    /crew\s*roster|CrewRoster|minha escala|my roster|per[ií]odo|duty|pairing|\b(?:JJ|LA)\s?\d{3,4}\b|Flight\s*Schedule/i.test(text)
+  );
+}
+
 export async function waitForRosterShell(root: LocatorRoot, appendLog: PipelineLogFn, timeoutMs = 120_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let lastText = '';
   while (Date.now() < deadline) {
     const t = await root.locator('body').innerText({ timeout: 8_000 }).catch(() => '');
-    if (
-      /crew\s*roster|CrewRoster|minha escala|my roster|per[ií]odo|duty|pairing|JJ\d{3,4}|Flight\s*Schedule/i.test(t)
-    ) {
+    lastText = t;
+    if (looksLikeRosterScreen(t)) {
       await appendLog({ step: 'roster_screen', ok: true, sample: t.slice(0, 240) });
       return;
     }
     await new Promise((r) => setTimeout(r, 2_000));
   }
-  await appendLog({ step: 'roster_screen', ok: false, message: 'Timeout à espera de conteúdo tipo escala' });
+  await appendLog({ step: 'roster_screen', ok: false, message: 'Timeout à espera de conteúdo tipo escala', sample: lastText.slice(0, 300) });
   throw new Error('Timeout: ecrã da escala não identificado no iFlight');
 }
 
@@ -81,6 +90,14 @@ export async function runSabToCrewRosterPdf(params: {
   const { context, page, runId, failDir, appendLog, onFsmPhase, instrument, persistNavigationDebug, requestedMonth } = params;
 
   await appendLog({ step: 'pipeline_start', runId, phase: 'sab_iflight_crewroster' });
+
+  // Quem entra direto no iFlight não tem como chegar ao SAB por aqui: esperar o tile só
+  // consumia 15 min (5 tentativas de 3 min) até o Chromium cair com "browser has been closed".
+  const entry = await detectCorporateSurface(page);
+  if (isIFlightSurface(entry.surface)) {
+    await appendLog({ step: 'sab_unreachable', surface: entry.surface, url: entry.url });
+    throw new Error('O iFlight abriu, mas a tela da escala não foi identificada. Use a importação manual do CrewRosterReport.');
+  }
 
   // ── Via SAB: aguardar portal → tile iFlight → roster ─────────────────────
   await onFsmPhase?.('opening_portal_sab');

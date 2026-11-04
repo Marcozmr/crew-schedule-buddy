@@ -149,7 +149,8 @@ export async function runLatamGoldPathRosterImport(params: {
     await onFsmPhase?.('iflight_loaded');
     try {
       await onFsmPhase?.('locating_roster');
-      await openCrewRosterCalendar(direct.root);
+      const navigatedToCalendar = await openCrewRosterCalendar(direct.root);
+      await appendLog({ step: 'roster_calendar_nav', ok: navigatedToCalendar });
       if (requestedMonth) {
         await navigateCalendarToMonth(direct.root, requestedMonth, appendLog);
       }
