@@ -16,6 +16,16 @@ Objetivo: gerar **atividade mínima** (invocação da Edge Function + RPC Postgr
 | Migration `20260428100000_keep_alive_ping.sql` | RPC `public.keep_alive_ping()` — só `service_role` |
 | Edge Function `keep-alive` | Header `x-keep-alive-secret`; resposta com `Cache-Control: no-store` |
 | GitHub Actions | Cron diário: POST, timeout 45s, valida HTTP 200 + `ok:true` + `status:"ok"` (corpo **não** vai para o log) |
+| Vercel Cron | `api/keep-alive.ts`, 1x/dia às 00h UTC: consulta `profiles` via PostgREST com a chave pública |
+
+## Por que dois caminhos
+
+A Supabase pausa o projeto Free após 7 dias sem atividade, e cada caminho pode falhar sozinho:
+
+- **GitHub Actions:** em repositório público, o agendamento é desligado após 60 dias sem atividade no repositório. Também depende dos secrets: sem eles, falhou de abril a 28/09/2026.
+- **Vercel Cron:** a entrega é "best effort", sem nova tentativa, e no plano Hobby roda 1x/dia com variação de até 59 min.
+
+Os horários ficam separados de propósito. Na prática, o GitHub roda entre 12h e 16h UTC, cerca de 12h depois do Vercel Cron.
 
 ## Variáveis de ambiente
 
@@ -120,4 +130,6 @@ Eventos estruturados (sem valor de secret):
 ## Confirmar que está a funcionar
 
 - GitHub **Actions** → última execução verde; mensagem `keep-alive OK (HTTP 200)`.
+- Vercel → projeto → **Settings** → **Cron Jobs** → **View Logs** de `/api/keep-alive`, com `keep_alive_ping_ok`.
+- Teste direto: `curl https://www.escalax.app.br/api/keep-alive` → `{"ok":true,"status":"ok"}`.
 - Supabase **Edge Functions** → **keep-alive** → **Logs** com `keep_alive_ping_ok`.

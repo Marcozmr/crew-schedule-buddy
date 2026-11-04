@@ -18,7 +18,7 @@ export function useActiveRosterDownload() {
     const result = await downloadActiveRoster(user.id);
     setDownloading(false);
 
-    if (!result.ok) {
+    if (result.ok === false) {
       toast.error(
         result.code === 'NO_PDF_IN_STORAGE'
           ? ROSTER_UX_MESSAGES.downloadNoPdfInStorage

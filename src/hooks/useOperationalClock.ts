@@ -34,7 +34,7 @@ export function useOperationalClock(rawTimezone = DEFAULT_TIMEZONE, onDayChange?
 
     const interval = window.setInterval(tick, 60_000);
 
-    let midnightTimer: ReturnType<typeof setTimeout> | undefined;
+    let midnightTimer: number | undefined;
     const scheduleMidnight = () => {
       if (midnightTimer !== undefined) clearTimeout(midnightTimer);
       const local = new TZDate(Date.now(), timezone);

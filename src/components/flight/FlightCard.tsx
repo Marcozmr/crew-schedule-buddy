@@ -37,7 +37,7 @@ function airlineStyle(code: string) {
 function calcDuration(depTime?: string | null, arrTime?: string | null): string {
   if (!depTime || !arrTime) return '';
   const [dh, dm] = depTime.split(':').map(Number);
-  let [ah, am] = arrTime.split(':').map(Number);
+  const [ah, am] = arrTime.split(':').map(Number);
   let mins = ah * 60 + am - (dh * 60 + dm);
   if (mins < 0) mins += 24 * 60;
   const h = Math.floor(mins / 60);

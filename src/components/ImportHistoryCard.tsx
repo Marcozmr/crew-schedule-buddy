@@ -58,7 +58,7 @@ export function ImportHistoryCard({ onRosterChanged }: ImportHistoryCardProps) {
     if (!user) return;
     toast.message(ROSTER_UX_MESSAGES.downloadingCurrent);
     const result = await downloadImportedRosterById(user.id, imp.id);
-    if (!result.ok) {
+    if (result.ok === false) {
       toast.error(
         result.code === 'NO_PDF_IN_STORAGE'
           ? ROSTER_UX_MESSAGES.downloadNoPdfInStorage

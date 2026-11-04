@@ -116,6 +116,8 @@ export interface FlightDataSourceFlags {
 }
 
 export interface FlightNormalized {
+  /** Horário de apresentação da tripulação (quando vier da escala). */
+  presentationTime?: string | null;
   id: string;
   flightNumber: string;
   airlineName: string;

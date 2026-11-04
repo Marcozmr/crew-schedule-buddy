@@ -27,6 +27,10 @@ export interface SurfaceSignals {
   bodySample: string;
 }
 
+export function isIFlightSurface(surface: CorporateSurface): boolean {
+  return surface.startsWith('iflight_');
+}
+
 export async function readPageSignals(page: Page): Promise<Omit<SurfaceSignals, 'surface'>> {
   const url = page.url();
   let title = '';

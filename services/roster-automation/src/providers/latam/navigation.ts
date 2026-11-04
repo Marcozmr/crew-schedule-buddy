@@ -213,7 +213,7 @@ async function clickFirstMatchingAnyRole(root: LocatorRoot, patterns: RegExp[]):
   return false;
 }
 
-const ROSTER_CALENDAR_MARKERS = /calend[aá]rio\s*do\s*elenco|roster\s*calendar|crew\s*roster\s*calendar/i;
+export const ROSTER_CALENDAR_MARKERS = /calend[aá]rio\s*do\s*elenco|roster\s*calendar|crew\s*roster\s*calendar/i;
 
 /**
  * O iFlight Neo abre em "Casa" (painel genérico, sem dados de escala) — é preciso navegar
@@ -257,6 +257,37 @@ function readDisplayedMonth(bodyText: string): string | null {
   const idx = names.findIndex((n) => n.toLowerCase() === m[1].toLowerCase()) % 12;
   if (idx < 0) return null;
   return `${m[2]}-${String(idx + 1).padStart(2, '0')}`;
+}
+
+const MONTH_ABBREVIATIONS: Record<string, number> = {
+  jan: 1, fev: 2, feb: 2, mar: 3, abr: 4, apr: 4, mai: 5, may: 5, jun: 6, jul: 7,
+  ago: 8, aug: 8, set: 9, sep: 9, out: 10, oct: 10, nov: 11, dez: 12, dec: 12,
+};
+
+/** Período do iFlight, ex.: "13-Jul-2026 – 02-Aug-2026" (nem sempre coincide com um mês fechado). */
+function readDisplayedPeriod(bodyText: string): { from: string; to: string } | null {
+  const m = bodyText.match(/\d{1,2}-([a-z]{3})-(\d{4})\s*[–—-]\s*\d{1,2}-([a-z]{3})-(\d{4})/i);
+  if (!m) return null;
+  const fromMonth = MONTH_ABBREVIATIONS[m[1].toLowerCase()];
+  const toMonth = MONTH_ABBREVIATIONS[m[3].toLowerCase()];
+  if (!fromMonth || !toMonth) return null;
+  return {
+    from: `${m[2]}-${String(fromMonth).padStart(2, '0')}`,
+    to: `${m[4]}-${String(toMonth).padStart(2, '0')}`,
+  };
+}
+
+/** Onde o calendário está em relação ao mês pedido (YYYY-MM); null se a tela não mostrar data. */
+export function readCalendarPosition(
+  bodyText: string,
+  targetMonth: string,
+): { current: string; reached: boolean } | null {
+  const period = readDisplayedPeriod(bodyText);
+  if (period) {
+    return { current: period.from, reached: period.from <= targetMonth && targetMonth <= period.to };
+  }
+  const current = readDisplayedMonth(bodyText);
+  return current ? { current, reached: current === targetMonth } : null;
 }
 
 /** Diferença em meses entre "YYYY-MM" alvo e atual (positivo = avançar / next). */
@@ -308,14 +339,15 @@ export async function navigateCalendarToMonth(
 
   for (let i = 0; i < MAX_STEPS; i++) {
     const bodyText = await root.locator('body').innerText({ timeout: 8_000 }).catch(() => '');
-    const current = readDisplayedMonth(bodyText);
-    reached = current;
+    const position = readCalendarPosition(bodyText, targetMonth);
+    reached = position?.current ?? null;
 
-    if (!current) {
+    if (!position) {
       await appendLog({ step: 'month_nav_failed', targetMonth, reason: 'mês exibido não identificado no texto da página' });
       return { ok: false, reachedMonth: null };
     }
-    if (current === targetMonth) {
+    const { current } = position;
+    if (position.reached) {
       await appendLog({ step: 'month_nav_result', ok: true, targetMonth, reachedMonth: current });
       return { ok: true, reachedMonth: current };
     }

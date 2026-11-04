@@ -436,8 +436,8 @@ export function parseRosterDateToken(raw: string): string | null {
 
 export function normalizeCrewRosterPdfText(text: string): string {
   let s = text
-    .replace(/ /g, ' ')
-    .replace(/[ -​﻿]/g, ' ')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\u2000-\u200b\ufeff]/g, ' ')
     .replace(/\r\n?/g, ' ')
     .replace(/[\t\f\v]+/g, ' ');
   s = s.replace(/[‐-―−]/g, '-');

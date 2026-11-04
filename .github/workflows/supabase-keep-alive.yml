@@ -2,6 +2,8 @@
 # Requer secrets no repositório: KEEP_ALIVE_URL, KEEP_ALIVE_SECRET
 #
 # Ativar: Settings → Secrets and variables → Actions → adicionar os dois secrets.
+# Em repositório público o GitHub desliga este agendamento após 60 dias sem atividade;
+# o Vercel Cron (api/keep-alive.ts) continua pingando nesse caso.
 # O corpo da resposta e o header secreto NÃO são impressos no log (apenas código HTTP e ok:true).
 
 name: Supabase keep-alive
@@ -30,7 +32,7 @@ jobs:
           out="$(mktemp)"
           trap 'rm -f "$out"' EXIT
           # Sem --fail: curl devolve 0 mesmo com HTTP 4xx/5xx; validamos %{http_code} e JSON.
-          code=$(curl -sS --max-time 45 -o "$out" -w "%{http_code}" -X POST "$KEEP_ALIVE_URL" \
+          code=$(curl -sS --max-time 45 --retry 3 --retry-delay 20 --retry-connrefused -o "$out" -w "%{http_code}" -X POST "$KEEP_ALIVE_URL" \
             -H "Content-Type: application/json" \
             -H "x-keep-alive-secret: $KEEP_ALIVE_SECRET" \
             -d '{}') || { echo "::error::curl falhou (rede/timeout)"; exit 1; }

@@ -43,7 +43,8 @@ function normalizeCorporate(raw: Partial<CorporatePortalConnection> | null): Cor
       sessionKind: null,
     };
   }
-  const status = raw.status === 'error' ? 'failed' : raw.status;
+  // Sessões antigas no localStorage ainda podem ter o status 'error'.
+  const status = (raw.status as string) === 'error' ? 'failed' : raw.status;
   return {
     status: status ?? 'disconnected',
     connectedAt: raw.connectedAt ?? null,

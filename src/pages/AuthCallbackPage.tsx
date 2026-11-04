@@ -53,7 +53,7 @@ export default function AuthCallbackPage() {
 
       const result = await establishSessionFromCurrentUrl(supabase, href);
       if (cancelled) return;
-      if (!result.ok) {
+      if (result.ok === false) {
         logAuthAuditEvent("auth_callback_error", { phase: "establish_session" });
         reportAuthFlowFailure("auth_callback_establish_session", result.error);
         if (import.meta.env.DEV) {

@@ -297,7 +297,7 @@ export function FlightBoard({
               : undefined,
         });
 
-        if (!res.ok) {
+        if (res.ok === false) {
           setDepartures([]);
           setArrivals([]);
           setLastUpdated(new Date().toISOString());
@@ -626,7 +626,6 @@ export function FlightBoard({
 
     const diff = nextFlight.scheduledTimestamp - now;
     if (
-      nextFlight.statusKey === "in_progress" ||
       nextFlight.statusKey === "boarding" ||
       diff <= THREE_HOURS_MS
     ) {
