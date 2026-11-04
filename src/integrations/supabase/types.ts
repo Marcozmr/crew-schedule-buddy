@@ -14,6 +14,248 @@ export type Database = {
   }
   public: {
     Tables: {
+      auth_audit_events: {
+        Row: {
+          client_origin: string | null
+          client_route: string | null
+          created_at: string
+          event_name: string
+          id: string
+          metadata: Json
+          user_id: string | null
+        }
+        Insert: {
+          client_origin?: string | null
+          client_route?: string | null
+          created_at?: string
+          event_name: string
+          id?: string
+          metadata?: Json
+          user_id?: string | null
+        }
+        Update: {
+          client_origin?: string | null
+          client_route?: string | null
+          created_at?: string
+          event_name?: string
+          id?: string
+          metadata?: Json
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      auth_rate_limit_buckets: {
+        Row: {
+          bucket_key: string
+          request_count: number
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          bucket_key: string
+          request_count?: number
+          updated_at?: string
+          window_start: string
+        }
+        Update: {
+          bucket_key?: string
+          request_count?: number
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      automation_runs: {
+        Row: {
+          artifact_base_path: string | null
+          created_at: string
+          error_message: string | null
+          finished_at: string | null
+          fsm_state: string | null
+          id: string
+          imported_roster_id: string | null
+          last_success_fsm_state: string | null
+          orchestration_snapshot: Json
+          requested_month: string | null
+          session_id: string
+          started_at: string
+          status: string
+          step_logs: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          artifact_base_path?: string | null
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          fsm_state?: string | null
+          id?: string
+          imported_roster_id?: string | null
+          last_success_fsm_state?: string | null
+          orchestration_snapshot?: Json
+          requested_month?: string | null
+          session_id: string
+          started_at?: string
+          status?: string
+          step_logs?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          artifact_base_path?: string | null
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          fsm_state?: string | null
+          id?: string
+          imported_roster_id?: string | null
+          last_success_fsm_state?: string | null
+          orchestration_snapshot?: Json
+          requested_month?: string | null
+          session_id?: string
+          started_at?: string
+          status?: string
+          step_logs?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_runs_imported_roster_id_fkey"
+            columns: ["imported_roster_id"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_runs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "automation_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_sessions: {
+        Row: {
+          created_at: string
+          encrypted_session_blob: string | null
+          id: string
+          last_error: string | null
+          provider: string
+          session_valid_until: string | null
+          status: string
+          storage_state_path: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          encrypted_session_blob?: string | null
+          id?: string
+          last_error?: string | null
+          provider?: string
+          session_valid_until?: string | null
+          status?: string
+          storage_state_path?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          encrypted_session_blob?: string | null
+          id?: string
+          last_error?: string | null
+          provider?: string
+          session_valid_until?: string | null
+          status?: string
+          storage_state_path?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      crew_conversation_messages: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          message: string
+          sender_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          message: string
+          sender_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crew_conversation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "crew_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crew_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: []
+      }
+      crew_days_off_matches: {
+        Row: {
+          created_at: string
+          day_off: string
+          id: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_off: string
+          id?: string
+          user_a_id: string
+          user_b_id: string
+        }
+        Update: {
+          created_at?: string
+          day_off?: string
+          id?: string
+          user_a_id?: string
+          user_b_id?: string
+        }
+        Relationships: []
+      }
       crew_flight_connections: {
         Row: {
           airline: string | null
@@ -50,30 +292,6 @@ export type Database = {
         }
         Relationships: []
       }
-      crew_days_off_matches: {
-        Row: {
-          created_at: string
-          day_off: string
-          id: string
-          user_a_id: string
-          user_b_id: string
-        }
-        Insert: {
-          created_at?: string
-          day_off: string
-          id?: string
-          user_a_id: string
-          user_b_id: string
-        }
-        Update: {
-          created_at?: string
-          day_off?: string
-          id?: string
-          user_a_id?: string
-          user_b_id?: string
-        }
-        Relationships: []
-      }
       crew_layover_matches: {
         Row: {
           city: string
@@ -100,62 +318,6 @@ export type Database = {
           user_b_id?: string
         }
         Relationships: []
-      }
-      crew_conversations: {
-        Row: {
-          created_at: string
-          id: string
-          last_message_at: string | null
-          user_a_id: string
-          user_b_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          last_message_at?: string | null
-          user_a_id: string
-          user_b_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          last_message_at?: string | null
-          user_a_id?: string
-          user_b_id?: string
-        }
-        Relationships: []
-      }
-      crew_conversation_messages: {
-        Row: {
-          conversation_id: string
-          created_at: string
-          id: string
-          message: string
-          sender_id: string
-        }
-        Insert: {
-          conversation_id: string
-          created_at?: string
-          id?: string
-          message: string
-          sender_id: string
-        }
-        Update: {
-          conversation_id?: string
-          created_at?: string
-          id?: string
-          message?: string
-          sender_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "crew_conversation_messages_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "crew_conversations"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       documents: {
         Row: {
@@ -222,6 +384,27 @@ export type Database = {
           status?: string
           subject?: string | null
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      flight_search_daily_usage: {
+        Row: {
+          search_count: number
+          updated_at: string
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          search_count?: number
+          updated_at?: string
+          usage_date: string
+          user_id: string
+        }
+        Update: {
+          search_count?: number
+          updated_at?: string
+          usage_date?: string
           user_id?: string
         }
         Relationships: []
@@ -403,14 +586,60 @@ export type Database = {
           },
         ]
       }
+      flights_cache: {
+        Row: {
+          airline: string | null
+          airport: string | null
+          cache_key: string
+          created_at: string
+          direction: string | null
+          flight_date: string
+          flight_number: string | null
+          id: string
+          mode: string
+          response_json: Json
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          airline?: string | null
+          airport?: string | null
+          cache_key: string
+          created_at?: string
+          direction?: string | null
+          flight_date: string
+          flight_number?: string | null
+          id?: string
+          mode: string
+          response_json: Json
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          airline?: string | null
+          airport?: string | null
+          cache_key?: string
+          created_at?: string
+          direction?: string | null
+          flight_date?: string
+          flight_number?: string | null
+          id?: string
+          mode?: string
+          response_json?: Json
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       imported_rosters: {
         Row: {
+          automation_run_id: string | null
           base_airport: string | null
           connector_key: string | null
+          content_sha256: string | null
           created_at: string
           crew_group_code: string | null
           crew_role: string | null
-          content_sha256: string | null
           duty_hours_total: number | null
           employee_code: string | null
           file_name: string
@@ -420,12 +649,11 @@ export type Database = {
           import_error: string | null
           import_origin: string
           import_status: string | null
-          imported_at?: string | null
+          imported_at: string
           inserted_count: number | null
           is_active: boolean
-          is_official_crew_roster_pdf?: boolean | null
+          is_official_crew_roster_pdf: boolean
           last_sync_at: string | null
-          superseded_by_roster_id?: string | null
           name: string | null
           parsed_count: number | null
           parser_version: string | null
@@ -433,19 +661,21 @@ export type Database = {
           raw_text_excerpt: string | null
           roster_end_date: string | null
           roster_provider: string | null
-          roster_source?: string | null
+          roster_source: string
           roster_start_date: string | null
-          roster_status?: string | null
+          roster_status: string
           source_message_id: string
           source_type: string | null
           storage_path: string
-          superseded_by?: string | null
+          superseded_by: string | null
+          superseded_by_roster_id: string | null
           sync_status: string | null
           synced_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          automation_run_id?: string | null
           base_airport?: string | null
           connector_key?: string | null
           content_sha256?: string | null
@@ -464,7 +694,7 @@ export type Database = {
           imported_at?: string
           inserted_count?: number | null
           is_active?: boolean
-          is_official_crew_roster_pdf?: boolean | null
+          is_official_crew_roster_pdf?: boolean
           last_sync_at?: string | null
           name?: string | null
           parsed_count?: number | null
@@ -487,6 +717,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          automation_run_id?: string | null
           base_airport?: string | null
           connector_key?: string | null
           content_sha256?: string | null
@@ -505,7 +736,7 @@ export type Database = {
           imported_at?: string
           inserted_count?: number | null
           is_active?: boolean
-          is_official_crew_roster_pdf?: boolean | null
+          is_official_crew_roster_pdf?: boolean
           last_sync_at?: string | null
           name?: string | null
           parsed_count?: number | null
@@ -529,10 +760,31 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "imported_rosters_automation_run_id_fkey"
+            columns: ["automation_run_id"]
+            isOneToOne: false
+            referencedRelation: "automation_runs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "imported_rosters_portal_connection_id_fkey"
             columns: ["portal_connection_id"]
             isOneToOne: false
             referencedRelation: "portal_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "imported_rosters_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "imported_rosters_superseded_by_roster_id_fkey"
+            columns: ["superseded_by_roster_id"]
+            isOneToOne: false
+            referencedRelation: "imported_rosters"
             referencedColumns: ["id"]
           },
         ]
@@ -624,12 +876,18 @@ export type Database = {
           display_name: string
           id: string
           last_error: string | null
+          last_reconnect_attempt_at: string | null
           last_successful_sync_at: string | null
+          last_sync_attempt_at: string | null
           last_synced_at: string | null
           metadata: Json
+          next_sync_at: string | null
+          reconnect_attempts: number
           session_expires_at: string | null
           source_kind: string
+          sync_attempts: number
           sync_enabled: boolean
+          sync_error: string | null
           updated_at: string
           user_id: string
         }
@@ -642,12 +900,18 @@ export type Database = {
           display_name?: string
           id?: string
           last_error?: string | null
+          last_reconnect_attempt_at?: string | null
           last_successful_sync_at?: string | null
+          last_sync_attempt_at?: string | null
           last_synced_at?: string | null
           metadata?: Json
+          next_sync_at?: string | null
+          reconnect_attempts?: number
           session_expires_at?: string | null
           source_kind?: string
+          sync_attempts?: number
           sync_enabled?: boolean
+          sync_error?: string | null
           updated_at?: string
           user_id: string
         }
@@ -660,12 +924,18 @@ export type Database = {
           display_name?: string
           id?: string
           last_error?: string | null
+          last_reconnect_attempt_at?: string | null
           last_successful_sync_at?: string | null
+          last_sync_attempt_at?: string | null
           last_synced_at?: string | null
           metadata?: Json
+          next_sync_at?: string | null
+          reconnect_attempts?: number
           session_expires_at?: string | null
           source_kind?: string
+          sync_attempts?: number
           sync_enabled?: boolean
+          sync_error?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -951,6 +1221,7 @@ export type Database = {
           hotel_name: string | null
           id: string
           is_flight: boolean
+          next_tracking_check_at: string | null
           operation_type: string | null
           overnight: boolean | null
           pairing_code: string | null
@@ -960,6 +1231,7 @@ export type Database = {
           sort_datetime: string | null
           source_pdf_path: string | null
           status: string
+          tracking_priority: string | null
           updated_at: string
           user_id: string
         }
@@ -991,6 +1263,7 @@ export type Database = {
           hotel_name?: string | null
           id?: string
           is_flight?: boolean
+          next_tracking_check_at?: string | null
           operation_type?: string | null
           overnight?: boolean | null
           pairing_code?: string | null
@@ -1000,6 +1273,7 @@ export type Database = {
           sort_datetime?: string | null
           source_pdf_path?: string | null
           status?: string
+          tracking_priority?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1031,6 +1305,7 @@ export type Database = {
           hotel_name?: string | null
           id?: string
           is_flight?: boolean
+          next_tracking_check_at?: string | null
           operation_type?: string | null
           overnight?: boolean | null
           pairing_code?: string | null
@@ -1040,6 +1315,7 @@ export type Database = {
           sort_datetime?: string | null
           source_pdf_path?: string | null
           status?: string
+          tracking_priority?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1055,51 +1331,61 @@ export type Database = {
       }
       user_roster_connection: {
         Row: {
-          id: string
-          user_id: string
-          connection_type: string
-          connection_status: string
-          roster_connection_state: string
+          automation_session_id: string | null
           connected_at: string | null
-          last_checked_at: string | null
-          last_successful_import_at: string | null
-          current_active_roster_id: string | null
-          last_error: string | null
-          is_auto_update_enabled: boolean
+          connection_status: string
+          connection_type: string
           created_at: string
+          current_active_roster_id: string | null
+          id: string
+          is_auto_update_enabled: boolean
+          last_checked_at: string | null
+          last_error: string | null
+          last_successful_import_at: string | null
+          roster_connection_state: string
           updated_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          connection_type: string
-          connection_status?: string
-          roster_connection_state?: string
+          automation_session_id?: string | null
           connected_at?: string | null
-          last_checked_at?: string | null
-          last_successful_import_at?: string | null
-          current_active_roster_id?: string | null
-          last_error?: string | null
-          is_auto_update_enabled?: boolean
+          connection_status?: string
+          connection_type: string
           created_at?: string
+          current_active_roster_id?: string | null
+          id?: string
+          is_auto_update_enabled?: boolean
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_successful_import_at?: string | null
+          roster_connection_state?: string
           updated_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          connection_type?: string
-          connection_status?: string
-          roster_connection_state?: string
+          automation_session_id?: string | null
           connected_at?: string | null
-          last_checked_at?: string | null
-          last_successful_import_at?: string | null
-          current_active_roster_id?: string | null
-          last_error?: string | null
-          is_auto_update_enabled?: boolean
+          connection_status?: string
+          connection_type?: string
           created_at?: string
+          current_active_roster_id?: string | null
+          id?: string
+          is_auto_update_enabled?: boolean
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_successful_import_at?: string | null
+          roster_connection_state?: string
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roster_connection_automation_session_id_fkey"
+            columns: ["automation_session_id"]
+            isOneToOne: false
+            referencedRelation: "automation_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_roster_connection_current_active_roster_id_fkey"
             columns: ["current_active_roster_id"]
@@ -1178,103 +1464,83 @@ export type Database = {
         }
         Relationships: []
       }
-      auth_audit_events: {
-        Row: {
-          id: string
-          created_at: string
-          event_name: string
-          user_id: string | null
-          client_route: string | null
-          client_origin: string | null
-          metadata: Json
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          event_name: string
-          user_id?: string | null
-          client_route?: string | null
-          client_origin?: string | null
-          metadata?: Json
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          event_name?: string
-          user_id?: string | null
-          client_route?: string | null
-          client_origin?: string | null
-          metadata?: Json
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      log_auth_audit_event: {
+      _auth_rate_limit_try_increment: {
         Args: {
-          p_event_name: string
-          p_metadata?: Json
-          p_route?: string | null
-          p_origin?: string | null
+          p_bucket_key: string
+          p_max_requests: number
+          p_now: string
+          p_window: string
         }
-        Returns: undefined
+        Returns: boolean
+      }
+      auth_rate_limit_check: {
+        Args: { p_action: string; p_email: string; p_ip: string }
+        Returns: Json
+      }
+      flight_search_try_increment: {
+        Args: { p_daily_limit: number; p_user_id: string }
+        Returns: Json
       }
       get_flight_crewmates: {
-        Args: {
-          p_date: string
-          p_flight_number: string
-          p_departure: string
-        }
+        Args: { p_date: string; p_departure: string; p_flight_number: string }
         Returns: {
-          user_id: string
+          airline: string
+          crew_role: string
           name: string
-          airline: string | null
-          crew_role: string | null
+          user_id: string
+        }[]
+      }
+      get_roster_crewmates: {
+        Args: never
+        Returns: {
+          arrival: string
+          crew_role: string
+          departure: string
+          flight_date: string
+          flight_number: string
+          partner_airline: string
+          partner_name: string
+          partner_user_id: string
         }[]
       }
       get_shared_days_off: {
-        Args: {
-          p_partner_id: string
-        }
+        Args: { p_partner_id: string }
         Returns: {
           day_off: string
         }[]
       }
       get_shared_layovers: {
-        Args: {
-          p_partner_id: string
-        }
+        Args: { p_partner_id: string }
         Returns: {
-          layover_date: string
           city: string
+          layover_date: string
         }[]
       }
-      get_roster_crewmates: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          flight_date: string
-          flight_number: string
-          departure: string | null
-          arrival: string | null
-          partner_user_id: string
-          partner_name: string
-          partner_airline: string | null
-          crew_role: string | null
-        }[]
-      }
+      keep_alive_ping: { Args: never; Returns: string }
       list_crew_connections: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
-          partner_user_id: string
-          partner_name: string
-          partner_airline: string | null
+          conversation_id: string
           flights_together_count: number
           has_conversation: boolean
-          conversation_id: string | null
+          partner_airline: string
+          partner_name: string
+          partner_user_id: string
         }[]
+      }
+      log_auth_audit_event: {
+        Args: {
+          p_event_name: string
+          p_metadata?: Json
+          p_origin?: string
+          p_route?: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
@@ -1294,12 +1560,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1323,11 +1589,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1348,11 +1614,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1373,11 +1639,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1390,11 +1656,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
