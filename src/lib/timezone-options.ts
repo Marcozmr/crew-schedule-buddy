@@ -10,7 +10,7 @@ export const OPERATIONAL_TIMEZONE_OPTIONS = [
   { value: 'America/Rio_Branco', label: 'Rio Branco (ACT)' },
 ] as const;
 
-const KNOWN = new Set(OPERATIONAL_TIMEZONE_OPTIONS.map((o) => o.value));
+const KNOWN = new Set<string>(OPERATIONAL_TIMEZONE_OPTIONS.map((o) => o.value));
 
 export function isKnownOperationalTimezone(iana: string | null | undefined): boolean {
   const v = (iana ?? '').trim();

@@ -80,7 +80,6 @@ function PWAUpdatePromptInner() {
       description:
         buildId !== "unknown" ? `Nova versão instalada (${buildId}).` : "Você já está na versão mais recente.",
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;

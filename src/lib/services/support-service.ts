@@ -454,7 +454,7 @@ export async function submitSupport(payload: SupportPayload): Promise<SupportRes
   }
 
   const resolved = await resolveAccessTokenForSupport();
-  if (!resolved.ok) {
+  if (resolved.ok === false) {
     console.log('[support-service] final interpreted outcome:', resolved.result.outcome, resolved.result.userMessage);
     return resolved.result;
   }

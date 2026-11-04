@@ -41,7 +41,7 @@ export async function invokeFlightSearch(
       const d = data as FlightSearchResponse;
       console.log("[flight-search]", {
         ok: d.ok,
-        count: d.ok ? d.data?.length ?? 0 : d.error,
+        count: d.ok === true ? d.data?.length ?? 0 : d.error,
       });
     }
     return data as FlightSearchResponse;

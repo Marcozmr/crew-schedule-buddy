@@ -48,5 +48,4 @@ export const cacheKeys = {
     makeKey("flights", airport, date, mode),
   flightStatus: (flightNumber: string, date: string) =>
     makeKey("status", flightNumber, date),
-  nearby: (bbox: string) => makeKey("nearby", bbox),
 };

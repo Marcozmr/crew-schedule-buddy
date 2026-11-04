@@ -162,7 +162,7 @@ export function useScheduleData() {
   }, [loadSchedule, user]);
 
   useEffect(() => {
-    let debounceId: ReturnType<typeof window.setTimeout> | undefined;
+    let debounceId: number | undefined;
     const scheduleReload = () => {
       if (debounceId != null) window.clearTimeout(debounceId);
       debounceId = window.setTimeout(() => {

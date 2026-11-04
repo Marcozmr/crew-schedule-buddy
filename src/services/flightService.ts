@@ -20,7 +20,6 @@ export {
 } from "./flightBoard/flightService";
 export { getFlightBoardData as getUnifiedFlightBoardData } from "./flightBoard/flightBoardDataService";
 export { getFlightStatus } from "./flightBoard/flightStatusService";
-export { getNearbyAircraft } from "./flightBoard/nearbyAircraftService";
 
 // Types
 export type {
@@ -29,7 +28,6 @@ export type {
   FlightFilters,
 } from "./flightBoard/types";
 export type { FlightStatusResult } from "./flightBoard/flightStatusService";
-export type { NearbyAircraft, NearbyAircraftOptions } from "./flightBoard/nearbyAircraftService";
 
 // Provider (para debug/troca de API)
 export {

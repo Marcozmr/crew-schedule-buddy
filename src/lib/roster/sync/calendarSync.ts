@@ -1,4 +1,4 @@
-import { google } from 'googleapis'
+import { google, type calendar_v3 } from 'googleapis'
 import { getGoogleAuthClient } from './authGoogle.ts'
 import type { DayOff, Flight, RosterJson } from '../types.ts'
 
@@ -17,12 +17,12 @@ function toDayOffKey(dayOff: DayOff): string {
 }
 
 function extractDateFromEvent(
-  event: google.calendar_v3.Schema$Event,
+  event: calendar_v3.Schema$Event,
 ): string | null {
   return event.start?.date ?? event.start?.dateTime?.slice(0, 10) ?? null
 }
 
-function parseFallbackKey(event: google.calendar_v3.Schema$Event): string | null {
+function parseFallbackKey(event: calendar_v3.Schema$Event): string | null {
   const summary = event.summary ?? ''
   const eventDate = extractDateFromEvent(event)
   if (!eventDate) return null
@@ -117,7 +117,7 @@ export async function syncRosterToCalendar(
     const flightNumber = normalizeFlightNumber(flight.flightNumber)
     const eventKey = `flight:${flight.date}:${flightNumber}`
     const eventTitle = `✈ ${flightNumber} ${flight.origin}→${flight.destination}`
-    const eventPayload: google.calendar_v3.Schema$Event = {
+    const eventPayload: calendar_v3.Schema$Event = {
       summary: eventTitle,
       description: [
         `Voo: ${flightNumber}`,
@@ -170,7 +170,7 @@ export async function syncRosterToCalendar(
     nextDate.setUTCDate(nextDate.getUTCDate() + 1)
     const endDate = nextDate.toISOString().slice(0, 10)
 
-    const eventPayload: google.calendar_v3.Schema$Event = {
+    const eventPayload: calendar_v3.Schema$Event = {
       summary: eventTitle,
       description: dayOff.rawText,
       colorId: '2',

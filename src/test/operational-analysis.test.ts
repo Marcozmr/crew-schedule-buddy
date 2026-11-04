@@ -5,6 +5,10 @@ import type { ScheduleEntry } from '@/hooks/useScheduleData';
 function makeFlight(overrides: Partial<ScheduleEntry>): ScheduleEntry {
   return {
     id: overrides.id ?? crypto.randomUUID(),
+    entry_type: overrides.entry_type ?? null,
+    crew_status_code: overrides.crew_status_code ?? null,
+    crew_status_label: overrides.crew_status_label ?? null,
+    activity_label: overrides.activity_label ?? null,
     date: overrides.date ?? '2026-03-17',
     flight_number: overrides.flight_number ?? 'LA0000',
     departure: overrides.departure ?? 'BSB',
