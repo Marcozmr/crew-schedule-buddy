@@ -28,6 +28,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { corporatePortalConfig, isLoginUrlConfigured, isTestMode } from '@/lib/corporate-portal-config';
 import { emitRosterUpdated } from '@/lib/events/roster-events';
 import { useUserRosterConnection } from '@/hooks/useUserRosterConnection';
+import { DevicePortalCard } from '@/modules/device-portal/ui/DevicePortalCard';
 import { UserRosterConnectionService } from '../services/UserRosterConnectionService';
 import type { ProviderStatus } from '../types';
 import { CORPORATE_ROSTER_FLOW } from '@/lib/roster/roster-ux-messages';
@@ -585,6 +586,7 @@ export function RosterSourcesCard({ onImportComplete }: RosterSourcesCardProps) 
       </div>
 
       <div className="space-y-3 min-w-0">
+        <DevicePortalCard onImported={handleImportComplete} />
         {pdfSource && pdfSource.available && !automationAsPrimary && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl border border-border bg-background/60 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
