@@ -6,78 +6,108 @@
 
 @layer base {
   :root {
-    /* Canvas cinza visível em toda a viewport (html/body/#root + shell) */
-    --background: 220 11% 90%;
-    --foreground: 222 47% 11%;
+    /* Paleta "Pista" (opção A): cinza, branco, verde e amarelo. Valores em
+       docs/superpowers/specs/2026-11-18-visual-verde-amarelo-design.md */
+    --background: 210 13% 94%;
+    --foreground: 221 39% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 221 39% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    /* Azul EscalaX */
-    --primary: 221 83% 53%;
+    --popover-foreground: 221 39% 11%;
+    --primary: 142 72% 29%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 221 83% 63%;
+    --primary-glow: 142 69% 58%;
     --secondary: 220 14% 96%;
-    --secondary-foreground: 222 35% 18%;
-    --muted: 220 12% 91%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 38 92% 50%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
+    --secondary-foreground: 221 39% 11%;
+    --muted: 220 13% 91%;
+    --muted-foreground: 217 11% 40%;
+    /* Amarelo: só como fundo, sempre com texto escuro */
+    --accent: 48 96% 53%;
+    --accent-foreground: 215 28% 17%;
+    --destructive: 0 74% 42%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%;
+    --success: 142 72% 29%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --border: 220 13% 86%;
-    --input: 220 13% 88%;
-    --ring: 221 83% 53%;
+    --warning: 48 96% 53%;
+    --warning-foreground: 215 28% 17%;
+    --border: 213 15% 88%;
+    --input: 213 15% 88%;
+    --ring: 142 72% 29%;
     --radius: 0.75rem;
     --radius-card: 1.25rem;
     --radius-shell: 1.75rem;
-    --sidebar-background: 220 12% 95%;
-    --sidebar-foreground: 220 9% 38%;
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 217 11% 40%;
+    --sidebar-primary: 142 72% 29%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 92%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 220 13% 88%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-accent: 141 84% 93%;
+    --sidebar-accent-foreground: 143 64% 24%;
+    --sidebar-border: 213 15% 88%;
+    --sidebar-ring: 142 72% 29%;
+    /* Tipos de dia da escala (fundo / texto) */
+    --day-voo: 141 84% 93%;
+    --day-voo-foreground: 143 64% 24%;
+    --day-folga: 0 0% 100%;
+    --day-folga-foreground: 217 11% 40%;
+    --day-sobreaviso: 55 97% 88%;
+    --day-sobreaviso-foreground: 32 81% 29%;
+    --day-reserva: 48 96% 53%;
+    --day-reserva-foreground: 215 28% 17%;
+    --day-curso: 142 72% 29%;
+    --day-curso-foreground: 0 0% 100%;
+    --day-ferias: 220 13% 91%;
+    --day-ferias-foreground: 217 19% 27%;
+    --day-dispensa: 217 19% 27%;
+    --day-dispensa-foreground: 0 0% 100%;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 213 94% 68%;
-    --primary-foreground: 222 47% 11%;
-    --primary-glow: 213 94% 76%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 48%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --border: 217 33% 22%;
-    --input: 217 33% 22%;
-    --ring: 213 94% 68%;
-    --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 213 94% 68%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 217 33% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 22%;
-    --sidebar-ring: 213 94% 68%;
+    --background: 214 17% 8%;
+    --foreground: 220 14% 96%;
+    --card: 213 14% 12%;
+    --card-foreground: 220 14% 96%;
+    --popover: 213 14% 12%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 142 69% 58%;
+    --primary-foreground: 145 80% 10%;
+    --primary-glow: 142 77% 73%;
+    --secondary: 215 15% 16%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 214 14% 19%;
+    --muted-foreground: 215 14% 68%;
+    --accent: 50 98% 64%;
+    --accent-foreground: 50 100% 6%;
+    --destructive: 0 91% 71%;
+    --destructive-foreground: 0 63% 7%;
+    --success: 142 69% 58%;
+    --success-foreground: 145 80% 10%;
+    --warning: 50 98% 64%;
+    --warning-foreground: 50 100% 6%;
+    --border: 214 14% 19%;
+    --input: 214 14% 19%;
+    --ring: 142 69% 58%;
+    --sidebar-background: 213 14% 12%;
+    --sidebar-foreground: 215 14% 68%;
+    --sidebar-primary: 142 69% 58%;
+    --sidebar-primary-foreground: 145 80% 10%;
+    --sidebar-accent: 144 61% 20%;
+    --sidebar-accent-foreground: 142 77% 73%;
+    --sidebar-border: 214 14% 19%;
+    --sidebar-ring: 142 69% 58%;
+    --day-voo: 144 61% 20%;
+    --day-voo-foreground: 142 77% 73%;
+    --day-folga: 213 14% 12%;
+    --day-folga-foreground: 215 14% 68%;
+    --day-sobreaviso: 26 83% 14%;
+    --day-sobreaviso-foreground: 48 97% 77%;
+    --day-reserva: 50 98% 64%;
+    --day-reserva-foreground: 50 100% 6%;
+    --day-curso: 142 69% 58%;
+    --day-curso-foreground: 145 80% 10%;
+    --day-ferias: 214 14% 19%;
+    --day-ferias-foreground: 216 12% 84%;
+    --day-dispensa: 220 13% 91%;
+    --day-dispensa-foreground: 214 17% 8%;
   }
 }
 
@@ -209,7 +239,7 @@
   }
 
   .gradient-primary {
-    background: linear-gradient(135deg, hsl(220, 13%, 32%), hsl(220, 13%, 24%));
+    background: linear-gradient(135deg, hsl(146, 65%, 39%), hsl(144, 72%, 21%));
   }
 
   .gradient-dark {
@@ -217,7 +247,7 @@
   }
 
   .gradient-sky {
-    background: linear-gradient(135deg, hsl(220, 13%, 38%), hsl(220, 10%, 28%));
+    background: linear-gradient(135deg, hsl(146, 65%, 39%), hsl(144, 72%, 21%));
   }
 
   .shadow-card {
