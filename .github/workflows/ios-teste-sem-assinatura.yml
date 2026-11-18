@@ -7,7 +7,7 @@ name: iOS teste (sem assinatura)
 
 on:
   push:
-    branches: [spike/webview-iflight]
+    branches: [spike/webview-iflight, feat/escalax-v3]
   workflow_dispatch:
 
 jobs:
