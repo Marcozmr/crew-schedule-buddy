@@ -69,14 +69,16 @@ De cima para baixo, como no desenho:
 4. Faixa de 7 dias a partir de hoje, cada dia com a cor e a sigla do tipo; hoje com contorno escuro. Legenda dos 7 tipos embaixo.
 5. Lista por dia com os cartões novos (ícone redondo do tipo, rota ou nome do evento, horário, selo de status).
 
-### 5. Logo
+### 5. Logo — escolhido: "Órbita" (opção 4)
 
-Três opções no desenho (quadro "Logo novo — 3 opções"). Depois da escolha:
+O mesmo avião de hoje (ícone `Plane` do lucide), preenchido de branco, dentro de uma órbita amarela que passa por trás e pela frente dele, com um ponto amarelo na ponta; fundo em degradê verde `#22A35A` → `#0F5B2E` (diagonal). Desenho de referência: quadro "Logo — opções tecnológicas" no link acima.
 
-- SVG fonte em `public/escalax-logo.svg`;
-- `public/escalax-icon.png` (512px) e favicon, que hoje estão **faltando** no repositório (o `index.html` e o PWA apontam para um arquivo apagado);
-- ícones do Android (`mipmap-*`, ícone adaptativo) e do iPhone (`AppIcon-512@2x.png`, hoje é o ícone padrão do Capacitor);
-- o quadradinho com avião no topo da barra lateral passa a usar o logo.
+Fonte única em `public/escalax-logo.svg` (512×512), da qual saem:
+
+- `public/escalax-icon.png` (512px, cantos arredondados) e `favicon.ico`, que hoje estão **faltando** no repositório (o `index.html` e o PWA apontam para um arquivo apagado);
+- ícone *maskable* do PWA e ícone do iPhone (`AppIcon-512@2x.png`, 1024px) **sem** cantos arredondados e sem transparência: o sistema aplica a máscara. Hoje o do iPhone é o ícone padrão do Capacitor;
+- Android: ícone adaptativo com fundo (o degradê) e frente (avião + órbita dentro da área segura de 66%), mais os `mipmap-*` legados. Hoje o `ic_launcher.png` está todo preto;
+- dentro do app: o quadradinho com avião do login, do cadastro e da barra lateral passa a usar o logo.
 
 ## Fora desta fase
 
