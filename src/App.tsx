@@ -58,6 +58,8 @@ const ConnectionDaysOffPage = lazy(() => import("./pages/connections/ConnectionD
 const ConnectionLayoversPage = lazy(() => import("./pages/connections/ConnectionLayoversPage"));
 const ConnectionSharePage = lazy(() => import("./pages/connections/ConnectionSharePage"));
 const ConnectionAlertsPage = lazy(() => import("./pages/connections/ConnectionAlertsPage"));
+// SPIKE (descartável): teste do login LATAM numa WebView do app.
+const IFlightLabPage = lazy(() => import("./lab/iflight/IFlightLabPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -363,6 +365,14 @@ export function AppRoutes() {
       <Route path="/legal/:document" element={<LegalPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/support" element={<SupportPage />} />
+      <Route
+        path="/lab/iflight"
+        element={
+          <ProtectedRoute>
+            <IFlightLabPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<NotFound />} />
     </Routes>
   </Suspense>

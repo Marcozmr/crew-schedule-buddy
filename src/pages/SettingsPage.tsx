@@ -227,6 +227,11 @@ export default function SettingsPage() {
           </Button>
         </motion.div>
 
+        {/* SPIKE (descartável): entrada para o teste do iFlight dentro do app. */}
+        <Link to="/lab/iflight" className="block text-center text-xs text-muted-foreground underline">
+          Teste: iFlight dentro do app
+        </Link>
+
       </div>
     </AppLayout>
   );

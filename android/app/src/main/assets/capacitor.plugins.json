@@ -1,6 +1,14 @@
 [
 	{
+		"pkg": "@capacitor/browser",
+		"classpath": "com.capacitorjs.plugins.browser.BrowserPlugin"
+	},
+	{
 		"pkg": "@capacitor/local-notifications",
 		"classpath": "com.capacitorjs.plugins.localnotifications.LocalNotificationsPlugin"
+	},
+	{
+		"pkg": "@capgo/inappbrowser",
+		"classpath": "ee.forgr.capacitor_inappbrowser.InAppBrowserPlugin"
 	}
 ]
