@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => ({
       injectRegister: null,
       /** Utilizador confirma atualização (toast “Atualizar agora”) — evita ativar build nova em segundo plano sem controlo. */
       registerType: "prompt",
-      includeAssets: ["escalax-icon.png", "favicon.ico"],
+      includeAssets: ["escalax-icon.png", "escalax-maskable.png", "apple-touch-icon.png", "favicon.png", "escalax-logo.svg"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallback: "/index.html",
@@ -90,12 +90,13 @@ export default defineConfig(({ mode }) => ({
         description: "EscalaX — Gestão operacional e de escala para tripulantes",
         start_url: "/",
         display: "standalone",
-        background_color: "#F8FAFC",
-        theme_color: "#2563EB",
+        background_color: "#EEF0F2",
+        theme_color: "#15803D",
         orientation: "portrait-primary",
         categories: ["productivity", "utilities"],
         icons: [
-          { src: "/escalax-icon.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+          { src: "/escalax-icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/escalax-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
         file_handlers: [
           {

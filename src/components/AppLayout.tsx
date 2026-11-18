@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, ChevronLeft, HelpCircle, Cloud, CalendarClock, Users, Home, Map, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, ChevronLeft, HelpCircle, Cloud, CalendarClock, Users, Home, Map, BarChart2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +9,7 @@ import { FeedbackFAB } from '@/components/FeedbackFAB';
 import { ConnectedRosterLifecycle } from '@/components/roster/ConnectedRosterLifecycle';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { AppShell } from '@/components/layout/AppShell';
+import { EscalaXLogo } from '@/components/brand/EscalaXLogo';
 import { useFlightNotifications } from '@/hooks/useFlightNotifications';
 import { useRosterSyncReminder } from '@/hooks/useRosterSyncReminder';
 
@@ -139,9 +140,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
         {/* Desktop sidebar */}
         <aside className="hidden w-[248px] shrink-0 flex-col border-b border-border bg-card safe-area-top safe-area-bottom dark:border-border dark:bg-card/50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-dvh lg:border-b-0 lg:border-r lg:border-border lg:shadow-sm">
           <div className="flex h-16 items-center gap-3 border-b border-border px-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
-              <Plane className="h-4 w-4 text-primary-foreground" />
-            </div>
+            <EscalaXLogo size={36} />
             <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -384,9 +383,7 @@ function AppLayoutRouterFallback({
         {/* Desktop sidebar */}
         <aside className="hidden w-[248px] shrink-0 flex-col border-b border-border bg-card safe-area-top safe-area-bottom dark:border-border dark:bg-card/50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-dvh lg:border-b-0 lg:border-r lg:border-border lg:shadow-sm">
           <div className="flex h-16 items-center gap-3 border-b border-border px-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-sm">
-              <Plane className="h-4 w-4 text-primary-foreground" />
-            </div>
+            <EscalaXLogo size={36} />
             <span className="text-base font-bold tracking-tight text-slate-900 dark:text-foreground">EscalaX</span>
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Plane, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import { EscalaXLogo } from '@/components/brand/EscalaXLogo';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,9 +69,7 @@ export default function SignupPage() {
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6 }} className="relative z-10 w-full max-w-md mx-4">
         <div className="rounded-2xl p-8 shadow-elevated backdrop-blur-md bg-black/20 border border-white/10">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 rounded-2xl gradient-sky flex items-center justify-center mb-4 shadow-elevated">
-              <Plane className="w-8 h-8 text-white" />
-            </div>
+            <EscalaXLogo size={64} className="mb-4 drop-shadow-lg" />
             <h1 className="text-3xl font-extrabold text-white tracking-tight">EscalaX</h1>
           </div>
 
