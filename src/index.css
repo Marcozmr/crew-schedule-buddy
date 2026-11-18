@@ -191,7 +191,8 @@
   /* Em mobile/tablet, espaço para a bottom nav não cobrir conteúdo */
   @media (max-width: 1023px) {
     .pb-safe-content {
-      padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+      /* barra flutuante: 68px + 12px de margem + folga */
+      padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
     }
   }
 

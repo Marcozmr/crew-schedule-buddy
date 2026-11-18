@@ -48,35 +48,44 @@ interface AppNavLinkProps {
   className?: string;
   onClick?: () => void;
   to: string;
+  'aria-current'?: 'page';
 }
 
-function AppNavLink({ children, className, onClick, to }: AppNavLinkProps) {
+function AppNavLink({ children, className, onClick, to, 'aria-current': ariaCurrent }: AppNavLinkProps) {
   const hasRouter = useInRouterContext();
   if (!hasRouter) {
-    return <a href={to} className={className} onClick={onClick}>{children}</a>;
+    return <a href={to} className={className} onClick={onClick} aria-current={ariaCurrent}>{children}</a>;
   }
-  return <RouterLink to={to} className={className} onClick={onClick}>{children}</RouterLink>;
+  return <RouterLink to={to} className={className} onClick={onClick} aria-current={ariaCurrent}>{children}</RouterLink>;
 }
 
 function MobileBottomNav({ pathname }: { pathname: string }) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card border-t border-border"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      aria-label="Navegação principal"
+      className="fixed left-3 right-3 z-50 lg:hidden rounded-[34px] bg-card shadow-[0_10px_30px_rgba(17,24,39,0.14)] dark:border dark:border-border dark:shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
+      style={{ bottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
     >
-      <div className="flex items-stretch h-[54px]">
+      <div className="flex items-center h-[68px] px-1">
         {bottomNavItems.map((item) => {
           const active = pathname === item.path;
           return (
             <AppNavLink
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center gap-[3px] flex-1 transition-colors ${
-                active ? 'text-primary' : 'text-muted-foreground/60'
+              aria-current={active ? 'page' : undefined}
+              className={`flex flex-col items-center justify-center gap-[3px] flex-1 min-w-0 transition-colors ${
+                active ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
-              <item.icon className={`w-[22px] h-[22px] ${active ? 'stroke-[2.5]' : 'stroke-[1.5]'}`} />
-              <span className={`text-[10px] leading-none ${active ? 'font-semibold' : 'font-medium'}`}>
+              <span
+                className={`flex h-7 w-11 items-center justify-center rounded-full transition-colors ${
+                  active ? 'bg-day-voo dark:bg-day-voo' : ''
+                }`}
+              >
+                <item.icon className={`w-[22px] h-[22px] ${active ? 'stroke-[2.25]' : 'stroke-[1.75]'}`} aria-hidden="true" />
+              </span>
+              <span className={`text-[11px] leading-none truncate ${active ? 'font-bold' : 'font-semibold'}`}>
                 {item.label}
               </span>
             </AppNavLink>
