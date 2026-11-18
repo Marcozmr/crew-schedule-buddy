@@ -7,7 +7,14 @@ import { AppLayout } from '@/components/AppLayout';
 import { PdfImportDialog } from '@/components/PdfImportDialog';
 import { useScheduleData } from '@/hooks/useScheduleData';
 import { Link } from 'react-router-dom';
-import { Calendar, ChevronLeft, ChevronRight, CalendarClock, Building2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Building2, RefreshCw } from 'lucide-react';
+import { useOperationalClock } from '@/hooks/useOperationalClock';
+import { groupIntoDutyPeriods, getNextDutyPeriod } from '@/lib/duty-grouping';
+import { DAY_KIND_META, dayKindForEntries } from '@/lib/roster/day-kind';
+import { WeekStrip } from '@/components/schedule/WeekStrip';
+import { DayKindLegend } from '@/components/schedule/DayKindLegend';
+import { NextEventBanner } from '@/components/schedule/NextEventBanner';
+import { ScheduleListView } from '@/components/schedule/ScheduleListView';
 import { useAirportWeather } from '@/hooks/useAirportWeather';
 import { FlightCard } from '@/components/flight/FlightCard';
 import { motion } from 'framer-motion';
@@ -108,6 +115,12 @@ export default function SchedulePage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [view, setView] = useState<'lista' | 'mes'>('lista');
+  const { now, todayStr } = useOperationalClock('America/Sao_Paulo', reload);
+  const nextDuty = useMemo(
+    () => getNextDutyPeriod(groupIntoDutyPeriods(schedule), todayStr, now, 'America/Sao_Paulo'),
+    [schedule, todayStr, now],
+  );
 
   const getMonth = (dateStr: string) => parseDateBRT(dateStr).getMonth();
   const getDay = (dateStr: string) => parseDateBRT(dateStr).getDate();
@@ -155,38 +168,90 @@ export default function SchedulePage() {
   return (
     <AppLayout>
       <div className="space-y-4 min-w-0">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
-          <div className="min-w-0">
-            <p className="text-sm text-muted-foreground break-words">{filteredSchedule.length} registros em {months[selectedMonth]}</p>
-            <Link
-              to="/minha-escala"
-              className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-[32px] font-extrabold leading-tight tracking-tight text-foreground">Escala</h1>
+          <Link
+            to="/minha-escala"
+            aria-label="Sincronizar escala"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-card text-primary"
+          >
+            <RefreshCw className="h-5 w-5" aria-hidden="true" />
+          </Link>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center">
+            <button
+              type="button"
+              aria-label="Mês anterior"
+              onClick={() => setSelectedMonth((month) => Math.max(0, month - 1))}
+              className="flex h-11 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
             >
-              <CalendarClock className="h-3.5 w-3.5" />
-              Minha escala — PDF e atualização
+              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <h2 className="whitespace-nowrap text-[15px] font-bold text-foreground">
+              {months[selectedMonth].slice(0, 3)} {selectedYear}
+            </h2>
+            <button
+              type="button"
+              aria-label="Próximo mês"
+              onClick={() => setSelectedMonth((month) => Math.min(11, month + 1))}
+              className="flex h-11 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+            >
+              <ChevronRight className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div role="tablist" aria-label="Modo de ver a escala" className="flex gap-0.5 rounded-xl bg-muted p-[3px]">
+            {(['lista', 'mes'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+                className={`h-[30px] rounded-[9px] px-3 text-xs font-semibold ${
+                  view === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                {v === 'lista' ? 'Lista' : 'Mês'}
+              </button>
+            ))}
+            <Link to="/minha-escala" className="flex h-[30px] items-center rounded-[9px] px-3 text-xs font-semibold text-muted-foreground">
+              PDF
             </Link>
           </div>
-          <PdfImportDialog onImportComplete={reload} />
         </div>
 
-        <div className="glass px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-2 min-w-0">
-          <button
-            onClick={() => setSelectedMonth((month) => Math.max(0, month - 1))}
-            className="p-2 rounded-xl hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground shrink-0"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <h2 className="text-base sm:text-lg font-semibold text-foreground text-center break-words">
-            {months[selectedMonth]} {selectedYear}
-          </h2>
-          <button
-            onClick={() => setSelectedMonth((month) => Math.min(11, month + 1))}
-            className="p-2 rounded-xl hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground shrink-0"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
+        <NextEventBanner nextDuty={nextDuty} now={now} />
 
+        <WeekStrip
+          schedule={schedule}
+          today={now}
+          onSelectDay={(d) => {
+            setSelectedMonth(d.getMonth());
+            const has = schedule.some((e) => {
+              const p = parseDateBRT(e.date);
+              return p.getMonth() === d.getMonth() && p.getDate() === d.getDate();
+            });
+            setSelectedDay(has ? d.getDate() : null);
+          }}
+        />
+        <DayKindLegend />
+
+        {view === 'lista' && (
+          <div className="space-y-4">
+            {filteredSchedule.length > 0 ? (
+              <ScheduleListView entries={filteredSchedule} onSelectDay={setSelectedDay} />
+            ) : (
+              <EmptyState icon={Calendar} title={`Sem escala em ${months[selectedMonth]}`} className="my-4" />
+            )}
+            <div className="flex justify-center">
+              <PdfImportDialog onImportComplete={reload} />
+            </div>
+          </div>
+        )}
+
+        {view === 'mes' && (
         <div className="glass p-2 sm:p-4 lg:p-6 overflow-hidden min-w-0">
           <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-2">
             {weekDays.map((day) => (
@@ -200,31 +265,22 @@ export default function SchedulePage() {
             {calendarDays.map((item, index) => {
               if (item.day === 0) return <div key={index} />;
 
-              const hasFlights = item.entries.some((entry) => entry.is_flight);
-              const isDayOff = item.entries.length > 0 && item.entries.every((entry) => ['DO', 'FOLGA', 'OFF', 'X'].includes(entry.activity_type));
               const isToday = item.day === todayDay;
               const isSelected = item.day === selectedDay;
+              const meta = DAY_KIND_META[dayKindForEntries(item.entries)];
 
               return (
                 <button
                   key={index}
                   onClick={() => setSelectedDay(item.entries.length > 0 ? item.day : null)}
+                  aria-current={isToday ? 'date' : undefined}
                   className={`relative min-h-[58px] sm:min-h-[72px] lg:min-h-[88px] rounded-xl p-1 sm:p-1.5 lg:p-2 text-left transition-all duration-150 overflow-hidden ${
-                    isSelected
-                      ? 'bg-primary/10 ring-2 ring-primary/30'
-                      : isToday
-                        ? 'bg-primary/5 ring-1 ring-primary/20'
-                        : item.entries.length > 0
-                          ? 'hover:bg-secondary/80 bg-secondary/40'
-                          : 'hover:bg-secondary/50'
-                  }`}
+                    isSelected ? 'ring-2 ring-primary' : isToday ? 'ring-2 ring-foreground' : ''
+                  } ${item.entries.length > 0 ? meta.className : 'hover:bg-secondary/50'}`}
                 >
-                  <span
-                    className={`text-[10px] sm:text-xs font-medium ${
-                      isToday ? 'text-primary font-bold' : hasFlights ? 'text-foreground' : isDayOff ? 'text-success' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {item.day}
+                  <span className="flex items-center justify-between gap-0.5">
+                    <span className={`text-[10px] sm:text-xs ${isToday ? 'font-extrabold' : 'font-semibold'}`}>{item.day}</span>
+                    {meta.sigla && <span className="text-[8px] sm:text-[9px] font-extrabold tracking-wide">{meta.sigla}</span>}
                   </span>
 
                   <div className="mt-1 space-y-0.5 min-w-0">
@@ -248,6 +304,7 @@ export default function SchedulePage() {
             })}
           </div>
         </div>
+        )}
       </div>
 
       <Sheet open={!!selectedDay} onOpenChange={(open) => !open && setSelectedDay(null)}>

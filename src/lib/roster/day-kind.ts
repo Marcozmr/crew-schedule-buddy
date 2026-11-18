@@ -3,7 +3,27 @@
  * As cores vêm dos tokens --day-* de src/index.css.
  */
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
+import { parseDateBRT } from '@/lib/date-utils';
 import { resolveCrewStatusFromActivityCode } from './crew-status-labels';
+
+type DateLike = { getFullYear(): number; getMonth(): number; getDate(): number };
+
+/** Chave "AAAA-M-D" de um dia (no fuso de quem gerou o objeto de data). */
+export function dayKey(d: DateLike): string {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** Lançamentos agrupados pelo dia da escala (horário de Brasília). */
+export function groupEntriesByDay(entries: ScheduleEntry[]): Map<string, ScheduleEntry[]> {
+  const map = new Map<string, ScheduleEntry[]>();
+  for (const e of entries) {
+    const k = dayKey(parseDateBRT(e.date));
+    const list = map.get(k);
+    if (list) list.push(e);
+    else map.set(k, [e]);
+  }
+  return map;
+}
 
 export type DayKind = 'voo' | 'folga' | 'sobreaviso' | 'reserva' | 'curso' | 'ferias' | 'dispensa' | 'outro' | 'vazio';
 
@@ -32,7 +52,7 @@ const BY_ENTRY_TYPE: Record<string, DayKind> = {
   sick: 'dispensa',
 };
 
-function kindOf(entry: ScheduleEntry): DayKind {
+export function kindOf(entry: ScheduleEntry): DayKind {
   if (entry.is_flight) return 'voo';
   const type = entry.entry_type ?? (entry.crew_status_code ? resolveCrewStatusFromActivityCode(entry.crew_status_code).entryType : null);
   return (type && BY_ENTRY_TYPE[type]) || 'outro';
