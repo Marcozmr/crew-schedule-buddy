@@ -63,7 +63,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1f3c 40%, #1a3a5c 70%, #0a1628 100%)' }}>
+    <div className="min-h-screen relative flex items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #07140D 0%, #0B2416 40%, #14532D 70%, #08180F 100%)' }}>
 
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6 }} className="relative z-10 w-full max-w-md mx-4">
         <div className="rounded-2xl p-8 shadow-elevated backdrop-blur-md bg-black/20 border border-white/10">

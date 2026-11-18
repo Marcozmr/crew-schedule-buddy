@@ -34,8 +34,8 @@ const MENU_ITEMS = [
     icon: Share2,
     title: 'Compartilhar escala',
     desc: 'Compartilhe sua escala com familiares e amigos para acompanharem sua rotina.',
-    iconBg: 'bg-blue-500/10',
-    iconColor: 'text-blue-500',
+    iconBg: 'bg-primary/10',
+    iconColor: 'text-primary',
   },
   {
     to: '/connections/alerts',

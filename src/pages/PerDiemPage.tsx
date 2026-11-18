@@ -113,7 +113,7 @@ function DutyPerDiemCard({ entry }: { entry: ComputedDutyPerDiem }) {
         className="w-full flex items-center gap-2 px-4 py-3 text-left"
         onClick={() => setOpen(o => !o)}
       >
-        <span className={`w-2 h-2 rounded-full shrink-0 ${entry.hasOvernight ? 'bg-blue-400' : 'bg-green-400'}`} />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${entry.hasOvernight ? 'bg-accent' : 'bg-primary'}`} />
         <span className="text-sm font-semibold text-foreground flex-1">{dutyDateLabel(entry.date)}</span>
         <span className="text-base mr-1">{mealIcons}</span>
         <span className="text-sm font-bold text-foreground">{fmtBRL(entry.total)}</span>
@@ -140,8 +140,8 @@ function DutyPerDiemCard({ entry }: { entry: ComputedDutyPerDiem }) {
                   <span className="text-sm font-bold text-foreground">{fmtBRL(meal.value)}</span>
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
                     meal.isNational
-                      ? 'bg-green-500/15 text-green-600 dark:text-green-400'
-                      : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                      ? 'bg-day-voo text-day-voo-foreground'
+                      : 'bg-day-sobreaviso text-day-sobreaviso-foreground'
                   }`}>
                     {meal.isNational ? 'NAC' : 'INT'}
                   </span>

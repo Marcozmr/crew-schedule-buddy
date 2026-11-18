@@ -282,7 +282,7 @@ export function OnboardingModal({ open, onClose }: Props) {
               <div className="flex-1 flex flex-col px-6 py-10 max-w-lg mx-auto w-full">
                 {/* Logo */}
                 <div className="flex flex-col items-center text-center mb-8">
-                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary to-sky-400 flex items-center justify-center shadow-xl mb-5">
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center shadow-xl mb-5">
                     <Plane className="w-10 h-10 text-white" />
                   </div>
                   <h1 className="text-3xl font-extrabold text-foreground">Bem-vindo ao EscalaX</h1>

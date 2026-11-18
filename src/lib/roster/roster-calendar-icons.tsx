@@ -43,7 +43,7 @@ function iconForType(
     case 'standby':
       return <Clock className={iconClass(size, 'text-amber-700 dark:text-amber-400')} />;
     case 'course':
-      return <GraduationCap className={iconClass(size, 'text-sky-600 dark:text-sky-400')} />;
+      return <GraduationCap className={iconClass(size, 'text-primary')} />;
     case 'simulator':
       return <MonitorPlay className={iconClass(size, 'text-violet-600 dark:text-violet-400')} />;
     case 'crm':
@@ -70,7 +70,7 @@ export function getRosterCalendarCellPillClass(entry: ScheduleEntry): string {
   const t = getRosterEventVisualType(entry);
   switch (t) {
     case 'flight':
-      return 'bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold';
+      return 'bg-primary/15 text-foreground font-semibold';
     case 'rest':
       return 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-medium';
     case 'extra':
@@ -79,18 +79,18 @@ export function getRosterCalendarCellPillClass(entry: ScheduleEntry): string {
       return 'bg-orange-500/20 text-orange-700 dark:text-orange-300';
     case 'course':
     case 'simulator':
-      return 'bg-sky-500/20 text-sky-700 dark:text-sky-300';
+      return 'bg-primary/10 text-foreground';
     case 'crm':
     case 'cma':
       return 'bg-slate-400/20 text-slate-700 dark:text-slate-300';
     case 'lgpd':
-      return 'bg-blue-400/15 text-blue-700 dark:text-blue-300';
+      return 'bg-primary/10 text-foreground';
     case 'medical':
       return 'bg-rose-500/20 text-rose-700 dark:text-rose-300';
     case 'hotel':
       return 'bg-violet-400/15 text-violet-700 dark:text-violet-300';
     case 'presentation':
-      return 'bg-blue-500/20 text-blue-700 dark:text-blue-300';
+      return 'bg-primary/15 text-foreground';
     case 'generic':
     default:
       return 'bg-slate-400/15 text-slate-600 dark:text-slate-400';
@@ -110,7 +110,7 @@ export function getRosterCalendarContainerClass(entry: ScheduleEntry): string {
       return 'bg-warning/10';
     case 'course':
     case 'simulator':
-      return 'bg-sky-500/10 dark:bg-sky-400/10';
+      return 'bg-primary/10';
     case 'crm':
     case 'cma':
       return 'bg-secondary';

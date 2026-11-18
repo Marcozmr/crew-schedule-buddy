@@ -43,8 +43,8 @@ export default function ConnectionSharePage() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15">
-            <Share2 className="h-5 w-5 text-blue-500" strokeWidth={1.75} />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
+            <Share2 className="h-5 w-5 text-primary" strokeWidth={1.75} />
           </div>
           <div>
             <h1 className="text-lg font-bold text-foreground">Compartilhar escala</h1>

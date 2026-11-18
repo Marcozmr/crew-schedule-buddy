@@ -83,7 +83,7 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1f3c 40%, #1a3a5c 70%, #0a1628 100%)' }}>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, #07140D 0%, #0B2416 40%, #14532D 70%, #08180F 100%)' }}>
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.97 }}
