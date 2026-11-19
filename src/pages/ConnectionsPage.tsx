@@ -1,102 +1,331 @@
-import { Link } from 'react-router-dom';
+/**
+ * Conexões: quem do EscalaX voa com você. Três abas práticas — próximos voos com colegas, colegas
+ * (com folgas e pernoites em comum ao tocar) e conversas. Os dados vêm das RPCs que só revelam um
+ * colega quando vocês estão no mesmo voo ou já voaram juntos.
+ */
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronDown, Loader2, MessageCircle, Plane, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { AppLayout } from '@/components/AppLayout';
-import { motion } from 'framer-motion';
-import { Users, Calendar, Share2, MapPin, Bell, ChevronRight } from 'lucide-react';
-import { AppCard, AppCardSection } from '@/components/ui/primitives';
+import { useAuth } from '@/lib/auth-context';
+import {
+  CrewDiscoveryService,
+  type CrewConnectionEntry,
+  type RosterCrewmateEntry,
+} from '@/lib/services/crew-discovery-service';
+import { CrewConversationService, type CrewConversationSummary } from '@/lib/services/crew-conversation-service';
 
-const MENU_ITEMS = [
-  {
-    to: '/connections/colleagues',
-    icon: Users,
-    title: 'Conecte com tripulantes',
-    desc: 'Encontre colegas com quem você já voou e veja quando suas escalas coincidem.',
-    iconBg: 'bg-primary/10',
-    iconColor: 'text-primary',
-  },
-  {
-    to: '/connections/days-off',
-    icon: Calendar,
-    title: 'Compare folgas',
-    desc: 'Descubra quem tem os mesmos dias de folga para planejar atividades juntos.',
-    iconBg: 'bg-green-500/10',
-    iconColor: 'text-green-500',
-  },
-  {
-    to: '/connections/layovers',
-    icon: MapPin,
-    title: 'Pernoites em comum',
-    desc: 'Saiba quais colegas estarão na mesma cidade durante layovers.',
-    iconBg: 'bg-amber-500/10',
-    iconColor: 'text-amber-500',
-  },
-  {
-    to: '/connections/share',
-    icon: Share2,
-    title: 'Compartilhar escala',
-    desc: 'Compartilhe sua escala com familiares e amigos para acompanharem sua rotina.',
-    iconBg: 'bg-primary/10',
-    iconColor: 'text-primary',
-  },
-  {
-    to: '/connections/alerts',
-    icon: Bell,
-    title: 'Alertas de coincidência',
-    desc: 'Notificações automáticas quando um colega estiver no mesmo voo, folga ou cidade.',
-    iconBg: 'bg-purple-500/10',
-    iconColor: 'text-purple-500',
-  },
-];
+type Tab = 'voos' | 'colegas' | 'conversas';
 
-const fade = (delay = 0) => ({
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0 },
-  transition: { delay, duration: 0.3, ease: 'easeOut' as const },
-});
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+/** "2026-03-21" → "21/mar". */
+const dayMonth = (iso: string) => `${Number(iso.slice(8, 10))}/${MONTHS[Number(iso.slice(5, 7)) - 1] ?? ''}`;
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('');
+const today = () => new Date().toISOString().slice(0, 10);
+
+const APP_URL = 'https://escalax-app.vercel.app';
+
+async function invite() {
+  const text = 'Estou usando o EscalaX para acompanhar minha escala e ver quem voa comigo. Baixe também:';
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'EscalaX', text, url: APP_URL });
+      return;
+    }
+    await navigator.clipboard.writeText(`${text} ${APP_URL}`);
+    toast.success('Convite copiado — é só colar no grupo da tripulação.');
+  } catch {
+    /* compartilhamento cancelado */
+  }
+}
+
+function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
+  const cls = size === 'sm' ? 'h-7 w-7 text-[10px]' : 'h-10 w-10 text-xs';
+  return (
+    <span className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent font-bold text-primary-foreground ${cls}`}>
+      {initials(name) || '?'}
+    </span>
+  );
+}
+
+function Empty({ emoji, title, text }: { emoji: string; title: string; text: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-border bg-card/60 px-6 py-10 text-center">
+      <span className="text-4xl" aria-hidden>
+        {emoji}
+      </span>
+      <p className="text-base font-semibold text-foreground">{title}</p>
+      <p className="max-w-xs text-sm text-muted-foreground">{text}</p>
+      <button type="button" onClick={invite} className="mt-1 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-95">
+        <Share2 className="h-4 w-4" /> Convidar colegas
+      </button>
+    </div>
+  );
+}
+
+function FlightsTab({ crewmates, chatFor }: { crewmates: RosterCrewmateEntry[]; chatFor: (id: string) => string | null }) {
+  const flights = useMemo(() => {
+    const groups = new Map<string, { date: string; flight: string; from: string | null; to: string | null; crew: RosterCrewmateEntry[] }>();
+    for (const c of crewmates) {
+      if (c.flightDate < today()) continue;
+      const key = `${c.flightDate}|${c.flightNumber}`;
+      const g = groups.get(key) ?? { date: c.flightDate, flight: c.flightNumber, from: c.departure, to: c.arrival, crew: [] };
+      if (!g.crew.some((x) => x.partnerUserId === c.partnerUserId)) g.crew.push(c);
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date) || a.flight.localeCompare(b.flight));
+  }, [crewmates]);
+
+  if (flights.length === 0) {
+    return <Empty emoji="✈️" title="Ninguém do EscalaX nos seus próximos voos" text="Quando um colega que usa o app estiver na mesma tripulação, ele aparece aqui." />;
+  }
+  return (
+    <ul className="space-y-3">
+      {flights.map((f) => (
+        <li key={`${f.date}|${f.flight}`} className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+          <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
+            <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <span className="text-lg font-bold leading-none">{Number(f.date.slice(8, 10))}</span>
+              <span className="text-[10px] font-semibold uppercase">{MONTHS[Number(f.date.slice(5, 7)) - 1]}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-mono text-sm font-bold text-foreground">{f.flight}</p>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {f.from ?? '—'} <Plane className="h-3 w-3" /> {f.to ?? '—'}
+              </p>
+            </div>
+            <span className="rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-foreground">
+              {f.crew.length} {f.crew.length === 1 ? 'colega' : 'colegas'}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2 px-4 py-3">
+            {f.crew.map((c) => {
+              const chat = chatFor(c.partnerUserId);
+              const chip = (
+                <>
+                  <Avatar name={c.partnerName} size="sm" />
+                  <span className="text-sm font-medium text-foreground">{c.partnerName}</span>
+                  {c.crewRole && <span className="text-[10px] font-semibold uppercase text-muted-foreground">{c.crewRole}</span>}
+                  {chat && <MessageCircle className="h-3.5 w-3.5 text-primary" />}
+                </>
+              );
+              return chat ? (
+                <Link key={c.partnerUserId} to={`/connections/chat/${chat}`} className="flex items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 active:scale-95">
+                  {chip}
+                </Link>
+              ) : (
+                <span key={c.partnerUserId} className="flex items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3">
+                  {chip}
+                </span>
+              );
+            })}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ColleagueCard({ c }: { c: CrewConnectionEntry }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [shared, setShared] = useState<{ daysOff: string[]; layovers: Array<{ date: string; city: string }> } | null>(null);
+
+  useEffect(() => {
+    if (!open || shared) return;
+    let cancelled = false;
+    Promise.all([CrewDiscoveryService.getSharedDaysOff(c.partnerUserId), CrewDiscoveryService.getSharedLayovers(c.partnerUserId)]).then(([daysOff, layovers]) => {
+      if (!cancelled) setShared({ daysOff: daysOff.filter((d) => d >= today()).sort(), layovers: layovers.filter((l) => l.date >= today()).sort((a, b) => a.date.localeCompare(b.date)) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, shared, c.partnerUserId]);
+
+  return (
+    <li className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <Avatar name={c.partnerName} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-foreground">{c.partnerName}</span>
+          <span className="block text-xs text-muted-foreground">
+            {c.flightsTogetherCount} {c.flightsTogetherCount === 1 ? 'voo juntos' : 'voos juntos'}
+            {c.partnerAirline ? ` · ${c.partnerAirline}` : ''}
+          </span>
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-border/60">
+            <div className="space-y-3 px-4 py-3">
+              {!shared ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cruzando as escalas…
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-foreground">🏖️ Folgas em comum</p>
+                    {shared.daysOff.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {shared.daysOff.slice(0, 8).map((d) => (
+                          <span key={d} className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                            {dayMonth(d)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Nenhuma folga em comum por enquanto.</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-foreground">🏨 Pernoites na mesma cidade</p>
+                    {shared.layovers.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {shared.layovers.slice(0, 8).map((l) => (
+                          <span key={`${l.date}${l.city}`} className="rounded-full bg-accent/15 px-2.5 py-1 text-xs font-semibold text-foreground">
+                            {dayMonth(l.date)} · {l.city}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Nenhum pernoite juntos por enquanto.</p>
+                    )}
+                  </div>
+                </>
+              )}
+              {c.conversationId && (
+                <button type="button" onClick={() => navigate(`/connections/chat/${c.conversationId}`)} className="inline-flex items-center gap-2 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-95">
+                  <MessageCircle className="h-3.5 w-3.5" /> Conversar
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </li>
+  );
+}
+
+function ConversationsTab({ conversations }: { conversations: CrewConversationSummary[] }) {
+  if (conversations.length === 0) {
+    return <Empty emoji="💬" title="Nenhuma conversa ainda" text="A conversa com um colega abre sozinha depois que vocês voam juntos mais de uma vez." />;
+  }
+  return (
+    <ul className="space-y-2">
+      {conversations.map((c) => (
+        <li key={c.id}>
+          <Link to={`/connections/chat/${c.id}`} className="flex items-center gap-3 rounded-3xl border border-border bg-card px-4 py-3 shadow-sm active:scale-[0.99]">
+            <Avatar name={c.partnerName} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-foreground">{c.partnerName}</span>
+              <span className="block truncate text-xs text-muted-foreground">{c.lastMessagePreview ?? 'Diga olá 👋'}</span>
+            </span>
+            {c.lastMessageAt && <span className="shrink-0 text-[11px] text-muted-foreground">{dayMonth(c.lastMessageAt.slice(0, 10))}</span>}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function ConnectionsPage() {
+  const { user } = useAuth();
+  const userId = user?.id;
+  const [tab, setTab] = useState<Tab>('voos');
+  const [loading, setLoading] = useState(true);
+  const [crewmates, setCrewmates] = useState<RosterCrewmateEntry[]>([]);
+  const [connections, setConnections] = useState<CrewConnectionEntry[]>([]);
+  const [conversations, setConversations] = useState<CrewConversationSummary[]>([]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    Promise.all([CrewDiscoveryService.getRosterCrewmates(), CrewDiscoveryService.listConnections(), CrewConversationService.listConversations(userId)]).then(([cm, cn, cv]) => {
+      if (cancelled) return;
+      setCrewmates(cm);
+      setConnections([...cn].sort((a, b) => b.flightsTogetherCount - a.flightsTogetherCount));
+      setConversations(cv);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const chatFor = useMemo(() => {
+    const byPartner = new Map(connections.filter((c) => c.conversationId).map((c) => [c.partnerUserId, c.conversationId as string]));
+    return (id: string) => byPartner.get(id) ?? null;
+  }, [connections]);
+
+  const upcoming = useMemo(() => new Set(crewmates.filter((c) => c.flightDate >= today()).map((c) => `${c.flightDate}|${c.flightNumber}`)).size, [crewmates]);
+  const tabs: Array<{ id: Tab; label: string; count: number }> = [
+    { id: 'voos', label: 'Próximos voos', count: upcoming },
+    { id: 'colegas', label: 'Colegas', count: connections.length },
+    { id: 'conversas', label: 'Conversas', count: conversations.length },
+  ];
+
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto space-y-5">
+      <div className="mx-auto max-w-2xl space-y-5 pb-10">
+        <header className="flex items-end justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Conexões</h1>
+            <p className="text-sm text-muted-foreground">Quem voa com você no EscalaX</p>
+          </div>
+          <button type="button" onClick={invite} aria-label="Convidar colegas" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-sm active:scale-95">
+            <Share2 className="h-3.5 w-3.5 text-primary" /> Convidar
+          </button>
+        </header>
 
-        {/* Hero */}
-        <motion.div {...fade(0)}>
-          <AppCard className="relative overflow-hidden">
-            <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-primary/10 blur-3xl" />
-            <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-primary/8 blur-2xl" />
-            <AppCardSection className="relative flex flex-col items-center py-8 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15">
-                <Users className="h-8 w-8 text-primary" strokeWidth={1.75} />
-              </div>
-              <h1 className="text-xl font-bold text-foreground">Conexões</h1>
-              <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">
-                Conecte-se com colegas de tripulação e compartilhe sua rotina com quem importa.
-              </p>
-            </AppCardSection>
-          </AppCard>
-        </motion.div>
-
-        {/* Menu */}
-        <div className="space-y-2.5">
-          {MENU_ITEMS.map((item, i) => (
-            <motion.div key={item.to} {...fade(0.05 + i * 0.04)}>
-              <Link to={item.to}>
-                <AppCard className="hover:bg-secondary/40 transition-colors">
-                  <AppCardSection className="flex items-center gap-3">
-                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.iconBg}`}>
-                      <item.icon className={`h-5 w-5 ${item.iconColor}`} strokeWidth={1.75} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </AppCardSection>
-                </AppCard>
-              </Link>
-            </motion.div>
+        <div role="tablist" className="grid grid-cols-3 gap-1 rounded-2xl bg-muted p-1">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`relative rounded-xl px-2 py-2 text-xs font-semibold transition-colors ${tab === t.id ? 'text-foreground' : 'text-muted-foreground'}`}
+            >
+              {tab === t.id && <motion.span layoutId="connections-tab" className="absolute inset-0 rounded-xl bg-card shadow-sm" />}
+              <span className="relative">
+                {t.label}
+                {t.count > 0 && <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10px] text-primary">{t.count}</span>}
+              </span>
+            </button>
           ))}
         </div>
 
+        {loading ? (
+          <p className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Procurando colegas…
+          </p>
+        ) : (
+          <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+            {tab === 'voos' && <FlightsTab crewmates={crewmates} chatFor={chatFor} />}
+            {tab === 'colegas' &&
+              (connections.length === 0 ? (
+                <Empty emoji="🤝" title="Seus colegas aparecem aqui" text="Depois de voar com alguém que usa o EscalaX, veja as folgas e os pernoites que vocês têm em comum." />
+              ) : (
+                <ul className="space-y-3">
+                  {connections.map((c) => (
+                    <ColleagueCard key={c.partnerUserId} c={c} />
+                  ))}
+                </ul>
+              ))}
+            {tab === 'conversas' && <ConversationsTab conversations={conversations} />}
+          </motion.div>
+        )}
       </div>
     </AppLayout>
   );
