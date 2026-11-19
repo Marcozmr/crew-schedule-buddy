@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { FEBRUARY_HISTORY, SAMPLE_MONTH } from '@/lib/stats/__fixtures__/sample-month';
+import { entry, FEBRUARY_HISTORY, SAMPLE_MONTH } from '@/lib/stats/__fixtures__/sample-month';
 
-const h = vi.hoisted(() => ({ homeBase: 'BSB' as string | null }));
+const h = vi.hoisted(() => ({ homeBase: 'BSB' as string | null, prefsLoading: false, entries: null as unknown[] | null }));
 
 vi.mock('@/components/AppLayout', () => ({ AppLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock('@/hooks/useRosterHistory', () => ({
-  useRosterHistory: () => ({ entries: [...FEBRUARY_HISTORY, ...SAMPLE_MONTH], loading: false, error: null, reload: () => {} }),
+  useRosterHistory: () => ({ entries: h.entries ?? [...FEBRUARY_HISTORY, ...SAMPLE_MONTH], loading: false, error: null, reload: () => {} }),
 }));
 vi.mock('@/hooks/useOperationalPreferences', () => ({
-  useOperationalPreferences: () => ({ homeBase: h.homeBase, loading: false, timezone: 'America/Sao_Paulo' }),
+  useOperationalPreferences: () => ({ homeBase: h.homeBase, loading: h.prefsLoading, timezone: 'America/Sao_Paulo' }),
 }));
 
 import StatsPage from './StatsPage';
@@ -40,7 +40,7 @@ describe('StatsPage', () => {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
     }
     expect(screen.getByText('10:30')).toBeInTheDocument(); // horas voadas (630 min)
-    expect(screen.getByText('Você estreou MAO este mês — já são 3 aeroportos operados.')).toBeInTheDocument();
+    expect(screen.getByText('Você estreou MAO no mês — já são 3 aeroportos operados.')).toBeInTheDocument();
   });
 
   it('aba Ano soma os meses do ano (fevereiro + março)', () => {
@@ -65,5 +65,38 @@ describe('StatsPage', () => {
     renderPage();
     expect(screen.getByText('Em que cidade você mora?')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Informar no perfil' })).toHaveAttribute('href', '/settings');
+  });
+});
+
+describe('StatsPage — ajustes da revisão', () => {
+  it('Qualidade de vida tem um emoji de acordo com cada frase', () => {
+    renderPage();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('🏨 Pernoites programados');
+    expect(text).toMatch(/(🎉|🙂|😓) Fins de semana livres/);
+    expect(text).toContain('🏖️ Maior bloco de folga');
+    expect(text).toMatch(/(💪|😮‍💨) Maior sequência de trabalho/);
+    expect(text).toContain('🏠');
+  });
+  it('Descobertas também ganham emoji pelo assunto', () => {
+    renderPage();
+    expect(document.body.textContent).toMatch(/🌍\s*Voou/);
+  });
+  it('rótulo dos pousos tarde diz a janela certa', () => {
+    renderPage();
+    expect(screen.getByText('Pousos entre 23h e 06h')).toBeInTheDocument();
+  });
+  it('mês só com folgas mostra as seções em vez de "Sem voos"', () => {
+    h.entries = [entry({ date: '2026-03-13', is_flight: false, activity_type: 'DO', entry_type: 'day_off' })];
+    renderPage();
+    expect(screen.queryByText('Sem voos neste mês')).toBeNull();
+    expect(screen.getByText('Qualidade de vida')).toBeInTheDocument();
+  });
+  it('espera as preferências carregarem antes de calcular (sem piscar o convite da base)', () => {
+    h.prefsLoading = true;
+    h.homeBase = null;
+    renderPage();
+    expect(screen.queryByText('Em que cidade você mora?')).toBeNull();
+    expect(screen.getByText(/Carregando estatísticas/)).toBeInTheDocument();
   });
 });

@@ -21,8 +21,9 @@ const EMPTY_TEXT: Record<InsightScope, string> = {
 };
 
 export default function StatsPage() {
-  const { entries, loading, error } = useRosterHistory();
-  const { homeBase } = useOperationalPreferences();
+  const { entries, loading: historyLoading, error } = useRosterHistory();
+  const { homeBase, loading: prefsLoading } = useOperationalPreferences();
+  const loading = historyLoading || prefsLoading;
   const [scope, setScope] = useState<InsightScope>('month');
   const [anchor, setAnchor] = useState(() => {
     const now = new Date();
@@ -64,7 +65,8 @@ export default function StatsPage() {
       return { year: a.year + Math.floor(m / 12), month: ((m % 12) + 12) % 12 };
     });
 
-  const hasFlights = stats.flights.legs + stats.flights.deadheads > 0;
+  // Mês só com folgas ou férias também mostra as seções (com zeros nos voos).
+  const hasFlights = entries.some((e) => e.date >= period.start && e.date <= period.end);
 
   return (
     <AppLayout>

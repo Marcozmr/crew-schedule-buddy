@@ -2,7 +2,7 @@
  * Mapa de rotas offline: contorno dos países (Natural Earth 110m, via world-atlas) e linhas retas
  * entre aeroportos. Não é a trajetória real do voo.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { geoMercator, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 import type { FeatureCollection } from 'geojson';
@@ -26,6 +26,9 @@ const countries: FeatureCollection = {
 
 export function RouteMap({ legs }: { legs: Array<{ from: string; to: string }> }) {
   const [zoom, setZoom] = useState(1);
+  // Arrastar move o mapa (em unidades do quadro), para ver aeroportos fora do centro.
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
 
   const points = useMemo(() => {
     const codes = [...new Set(legs.flatMap((l) => [l.from, l.to]))];
@@ -59,8 +62,26 @@ export function RouteMap({ legs }: { legs: Array<{ from: string; to: string }> }
 
   return (
     <div className="relative overflow-hidden rounded-xl bg-muted/40">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Mapa de rotas" className="block h-auto w-full">
-        <g transform={`translate(${W / 2} ${H / 2}) scale(${zoom}) translate(${-W / 2} ${-H / 2})`}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label="Mapa de rotas"
+        className="block h-auto w-full cursor-grab touch-none active:cursor-grabbing"
+        onPointerDown={(e) => {
+          drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d) return;
+          const width = e.currentTarget.getBoundingClientRect().width;
+          const k = width > 0 ? W / width : 1;
+          setPan({ x: d.px + (e.clientX - d.x) * k, y: d.py + (e.clientY - d.y) * k });
+        }}
+        onPointerUp={() => (drag.current = null)}
+        onPointerCancel={() => (drag.current = null)}
+      >
+        <g transform={`translate(${pan.x} ${pan.y}) translate(${W / 2} ${H / 2}) scale(${zoom}) translate(${-W / 2} ${-H / 2})`}>
           <path d={path(countries) ?? ''} className="fill-muted stroke-border" strokeWidth={0.6 / zoom} />
           {legs.map((l) => {
             const a = xy(l.from);
@@ -89,7 +110,7 @@ export function RouteMap({ legs }: { legs: Array<{ from: string; to: string }> }
         <button type="button" aria-label="Aumentar" onClick={() => setZoom((z) => Math.min(8, z * 1.5))} className="h-8 w-8 rounded-lg border border-border bg-card text-sm font-semibold shadow-sm">
           +
         </button>
-        <button type="button" onClick={() => setZoom(1)} className="h-8 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold shadow-sm">
+        <button type="button" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="h-8 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold shadow-sm">
           Enquadrar
         </button>
       </div>

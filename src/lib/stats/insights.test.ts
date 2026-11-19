@@ -11,11 +11,11 @@ describe('buildInsights', () => {
   });
 
   it('aeroporto estreado no mês', () => {
-    expect(buildInsights(stats)).toContain('Você estreou MAO este mês — já são 3 aeroportos operados.');
+    expect(buildInsights(stats)).toContain('Você estreou MAO no mês — já são 3 aeroportos operados.');
   });
 
   it('na aba Ano fala "este ano"; em Sempre não fala de estreia', () => {
-    expect(buildInsights(stats, 'year')).toContain('Você estreou MAO este ano — já são 3 aeroportos operados.');
+    expect(buildInsights(stats, 'year')).toContain('Você estreou MAO no ano — já são 3 aeroportos operados.');
     expect(buildInsights(stats, 'all').some((s) => s.includes('estreou'))).toBe(false);
   });
 
@@ -32,7 +32,7 @@ describe('buildInsights', () => {
 
   it('mais de 3 aeroportos estreados vira contagem', () => {
     const many = { ...stats, airports: { ...stats.airports, newAirports: ['AEP', 'CAC', 'MCP', 'REC'], totalOperated: 18 } };
-    expect(buildInsights(many)).toContain('Você estreou 4 aeroportos este mês — já são 18 aeroportos operados.');
+    expect(buildInsights(many)).toContain('Você estreou 4 aeroportos no mês — já são 18 aeroportos operados.');
   });
 
   it('no máximo 5 frases; período vazio não gera nenhuma', () => {

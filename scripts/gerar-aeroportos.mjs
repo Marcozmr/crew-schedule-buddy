@@ -4,9 +4,11 @@
 // Sem argumento, baixa https://davidmegginson.github.io/ourairports-data/airports.csv
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const SOURCE = 'https://davidmegginson.github.io/ourairports-data/airports.csv';
-const OUT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '../src/lib/airports-data.ts');
+// fileURLToPath decodifica espaço e acento no caminho (URL.pathname deixaria "%20").
+const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/lib/airports-data.ts');
 
 const SOUTH_AMERICA = new Set(['AR', 'BO', 'BR', 'CL', 'CO', 'EC', 'GY', 'PY', 'PE', 'SR', 'UY', 'VE', 'GF']);
 const OTHER = new Set(['US', 'MX', 'PA', 'CU', 'DO', 'PT', 'ES', 'IT', 'FR', 'DE', 'GB', 'NL', 'ZA', 'AU', 'NZ']);

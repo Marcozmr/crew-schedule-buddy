@@ -16,6 +16,8 @@ const WORK_TYPES = new Set(['flight', 'reserve', 'standby', 'on_call', 'training
 const METRO_CITY: Record<string, string> = {
   GRU: 'São Paulo', CGH: 'São Paulo', GIG: 'Rio de Janeiro', SDU: 'Rio de Janeiro',
   CNF: 'Belo Horizonte', PLU: 'Belo Horizonte', AEP: 'Buenos Aires', EZE: 'Buenos Aires',
+  CDG: 'Paris', ORY: 'Paris', MXP: 'Milão', LIN: 'Milão', JFK: 'Nova York', EWR: 'Nova York', LGA: 'Nova York',
+  LHR: 'Londres', LGW: 'Londres',
 };
 
 const dep = (e: ScheduleEntry) => String(e.departure_airport || e.departure || '').trim().toUpperCase();
