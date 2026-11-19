@@ -27,6 +27,8 @@ function titleOf(e: ScheduleEntry): string {
 
 function subtitleOf(e: ScheduleEntry): string {
   if (e.is_flight) return [e.flight_number, e.aircraft_type].filter(Boolean).join(' · ');
+  // Apresentação na noite anterior: diz qual voo vem depois.
+  if (e.activity_type === 'APR' && e.flight_number) return `Voo ${e.flight_number} · ${e.departure?.trim()} → ${e.arrival?.trim()}`;
   return e.hotel_name ?? '';
 }
 
