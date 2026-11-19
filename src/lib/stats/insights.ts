@@ -46,7 +46,7 @@ export function buildInsights(stats: RosterStats, scope: InsightScope = 'month')
 
   if (scope !== 'all' && a.newAirports.length > 0) {
     const what = a.newAirports.length > 3 ? `${a.newAirports.length} aeroportos` : joinPt(a.newAirports);
-    out.push(`Você estreou ${what} ${scope === 'year' ? 'este ano' : 'este mês'} — já são ${a.totalOperated} aeroportos operados.`);
+    out.push(`Você estreou ${what} ${scope === 'year' ? 'no ano' : 'no mês'} — já são ${a.totalOperated} aeroportos operados.`);
   }
 
   return out.slice(0, 5);

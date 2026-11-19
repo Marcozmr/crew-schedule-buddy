@@ -41,7 +41,10 @@ export function useLegWeather(queries: LegWeatherQuery[]): Record<string, LegWea
   const signature = useMemo(() => queries.map((q) => `${q.key}|${q.iata}|${q.date}|${q.time}`).join(';'), [queries]);
 
   useEffect(() => {
-    if (!signature) return;
+    if (!signature) {
+      setData({});
+      return;
+    }
     let cancelled = false;
     const metarByIata = new Map<string, Promise<string>>();
     const metarFor = (iata: string) => {

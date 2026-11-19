@@ -53,3 +53,29 @@ describe('forecastAtArrival', () => {
     expect(await forecastAtArrival('REC', '2026-03-20', '20:00', now)).toBeNull();
   });
 });
+
+describe('forecastAtArrival — cache', () => {
+  const now = new Date('2026-03-19T15:00:00Z');
+  const ok = () => new Response(JSON.stringify({ hourly: HOURLY }));
+
+  it('resposta com erro não fica guardada: tenta de novo na próxima vez', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('x', { status: 500 })).mockResolvedValueOnce(ok());
+    expect(await forecastAtArrival('REC', '2026-03-20', '20:00', now)).toBeNull();
+    expect(await forecastAtArrival('REC', '2026-03-20', '20:00', now)).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('previsão guardada vale por 1 hora', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-19T15:00:00Z'));
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ok());
+    await forecastAtArrival('REC', '2026-03-20', '20:00', now);
+    vi.setSystemTime(new Date('2026-03-19T15:30:00Z'));
+    await forecastAtArrival('REC', '2026-03-20', '20:00', now);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(new Date('2026-03-19T16:01:00Z'));
+    await forecastAtArrival('REC', '2026-03-20', '20:00', now);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+});

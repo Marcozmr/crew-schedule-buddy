@@ -54,7 +54,9 @@ export function pickHourly(
   };
 }
 
-const cache = new Map<string, Promise<Hourly | null>>();
+/** Previsão guardada por 1 h (o app pode ficar aberto por dias). Falha ou resposta com erro não fica guardada. */
+const FORECAST_TTL_MS = 3_600_000;
+const cache = new Map<string, { at: number; p: Promise<Hourly | null> }>();
 
 export function clearForecastCache(): void {
   cache.clear();
@@ -62,7 +64,8 @@ export function clearForecastCache(): void {
 
 function hourlyFor(iata: string, date: string): Promise<Hourly | null> {
   const key = `${iata}|${date}`;
-  let p = cache.get(key);
+  const hit = cache.get(key);
+  let p = hit && Date.now() - hit.at < FORECAST_TTL_MS ? hit.p : undefined;
   if (!p) {
     const apt = getAirport(iata)!;
     const params = new URLSearchParams({
@@ -77,11 +80,12 @@ function hourlyFor(iata: string, date: string): Promise<Hourly | null> {
     p = fetch(`https://api.open-meteo.com/v1/forecast?${params}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => (j?.hourly as Hourly) ?? null)
-      .catch(() => {
-        cache.delete(key);
-        return null;
+      .catch(() => null)
+      .then((h) => {
+        if (!h) cache.delete(key);
+        return h;
       });
-    cache.set(key, p);
+    cache.set(key, { at: Date.now(), p });
   }
   return p;
 }

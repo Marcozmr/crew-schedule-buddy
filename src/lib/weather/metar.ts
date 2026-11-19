@@ -25,8 +25,24 @@ export async function fetchAviationWeather(kind: AviationKind, icao?: string): P
   }
 }
 
+/** METAR guardado por 10 min: no Início, cartão, voos e faixa pedem o mesmo aeroporto. Vazio não fica guardado. */
+const METAR_TTL_MS = 10 * 60_000;
+const metarCache = new Map<string, { at: number; p: Promise<string> }>();
+
+export function clearMetarCache(): void {
+  metarCache.clear();
+}
+
 export function fetchMetar(icao: string): Promise<string> {
-  return fetchAviationWeather('metar', icao);
+  const key = icao.trim().toUpperCase();
+  const hit = metarCache.get(key);
+  if (hit && Date.now() - hit.at < METAR_TTL_MS) return hit.p;
+  const p = fetchAviationWeather('metar', key).then((raw) => {
+    if (!raw) metarCache.delete(key);
+    return raw;
+  });
+  metarCache.set(key, { at: Date.now(), p });
+  return p;
 }
 
 /** Temperatura do grupo "TT/DD" do METAR ("M02" = -2). */

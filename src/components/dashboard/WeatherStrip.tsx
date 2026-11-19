@@ -20,8 +20,6 @@ export function WeatherStrip({ base, nextArrival }: Props) {
 
   const baseNow = base ? now[base] : undefined;
   const arrival = legs.next?.forecast ?? null;
-  if (baseNow?.temp == null && !arrival) return null;
-
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
       {baseNow && baseNow.temp != null && (

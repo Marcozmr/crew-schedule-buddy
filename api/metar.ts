@@ -12,12 +12,17 @@ export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const kind = (params.get('kind') ?? 'metar').toLowerCase();
   const ids = (params.get('ids') ?? '').trim().toUpperCase();
-  const headers = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/plain; charset=utf-8' };
+  // Sem Access-Control-Allow-Origin: só o próprio app na web (mesma origem) usa a rota; o app
+  // instalado vai direto pelo HTTP nativo. Assim ela não vira proxy aberto para outros sites.
+  const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
   if (!KINDS.has(kind)) return new Response('kind inválido', { status: 400, headers });
   if (kind !== 'sigmet' && !IDS.test(ids)) return new Response('ids inválido', { status: 400, headers });
   try {
     const query = kind === 'sigmet' ? 'format=raw' : `ids=${ids}&format=raw`;
-    const upstream = await fetch(`${UPSTREAM}/${kind}?${query}`);
+    // Tempo limite de 8 s: se o aviationweather travar, a função responde 502 em vez de esperar.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const upstream = await fetch(`${UPSTREAM}/${kind}?${query}`, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
     const text = upstream.ok ? await upstream.text() : '';
     return new Response(text, { status: upstream.ok ? 200 : 502, headers: { ...headers, 'Cache-Control': 'public, s-maxage=300' } });
   } catch {

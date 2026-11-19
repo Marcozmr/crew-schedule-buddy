@@ -6,7 +6,9 @@ vi.mock('@capacitor/core', () => ({
   CapacitorHttp: { get: h.httpGet },
 }));
 
-import { fetchAviationWeather, fetchMetar, metarTempC } from './metar';
+import { clearMetarCache, fetchAviationWeather, fetchMetar, metarTempC } from './metar';
+
+afterEach(() => clearMetarCache());
 import { GET } from '../../../api/metar';
 
 const RAW = 'METAR SBBR 191500Z 33006KT 9999 BKN030 27/18 Q1018';
@@ -79,13 +81,24 @@ describe('api/metar (Vercel)', () => {
     expect(r.status).toBe(400);
   });
 
-  it('repassa ao aviationweather e libera CORS', async () => {
+  it('repassa ao aviationweather só para o próprio app (sem CORS aberto) e com tempo limite', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(RAW));
     const r = await GET(new Request('https://x/api/metar?ids=SBBR,SBGR'));
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://aviationweather.gov/api/data/metar?ids=SBBR,SBGR&format=raw');
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
     expect(r.status).toBe(200);
     expect(await r.text()).toBe(RAW);
-    expect(r.headers.get('access-control-allow-origin')).toBe('*');
+    expect(r.headers.get('access-control-allow-origin')).toBeNull();
     expect(r.headers.get('cache-control')).toContain('s-maxage=300');
+  });
+});
+
+describe('fetchMetar — cache', () => {
+  it('o mesmo aeroporto não é pedido de novo em seguida (Início pede o mesmo METAR em vários cartões)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(RAW));
+    await Promise.all([fetchMetar('SBBR'), fetchMetar('SBBR')]);
+    expect(await fetchMetar('SBBR')).toBe(RAW);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockRestore();
   });
 });

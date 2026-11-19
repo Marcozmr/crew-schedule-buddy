@@ -42,4 +42,13 @@ describe('useLegWeather', () => {
     expect(result.current.l1.forecast).toBeNull();
     expect(result.current.l1.flightCategory).toBe('UNKN');
   });
+
+  it('sem pousos na lista, limpa o tempo anterior', async () => {
+    h.forecast.mockResolvedValue(FORECAST);
+    h.metar.mockResolvedValue('');
+    const { result, rerender } = renderHook(({ q }) => useLegWeather(q), { initialProps: { q: [{ key: 'l1', iata: 'REC', date: '2026-03-20', time: '20:00' }] } });
+    await waitFor(() => expect(result.current.l1).toBeDefined());
+    rerender({ q: [] });
+    await waitFor(() => expect(result.current).toEqual({}));
+  });
 });

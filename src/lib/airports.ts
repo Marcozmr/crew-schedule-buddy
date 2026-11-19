@@ -57,7 +57,11 @@ const PT_NAMES: Record<string, { name: string; city: string }> = {
   LIM: { name: "Lima", city: "Lima" },
   BOG: { name: "Bogotá", city: "Bogotá" },
   MIA: { name: "Miami", city: "Miami" },
-  JFK: { name: "JFK", city: "New York" },
+  JFK: { name: "JFK", city: "Nova York" },
+  MVD: { name: "Carrasco", city: "Montevidéu" },
+  MXP: { name: "Malpensa", city: "Milão" },
+  CDG: { name: "Charles de Gaulle", city: "Paris" },
+  FCO: { name: "Fiumicino", city: "Roma" },
   ORY: { name: "Orly", city: "Paris" },
   LIS: { name: "Lisboa", city: "Lisboa" },
 };

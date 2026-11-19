@@ -1,7 +1,7 @@
 /** Seções da tela de Estatísticas. Só formatam o que computeRosterStats calculou. */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Home, Lightbulb } from 'lucide-react';
+import { Home } from 'lucide-react';
 import type { RosterStats } from '@/lib/stats/types';
 import { RouteMap } from './RouteMap';
 import { dayMonth, decimal1, hhmm, hShort, int, pct, plural } from './format';
@@ -29,10 +29,10 @@ function Card({ title, aside, children }: { title?: string; aside?: ReactNode; c
   );
 }
 
-function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+function Row({ label, value, hint, emoji }: { label: string; value: ReactNode; hint?: ReactNode; emoji?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-sm">
-      <span className="text-foreground">{label}</span>
+      <span className="text-foreground">{emoji ? `${emoji} ${label}` : label}</span>
       <span className="text-right font-semibold text-foreground">
         {value}
         {hint && <span className="ml-1 font-normal text-muted-foreground">{hint}</span>}
@@ -84,16 +84,32 @@ export function SummarySection({ stats }: { stats: RosterStats }) {
             <div className="h-full rounded-full bg-primary" style={{ width: pct(Math.min(1, s.efficiency)) }} />
           </div>
           <p className="text-sm text-muted-foreground">
-            De cada 10h de jornada, {hShort(s.efficiency * 600)} voando — o resto é solo, espera e apresentação.
+            De cada 10h de jornada, {hShort(Math.min(1, s.efficiency) * 600)} voando — o resto é solo, espera e apresentação.
           </p>
         </Card>
       )}
       <Card title="Madrugadas">
         <Row label="Apresentações antes das 06h" value={s.earlyReports} />
-        <Row label="Pousos depois das 23h" value={s.lateLandings} />
+        <Row label="Pousos entre 23h e 06h" value={s.lateLandings} />
       </Card>
     </Section>
   );
+}
+
+/** Metade ou mais dos fins de semana livres é festa; algum livre, sorriso; nenhum, cansaço. */
+function weekendEmoji(free: number, total: number): string {
+  if (free === 0) return '😓';
+  return free * 2 >= total ? '🎉' : '🙂';
+}
+
+/** Emoji da descoberta pelo assunto da frase. */
+function insightEmoji(text: string): string {
+  if (/pernoite/i.test(text)) return '🏨';
+  if (/folgas|fins? de semana/i.test(text)) return '🏖️';
+  if (/madrugada/i.test(text)) return '🌅';
+  if (/^Voou/.test(text)) return '🌍';
+  if (/estreou/i.test(text)) return '✈️';
+  return '💡';
 }
 
 export function QualitySection({ stats }: { stats: RosterStats }) {
@@ -107,16 +123,16 @@ export function QualitySection({ stats }: { stats: RosterStats }) {
           <div className="h-full bg-accent" style={{ width: nights ? `${(q.nightsAway / nights) * 100}%` : '0%' }} />
         </div>
         <p className="text-sm text-foreground">
-          <span className="font-semibold">{q.nightsHome} em casa</span>
+          <span className="font-semibold">🏠 {q.nightsHome} em casa</span>
           {nights > 0 && <span className="text-muted-foreground"> · {pct(q.nightsHome / nights)}</span>}
           <span className="mx-2 text-muted-foreground">|</span>
-          <span className="font-semibold">{q.nightsAway} fora</span>
+          <span className="font-semibold">🧳 {q.nightsAway} fora</span>
           {nights > 0 && <span className="text-muted-foreground"> · {pct(q.nightsAway / nights)}</span>}
         </p>
-        <Row label="Pernoites programados" value={q.layovers} />
-        <Row label="Fins de semana livres" value={q.weekendsFree} hint={`de ${q.weekendsTotal}`} />
-        <Row label="Maior bloco de folga" value={plural(q.longestOffBlock, 'dia', 'dias')} />
-        <Row label="Maior sequência de trabalho" value={plural(q.longestWorkStreak, 'dia', 'dias')} />
+        <Row emoji="🏨" label="Pernoites programados" value={q.layovers} />
+        <Row emoji={weekendEmoji(q.weekendsFree, q.weekendsTotal)} label="Fins de semana livres" value={q.weekendsFree} hint={`de ${q.weekendsTotal}`} />
+        <Row emoji="🏖️" label="Maior bloco de folga" value={plural(q.longestOffBlock, 'dia', 'dias')} />
+        <Row emoji={q.longestWorkStreak >= 6 ? '😮‍💨' : '💪'} label="Maior sequência de trabalho" value={plural(q.longestWorkStreak, 'dia', 'dias')} />
         {q.baseInferred && (
           <div className="flex gap-3 border-t border-border pt-3">
             <Home className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
@@ -214,7 +230,7 @@ export function InsightsSection({ insights }: { insights: string[] }) {
       <ul className="space-y-2">
         {insights.map((text) => (
           <li key={text} className="flex gap-3 rounded-2xl border border-border bg-card p-4 text-sm text-foreground shadow-sm">
-            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span aria-hidden className="shrink-0 text-base leading-5">{insightEmoji(text)}</span>
             <span>{text}</span>
           </li>
         ))}

@@ -43,10 +43,11 @@ describe('WeatherStrip', () => {
     expect(screen.getByText(/Agora em BSB/)).toBeInTheDocument();
   });
 
-  it('sem base e sem pouso, não aparece', () => {
+  it('sem base e sem pouso, mostra só o link do METAR/TAF', () => {
     h.now = {};
     h.legs = {};
-    const { container } = renderStrip({ base: null, nextArrival: null });
-    expect(container).toBeEmptyDOMElement();
+    renderStrip({ base: null, nextArrival: null });
+    expect(screen.getByRole('link', { name: 'METAR/TAF' })).toHaveAttribute('href', '/weather');
+    expect(screen.queryByText(/Agora em|Pouso em/)).toBeNull();
   });
 });

@@ -49,3 +49,10 @@ describe('tabela de aeroportos', () => {
     expect(Object.keys(AIRPORTS_DB).length).toBeGreaterThanOrEqual(150);
   });
 });
+
+describe('nomes de cidade em português (Pernoites por cidade)', () => {
+  it('internacionais com o nome que a tripulação usa', () => {
+    const city = (c: string) => getAirport(c)?.city;
+    expect([city('MVD'), city('MXP'), city('CDG'), city('ORY'), city('FCO'), city('JFK')]).toEqual(['Montevidéu', 'Milão', 'Paris', 'Paris', 'Roma', 'Nova York']);
+  });
+});
