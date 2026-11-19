@@ -7,7 +7,7 @@ function report(rows: Array<Record<string, unknown>>) {
     title: 'Roster Report',
     model: {
       cWPRosterWidgetModel: {
-        cWPRosterReportSearchDTO: { periodFromDate: '2026-11-01T00:00:00.000', periodToDate: '2026-11-30T00:00:00.000' },
+        cWPRosterReportSearchDTO: { periodFromDate: '2026-03-01T00:00:00.000', periodToDate: '2026-03-30T00:00:00.000' },
         cWPCrewRosterDayReportDTO: rows,
       },
     },
@@ -15,10 +15,10 @@ function report(rows: Array<Record<string, unknown>>) {
 }
 
 const firstLeg = {
-  allocationDate: '2026-11-03T14:10:00.000',
+  allocationDate: '2026-03-03T14:10:00.000',
   complementRank: 'CC',
   itemType: 'FLT',
-  itemCode: 'LA3000-04/031126/JJCC320',
+  itemCode: 'LA3000-04/030326/JJCC320',
   reportTime: '14:10',
   pairingItemCode: 'LA3000',
   workType: 'OP',
@@ -69,7 +69,7 @@ describe('parseIflightRosterReport', () => {
 
   it('período do relatório vira o período da escala', () => {
     const { header } = parseIflightRosterReport(report([]));
-    expect(header).toMatchObject({ rosterStartDate: '2026-11-01', rosterEndDate: '2026-11-30' });
+    expect(header).toMatchObject({ rosterStartDate: '2026-03-01', rosterEndDate: '2026-03-30' });
   });
 
   it('jornada com três trechos: voo, programação, apresentação, fim de jornada e horas', () => {
@@ -78,9 +78,9 @@ describe('parseIflightRosterReport', () => {
     expect(entries).toHaveLength(3);
     expect(entries.map((e) => e.flightNumber)).toEqual(['LA3000', 'LA3001', 'LA3002']);
     expect(entries.every((e) => e.isFlight && e.entryType === 'flight')).toBe(true);
-    expect(entries.every((e) => e.pairingCode === 'LA3000-04/031126/JJCC320')).toBe(true);
+    expect(entries.every((e) => e.pairingCode === 'LA3000-04/030326/JJCC320')).toBe(true);
     expect(entries[0]).toMatchObject({
-      date: '2026-11-03',
+      date: '2026-03-03',
       reportTime: '14:10',
       departureAirport: 'BSB',
       departureTime: '15:00',
@@ -92,11 +92,11 @@ describe('parseIflightRosterReport', () => {
       crewRole: 'CC',
       operationType: 'OP',
       crewStatusLabel: 'Em operação',
-      sortDatetime: '2026-11-03T15:00:00',
+      sortDatetime: '2026-03-03T15:00:00',
     });
     expect(entries[1]).toMatchObject({ reportTime: '', dutyHours: null, operationType: 'PS', crewStatusLabel: 'Reposicionamento' });
     expect(entries[2]).toMatchObject({
-      date: '2026-11-03',
+      date: '2026-03-03',
       arrivalTime: '01:36',
       debriefTime: '02:06',
       crossesMidnight: true,
@@ -107,7 +107,7 @@ describe('parseIflightRosterReport', () => {
   it('trecho que sai depois da meia-noite fica no dia seguinte', () => {
     const duty = {
       ...firstLeg,
-      allocationDate: '2026-11-10T23:50:00.000',
+      allocationDate: '2026-03-10T23:50:00.000',
       reportTime: '23:50',
       departureStation: 'BEL 00:13(+1)',
       departureTime: '00:13(+1)',
@@ -117,17 +117,17 @@ describe('parseIflightRosterReport', () => {
     const { entries } = parseIflightRosterReport(report([duty]));
 
     expect(entries[0]).toMatchObject({
-      date: '2026-11-11',
+      date: '2026-03-11',
       departureTime: '00:13',
       reportTime: '23:50',
       crossesMidnight: false,
-      sortDatetime: '2026-11-11T00:13:00',
+      sortDatetime: '2026-03-11T00:13:00',
     });
   });
 
   it('atividades: sobreaviso com horário, folga que vira o dia e código dentro da programação', () => {
     const standby = {
-      allocationDate: '2026-11-05T16:05:00.000',
+      allocationDate: '2026-03-05T16:05:00.000',
       complementRank: 'CC',
       itemType: 'ACY',
       description: 'Airport stand by',
@@ -155,7 +155,7 @@ describe('parseIflightRosterReport', () => {
       pairingDutyId: 7,
     };
     const dayOff = {
-      allocationDate: '2026-11-07T08:51:00.000',
+      allocationDate: '2026-03-07T08:51:00.000',
       complementRank: 'CC',
       itemCode: 'DO',
       description: 'Day off',
@@ -170,7 +170,7 @@ describe('parseIflightRosterReport', () => {
 
     expect(entries).toHaveLength(3);
     expect(entries[0]).toMatchObject({
-      date: '2026-11-05',
+      date: '2026-03-05',
       isFlight: false,
       activityType: 'ASB',
       flightNumber: 'ASB',
@@ -183,9 +183,9 @@ describe('parseIflightRosterReport', () => {
       activityLabel: 'Airport stand by',
     });
     expect(entries[0].entryType).not.toBe('other_activity');
-    expect(entries[1]).toMatchObject({ date: '2026-11-05', activityType: 'CNA', activityLabel: 'Airport cancellation' });
+    expect(entries[1]).toMatchObject({ date: '2026-03-05', activityType: 'CNA', activityLabel: 'Airport cancellation' });
     expect(entries[2]).toMatchObject({
-      date: '2026-11-07',
+      date: '2026-03-07',
       activityType: 'DO',
       entryType: 'day_off',
       crossesMidnight: true,

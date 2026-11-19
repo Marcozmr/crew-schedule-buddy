@@ -48,7 +48,7 @@ describe('IFLIGHT_LAB_HOOK_SCRIPT', () => {
 
   it('registra a requisição sem vazar valores de token na URL', async () => {
     window.fetch = vi.fn(async () =>
-      new Response(JSON.stringify({ duties: [{ flightNo: 'LA3748', dep: 'BSB' }] }), {
+      new Response(JSON.stringify({ duties: [{ flightNo: 'LA9004', dep: 'BSB' }] }), {
         status: 200,
         headers: { 'content-type': 'application/json; charset=utf-8' },
       }),
@@ -66,7 +66,7 @@ describe('IFLIGHT_LAB_HOOK_SCRIPT', () => {
     expect(net[0].status).toBe(200);
     // só a forma do JSON, nunca os valores
     expect(net[0].shape).toEqual({ duties: 'array[1] de {flightNo,dep}' });
-    expect(JSON.stringify(net[0])).not.toContain('LA3748');
+    expect(JSON.stringify(net[0])).not.toContain('LA9004');
   });
 
   it('captura os bytes quando a resposta é PDF', async () => {
