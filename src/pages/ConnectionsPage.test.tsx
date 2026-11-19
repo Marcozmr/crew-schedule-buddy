@@ -56,6 +56,19 @@ describe('ConnectionsPage', () => {
     expect(screen.getByText('Bruno Lima')).toBeInTheDocument();
   });
 
+  it('voos do mesmo dia com a mesma colega viram um cartão só, sem repetir o nome', async () => {
+    const day = { flightDate: '2099-03-20', partnerUserId: 'p1', partnerName: 'Ana Souza', partnerAirline: 'LATAM', crewRole: 'CC' };
+    h.crewmates = [
+      { ...day, flightNumber: 'LA9001', departure: 'GRU', arrival: 'REC' },
+      { ...day, flightNumber: 'LA9002', departure: 'REC', arrival: 'GRU' },
+    ];
+    renderPage();
+    expect(await screen.findByText('LA9002')).toBeInTheDocument();
+    expect(screen.getByText('LA9001')).toBeInTheDocument();
+    expect(screen.getAllByText('Ana Souza')).toHaveLength(1);
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+
   it('tocar num colega abre as folgas e os pernoites em comum', async () => {
     h.connections = [{ partnerUserId: 'p1', partnerName: 'Ana Souza', partnerAirline: 'LATAM', flightsTogetherCount: 3, hasConversation: false, conversationId: null }];
     h.daysOff.mockResolvedValue(['2099-03-21']);
