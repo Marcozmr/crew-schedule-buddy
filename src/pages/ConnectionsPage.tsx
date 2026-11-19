@@ -72,16 +72,18 @@ function Empty({ emoji, title, text }: { emoji: string; title: string; text: str
 }
 
 function FlightsTab({ crewmates, chatFor }: { crewmates: RosterCrewmateEntry[]; chatFor: (id: string) => string | null }) {
+  // Um cartão por dia: os voos do dia e quem do EscalaX está em algum deles (sem repetir a pessoa).
   const flights = useMemo(() => {
-    const groups = new Map<string, { date: string; flight: string; from: string | null; to: string | null; crew: RosterCrewmateEntry[] }>();
+    type Leg = { flight: string; from: string | null; to: string | null };
+    const groups = new Map<string, { date: string; legs: Leg[]; crew: RosterCrewmateEntry[] }>();
     for (const c of crewmates) {
       if (c.flightDate < today()) continue;
-      const key = `${c.flightDate}|${c.flightNumber}`;
-      const g = groups.get(key) ?? { date: c.flightDate, flight: c.flightNumber, from: c.departure, to: c.arrival, crew: [] };
+      const g = groups.get(c.flightDate) ?? { date: c.flightDate, legs: [], crew: [] };
+      if (!g.legs.some((l) => l.flight === c.flightNumber)) g.legs.push({ flight: c.flightNumber, from: c.departure, to: c.arrival });
       if (!g.crew.some((x) => x.partnerUserId === c.partnerUserId)) g.crew.push(c);
-      groups.set(key, g);
+      groups.set(c.flightDate, g);
     }
-    return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date) || a.flight.localeCompare(b.flight));
+    return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date));
   }, [crewmates]);
 
   if (flights.length === 0) {
@@ -90,17 +92,19 @@ function FlightsTab({ crewmates, chatFor }: { crewmates: RosterCrewmateEntry[]; 
   return (
     <ul className="space-y-3">
       {flights.map((f) => (
-        <li key={`${f.date}|${f.flight}`} className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+        <li key={f.date} className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
           <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
             <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <span className="text-lg font-bold leading-none">{Number(f.date.slice(8, 10))}</span>
               <span className="text-[10px] font-semibold uppercase">{MONTHS[Number(f.date.slice(5, 7)) - 1]}</span>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-mono text-sm font-bold text-foreground">{f.flight}</p>
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                {f.from ?? '—'} <Plane className="h-3 w-3" /> {f.to ?? '—'}
-              </p>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              {f.legs.map((l) => (
+                <p key={l.flight} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="font-mono text-sm font-bold text-foreground">{l.flight}</span>
+                  {l.from ?? '—'} <Plane className="h-3 w-3" /> {l.to ?? '—'}
+                </p>
+              ))}
             </div>
             <span className="rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-foreground">
               {f.crew.length} {f.crew.length === 1 ? 'colega' : 'colegas'}
@@ -267,9 +271,9 @@ export default function ConnectionsPage() {
     return (id: string) => byPartner.get(id) ?? null;
   }, [connections]);
 
-  const upcoming = useMemo(() => new Set(crewmates.filter((c) => c.flightDate >= today()).map((c) => `${c.flightDate}|${c.flightNumber}`)).size, [crewmates]);
+  const upcoming = useMemo(() => new Set(crewmates.filter((c) => c.flightDate >= today()).map((c) => c.flightDate)).size, [crewmates]);
   const tabs: Array<{ id: Tab; label: string; count: number }> = [
-    { id: 'voos', label: 'Próximos voos', count: upcoming },
+    { id: 'voos', label: 'Voos', count: upcoming },
     { id: 'colegas', label: 'Colegas', count: connections.length },
     { id: 'conversas', label: 'Conversas', count: conversations.length },
   ];

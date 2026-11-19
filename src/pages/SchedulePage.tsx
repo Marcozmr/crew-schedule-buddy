@@ -21,6 +21,7 @@ import { FlightCard } from '@/components/flight/FlightCard';
 import { motion } from 'framer-motion';
 import { parseDateBRT } from '@/lib/date-utils';
 import { compareScheduleEntries } from '@/lib/schedule-entry-sort';
+import { withPreviousEveningReports } from '@/lib/roster/previous-evening-report';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { AppCard, EmptyState } from '@/components/ui/primitives';
 import { buildCrewSituationDisplayFromEntry } from '@/lib/roster/crew-tripulante-display';
@@ -112,6 +113,8 @@ function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof 
 
 export default function SchedulePage() {
   const { schedule, reload } = useScheduleData();
+  // Para exibir: jornada com apresentação na noite anterior aparece também nesse dia.
+  const displaySchedule = useMemo(() => withPreviousEveningReports(schedule), [schedule]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear] = useState(new Date().getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -141,7 +144,7 @@ export default function SchedulePage() {
     if (latestMonth >= 0) setSelectedMonth(latestMonth);
   }, [schedule]);
 
-  const filteredSchedule = useMemo(() => schedule.filter((entry) => getMonth(entry.date) === selectedMonth), [schedule, selectedMonth]);
+  const filteredSchedule = useMemo(() => displaySchedule.filter((entry) => getMonth(entry.date) === selectedMonth), [displaySchedule, selectedMonth]);
 
   const calendarDays = useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -225,11 +228,11 @@ export default function SchedulePage() {
         <NextEventBanner nextDuty={nextDuty} now={now} />
 
         <WeekStrip
-          schedule={schedule}
+          schedule={displaySchedule}
           today={now}
           onSelectDay={(d) => {
             setSelectedMonth(d.getMonth());
-            const has = schedule.some((e) => {
+            const has = displaySchedule.some((e) => {
               const p = parseDateBRT(e.date);
               return p.getMonth() === d.getMonth() && p.getDate() === d.getDate();
             });
