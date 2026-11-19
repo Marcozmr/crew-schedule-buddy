@@ -18,6 +18,8 @@ import {
 import { AppLayout } from "../components/AppLayout";
 import { PdfImportDialog } from "../components/PdfImportDialog";
 import { DashboardNextPresentationCard } from "../components/dashboard/DashboardNextPresentationCard";
+import { WeatherStrip } from "../components/dashboard/WeatherStrip";
+import { legWeatherQuery } from "../hooks/useLegWeather";
 import { DashboardRosterUpdatedHint } from "../components/dashboard/DashboardRosterUpdatedHint";
 import {
   OnboardingModal,
@@ -128,6 +130,12 @@ export default function DashboardPage() {
     () => getNextDutyPeriod(allDutyPeriods, todayStr, now, safeTz),
     [allDutyPeriods, todayStr, now, safeTz]
   );
+
+  const nextArrival = useMemo(() => {
+    const leg = nextDuty?.legs.find((l) => l.is_flight);
+    const q = leg ? legWeatherQuery(leg) : null;
+    return q ? { iata: q.iata, date: q.date, time: q.time } : null;
+  }, [nextDuty]);
 
   const analysis = useMemo(
     () => analyzeOperationalSchedule(schedule, safeTz, homeBase),
@@ -282,6 +290,11 @@ export default function DashboardPage() {
           <motion.div {...fade(0.04)}>
             <DashboardNextPresentationCard nextDuty={nextDuty} todayStr={todayStr} />
           </motion.div>
+        )}
+
+        {/* ── Tempo discreto: agora na base e previsão do próximo pouso ── */}
+        {!loading && (
+          <WeatherStrip base={homeBase} nextArrival={nextArrival} />
         )}
 
         {/* ── Voos hoje ── */}

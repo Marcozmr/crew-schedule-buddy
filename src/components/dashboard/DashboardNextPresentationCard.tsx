@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import type { DutyPeriod } from "@/lib/duty-grouping";
 import { formatDateBR } from "@/lib/date-utils";
 import { CrewFunctionActivityBadge } from "@/components/roster/CrewFunctionActivityBadge";
-import { useAirportWeather, FC_COLOR } from "@/hooks/useAirportWeather";
+import { FC_COLOR } from "@/hooks/useAirportWeather";
+import { legWeatherQuery, useLegWeather } from "@/hooks/useLegWeather";
 import { useMemo } from "react";
 
 interface Props {
@@ -13,17 +14,12 @@ interface Props {
 }
 
 export function DashboardNextPresentationCard({ nextDuty, todayStr }: Props) {
-  // Collect unique arrival airports from all legs
-  const arrivalCodes = useMemo(() => {
-    if (!nextDuty) return [];
-    return [...new Set(
-      nextDuty.legs
-        .filter(l => l.is_flight && l.arrival)
-        .map(l => l.arrival.trim().toUpperCase().slice(0, 3))
-    )];
-  }, [nextDuty]);
-
-  const { data: wxData } = useAirportWeather(arrivalCodes);
+  // Previsão para a hora de cada pouso (não a temperatura de agora).
+  const weatherQueries = useMemo(
+    () => (nextDuty ? nextDuty.legs.filter(l => l.is_flight).map(legWeatherQuery).filter((q): q is NonNullable<typeof q> => q != null) : []),
+    [nextDuty]
+  );
+  const legWeather = useLegWeather(weatherQueries);
 
   if (!nextDuty) {
     return (
@@ -54,7 +50,8 @@ export function DashboardNextPresentationCard({ nextDuty, todayStr }: Props) {
   // Last arrival = final destination
   const lastFlightLeg = [...nextDuty.legs].reverse().find(l => l.is_flight && l.arrival);
   const finalArrival = lastFlightLeg?.arrival?.trim().toUpperCase().slice(0, 3) ?? '';
-  const finalWx = finalArrival ? wxData[finalArrival] : null;
+  const finalWx = lastFlightLeg ? legWeather[lastFlightLeg.id] ?? null : null;
+  const finalForecast = finalWx?.forecast ?? null;
 
   return (
     <motion.div
@@ -109,19 +106,17 @@ export function DashboardNextPresentationCard({ nextDuty, todayStr }: Props) {
           <div className="rounded-xl border border-border/60 bg-card/80 p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xl">{finalWx.conditionEmoji}</span>
+                {finalForecast && <span className="text-xl">{finalForecast.conditionEmoji}</span>}
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">
-                    {finalWx.condition}
-                    {finalWx.temp != null && (
-                      <span className="ml-1.5 text-muted-foreground">{Math.round(finalWx.temp)}°C</span>
-                    )}
-                  </p>
+                  {finalForecast && (
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {finalForecast.condition}
+                      <span className="ml-1.5 text-muted-foreground">{Math.round(finalForecast.temp)}°C</span>
+                    </p>
+                  )}
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    METAR {finalArrival}
-                    {finalWx.windSpeed != null && (
-                      <span className="ml-2">{Math.round(finalWx.windSpeed)}kt</span>
-                    )}
+                    {finalForecast ? `Previsão no pouso · ${finalArrival} ${lastFlightLeg?.arrival_time ?? ''}` : `METAR ${finalArrival}`}
+                    {finalForecast?.windKt != null && <span className="ml-2">{Math.round(finalForecast.windKt)}kt</span>}
                   </p>
                 </div>
               </div>
@@ -132,22 +127,21 @@ export function DashboardNextPresentationCard({ nextDuty, todayStr }: Props) {
           </div>
         )}
 
-        {/* Weather for each leg with flight */}
-        {nextDuty.legs.filter(l => l.is_flight && l.arrival && wxData[l.arrival.trim().toUpperCase().slice(0, 3)]).length > 1 && (
+        {/* Previsão de cada pouso da jornada (só os que têm previsão) */}
+        {nextDuty.legs.filter(l => l.is_flight && legWeather[l.id]?.forecast).length > 1 && (
           <div className="space-y-1.5 border-t border-border/40 pt-3">
             {nextDuty.legs
-              .filter(l => l.is_flight && l.arrival)
-              .map((leg, i) => {
-                const code = leg.arrival.trim().toUpperCase().slice(0, 3);
-                const wx = wxData[code];
-                if (!wx) return null;
+              .filter(l => l.is_flight && legWeather[l.id]?.forecast)
+              .map((leg) => {
+                const wx = legWeather[leg.id];
+                const fc = wx.forecast!;
                 return (
-                  <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                  <div key={leg.id} className="flex items-center justify-between gap-2 text-[11px]">
                     <span className="text-muted-foreground font-mono">
-                      {leg.departure?.slice(0,3)} → {code}
+                      {leg.departure?.slice(0, 3)} → {wx.iata} {leg.arrival_time}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-foreground">{wx.conditionEmoji} {Math.round(wx.temp ?? 0)}°C</span>
+                      <span className="text-foreground">{fc.conditionEmoji} {Math.round(fc.temp)}°C</span>
                       <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${FC_COLOR[wx.flightCategory]}`}>
                         {wx.flightCategory}
                       </span>

@@ -7,29 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Cloud, Search, Thermometer, Wind, Droplets, MapPin, FileText, Map, Satellite, Radio, ExternalLink, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { AIRPORTS_DB } from '@/lib/airports';
+import { getAirport } from '@/lib/airports';
 import { FC_COLOR } from '@/hooks/useAirportWeather';
+import { fetchAviationWeather, metarTempC } from '@/lib/weather/metar';
+import { wmoCondition } from '@/lib/weather/wmo';
 
 type Tab = 'briefing' | 'notam' | 'cartas' | 'sigwx';
 
 interface WeatherData {
   temp: number; windSpeed: number; windDir: number; humidity: number; condition: string; conditionEmoji: string;
-}
-
-function getCondition(code: number): { label: string; emoji: string } {
-  if (code < 0)  return { label: 'Desconhecido', emoji: '❓' };
-  if (code === 0) return { label: 'Céu limpo', emoji: '☀️' };
-  if (code === 1) return { label: 'Predominante limpo', emoji: '🌤️' };
-  if (code === 2) return { label: 'Parcialmente nublado', emoji: '⛅' };
-  if (code === 3) return { label: 'Nublado', emoji: '☁️' };
-  if (code <= 48) return { label: 'Nevoeiro', emoji: '🌫️' };
-  if (code <= 55) return { label: 'Garoa', emoji: '🌦️' };
-  if (code <= 67) return { label: 'Chuva', emoji: '🌧️' };
-  if (code <= 77) return { label: 'Neve', emoji: '❄️' };
-  if (code <= 82) return { label: 'Chuvisco leve', emoji: '🌦️' };
-  if (code <= 86) return { label: 'Neve forte', emoji: '❄️' };
-  if (code <= 99) return { label: 'Tempestade', emoji: '⛈️' };
-  return { label: 'Desconhecido', emoji: '❓' };
 }
 
 function parseFlightCategory(metar: string): string {
@@ -90,22 +76,25 @@ export default function WeatherPage() {
   const search = async (iata?: string) => {
     const q = (iata || code).toUpperCase().trim();
     if (!q) return;
-    const apt = AIRPORTS_DB[q];
+    const apt = getAirport(q);
     if (!apt) { toast.error(`Aeroporto ${q} não encontrado. Use código IATA (ex: GRU, BSB)`); return; }
     setLoading(true);
     setCode(q);
     setWeather(null); setMetar(''); setTaf(''); setSigmet('');
     try {
       const [wxRes, metarRes, tafRes, sigmetRes] = await Promise.allSettled([
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${apt.lat}&longitude=${apt.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&timezone=auto`).then(r => r.json()),
-        fetch(`https://aviationweather.gov/api/data/metar?ids=${apt.icao}&format=raw`).then(r => r.text()),
-        fetch(`https://aviationweather.gov/api/data/taf?ids=${apt.icao}&format=raw`).then(r => r.text()),
-        fetch(`https://aviationweather.gov/api/data/sigmet?format=raw`).then(r => r.text()).catch(() => ''),
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${apt.lat}&longitude=${apt.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kn&timezone=auto`).then(r => r.json()),
+        fetchAviationWeather('metar', apt.icao),
+        fetchAviationWeather('taf', apt.icao),
+        fetchAviationWeather('sigmet'),
       ]);
-      if (wxRes.status === 'fulfilled') {
+      const metarRaw = metarRes.status === 'fulfilled' ? metarRes.value : '';
+      if (wxRes.status === 'fulfilled' && wxRes.value?.current) {
         const c = wxRes.value.current;
-        const cond = getCondition(c.weather_code);
-        setWeather({ temp: c.temperature_2m, windSpeed: c.wind_speed_10m, windDir: c.wind_direction_10m, humidity: c.relative_humidity_2m, condition: cond.label, conditionEmoji: cond.emoji });
+        const cond = wmoCondition(c.weather_code ?? -1);
+        // Temperatura observada (METAR) vale mais que a estimada pelo modelo.
+        const temp = metarTempC(metarRaw) ?? c.temperature_2m;
+        setWeather({ temp, windSpeed: c.wind_speed_10m, windDir: c.wind_direction_10m, humidity: c.relative_humidity_2m, condition: cond.label, conditionEmoji: cond.emoji });
       }
       if (metarRes.status === 'fulfilled') setMetar(metarRes.value.trim());
       if (tafRes.status === 'fulfilled') setTaf(tafRes.value.trim());
@@ -118,7 +107,7 @@ export default function WeatherPage() {
   };
 
   const fc = metar ? parseFlightCategory(metar) : null;
-  const apt = AIRPORTS_DB[code];
+  const apt = getAirport(code);
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: 'briefing', label: 'Briefing', icon: Cloud },
