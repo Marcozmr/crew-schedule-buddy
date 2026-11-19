@@ -45,6 +45,7 @@ const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 function deps(result: PdfImportResult = ok) {
   return {
     importPdf: vi.fn(async (_n: string, _b: ArrayBuffer) => result),
+    importRosterJson: vi.fn(async (_t: string) => result),
     now: () => new Date('2026-11-18T16:00:00.000Z'),
     settleMs: 0,
   };
@@ -143,19 +144,22 @@ describe('connectPortal', () => {
   });
 });
 
-describe('syncPortal', () => {
+/** Portal que entrega o PDF direto: a sincronização refaz a requisição aprendida. */
+const REPLAY = { ...LATAM_IFLIGHT, report: undefined };
+
+describe('syncPortal (refazendo a requisição)', () => {
   it('sem caminho aprendido pede para conectar, sem abrir nada', async () => {
-    await expect(syncPortal(LATAM_IFLIGHT, deps(), () => {})).resolves.toEqual({ kind: 'needs_connect' });
+    await expect(syncPortal(REPLAY, deps(), () => {})).resolves.toEqual({ kind: 'needs_connect' });
     expect(h.openWebView).not.toHaveBeenCalled();
   });
 
   it('com sessão salva: abre escondido, refaz a requisição e importa', async () => {
     savePortalState('latam', { status: 'saved', learned: REQUEST });
     const d = deps();
-    const p = syncPortal(LATAM_IFLIGHT, d, () => {});
+    const p = syncPortal(REPLAY, d, () => {});
     await tick();
 
-    expect(h.openWebView).toHaveBeenCalledWith(expect.objectContaining({ url: LATAM_IFLIGHT.startUrl, hidden: true }));
+    expect(h.openWebView).toHaveBeenCalledWith(expect.objectContaining({ url: REPLAY.startUrl, hidden: true }));
     h.emit('urlChangeEvent', { url: 'https://iflightla.ibsplc.aero/iflight-crew/web/home' });
     h.emit('browserPageLoaded', {});
     await tick();
@@ -169,7 +173,7 @@ describe('syncPortal', () => {
 
   it('caiu no login: sessão expirada', async () => {
     savePortalState('latam', { status: 'saved', learned: REQUEST });
-    const p = syncPortal(LATAM_IFLIGHT, deps(), () => {});
+    const p = syncPortal(REPLAY, deps(), () => {});
     await tick();
     h.emit('urlChangeEvent', { url: 'https://login.microsoftonline.com/common/saml2' });
     h.emit('browserPageLoaded', {});
@@ -182,7 +186,7 @@ describe('syncPortal', () => {
 
   it('caminho aprendido sem PDF: apaga o caminho e pede para conectar', async () => {
     savePortalState('latam', { status: 'saved', learned: REQUEST });
-    const p = syncPortal(LATAM_IFLIGHT, deps(), () => {});
+    const p = syncPortal(REPLAY, deps(), () => {});
     await tick();
     h.emit('urlChangeEvent', { url: 'https://iflightla.ibsplc.aero/iflight-crew/web/home' });
     h.emit('browserPageLoaded', {});
@@ -196,11 +200,146 @@ describe('syncPortal', () => {
   it('45 s sem resposta: erro e tela fechada', async () => {
     vi.useFakeTimers();
     savePortalState('latam', { status: 'saved', learned: REQUEST });
-    const p = syncPortal(LATAM_IFLIGHT, deps(), () => {});
+    const p = syncPortal(REPLAY, deps(), () => {});
     await vi.advanceTimersByTimeAsync(45_001);
 
     await expect(p).resolves.toEqual({ kind: 'error', message: 'O iFlight não respondeu' });
     expect(h.close).toHaveBeenCalled();
+  });
+});
+
+describe('syncPortal (relatório automático do iFlight)', () => {
+  const PORTAL_URL = 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage';
+  const LOGIN_URL = 'https://login.microsoftonline.com/common/saml2';
+
+  it('nunca conectado: pede para conectar, sem abrir nada', async () => {
+    await expect(syncPortal(LATAM_IFLIGHT, deps(), () => {})).resolves.toEqual({ kind: 'needs_connect' });
+    expect(h.openWebView).not.toHaveBeenCalled();
+  });
+
+  it('com sessão salva: abre escondido, roda o script automático e importa o PDF', async () => {
+    savePortalState('latam', { status: 'saved', learned: null });
+    const d = deps();
+    const steps: PortalStep[] = [];
+    const p = syncPortal(LATAM_IFLIGHT, d, (s) => steps.push(s));
+    await tick();
+
+    expect(h.openWebView).toHaveBeenCalledWith(expect.objectContaining({ url: LATAM_IFLIGHT.startUrl, hidden: true }));
+    // O plugin recusa preShowScript em tela escondida ("requires isPresentAfterPageLoad").
+    expect(h.openWebView.mock.calls[0][0]).not.toHaveProperty('preShowScript');
+    h.emit('urlChangeEvent', { url: PORTAL_URL });
+    h.emit('browserPageLoaded', {});
+    expect(h.executeScript).toHaveBeenCalledWith({ code: expect.stringContaining('runRosterReport') });
+    h.emit('messageFromWebview', { detail: { type: 'pdf', base64: PDF_B64, size: 9, request: { method: 'POST', url: PORTAL_URL } } });
+
+    await expect(p).resolves.toMatchObject({ kind: 'imported' });
+    expect(d.importPdf).toHaveBeenCalledTimes(1);
+    expect(steps).toEqual(['conectando', 'lendo', 'salvando', 'pronto']);
+    expect(loadPortalState('latam')).toMatchObject({ status: 'saved', lastSyncAt: '2026-11-18T16:00:00.000Z' });
+    expect(h.close).toHaveBeenCalled();
+  });
+
+  it('login que volta sozinho para o portal (SSO) não conta como sessão expirada', async () => {
+    vi.useFakeTimers();
+    savePortalState('latam', { status: 'saved' });
+    const p = syncPortal(LATAM_IFLIGHT, deps(), () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    h.emit('urlChangeEvent', { url: LOGIN_URL });
+    h.emit('browserPageLoaded', {});
+    await vi.advanceTimersByTimeAsync(3_000);
+    h.emit('urlChangeEvent', { url: PORTAL_URL });
+    h.emit('browserPageLoaded', {});
+    await vi.advanceTimersByTimeAsync(15_000);
+    h.emit('messageFromWebview', { detail: { type: 'pdf', base64: PDF_B64, size: 9, request: null } });
+
+    await expect(p).resolves.toMatchObject({ kind: 'imported' });
+    expect(loadPortalState('latam').status).toBe('saved');
+  });
+
+  it('parado no login por 10 s: sessão expirada', async () => {
+    vi.useFakeTimers();
+    savePortalState('latam', { status: 'saved' });
+    const p = syncPortal(LATAM_IFLIGHT, deps(), () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    h.emit('urlChangeEvent', { url: LOGIN_URL });
+    h.emit('browserPageLoaded', {});
+    await vi.advanceTimersByTimeAsync(10_001);
+
+    await expect(p).resolves.toEqual({ kind: 'login_required' });
+    expect(loadPortalState('latam').status).toBe('expired');
+    expect(h.close).toHaveBeenCalled();
+  });
+
+  it('90 s sem PDF: erro e tela fechada', async () => {
+    vi.useFakeTimers();
+    savePortalState('latam', { status: 'saved' });
+    const p = syncPortal(LATAM_IFLIGHT, deps(), () => {});
+    await vi.advanceTimersByTimeAsync(90_001);
+
+    await expect(p).resolves.toEqual({ kind: 'error', message: 'O iFlight não respondeu' });
+    expect(h.close).toHaveBeenCalled();
+  });
+});
+
+describe('escala em JSON do iFlight', () => {
+  const JSON_TEXT = '{"model":{"cWPRosterWidgetModel":{"cWPCrewRosterDayReportDTO":[]}}}';
+
+  it('conectar: o JSON da escala é importado e a tela fecha', async () => {
+    const d = deps();
+    const steps: PortalStep[] = [];
+    const p = connectPortal(LATAM_IFLIGHT, d, (s) => steps.push(s));
+    await tick();
+    h.emit('urlChangeEvent', { url: 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage' });
+    h.emit('messageFromWebview', { detail: { type: 'roster-json', text: JSON_TEXT } });
+
+    await expect(p).resolves.toMatchObject({ kind: 'imported', insertedCount: 12 });
+    expect(d.importRosterJson).toHaveBeenCalledWith(JSON_TEXT);
+    expect(d.importPdf).not.toHaveBeenCalled();
+    expect(steps).toEqual(['conectando', 'lendo', 'salvando', 'pronto']);
+    expect(h.close).toHaveBeenCalled();
+    expect(loadPortalState('latam').status).toBe('saved');
+  });
+
+  it('sincronizar escondido: o JSON da escala é importado', async () => {
+    savePortalState('latam', { status: 'saved' });
+    const d = deps();
+    const p = syncPortal(LATAM_IFLIGHT, d, () => {});
+    await tick();
+    h.emit('urlChangeEvent', { url: 'https://iflightla.ibsplc.aero/iflight-crew/web/getMainPage' });
+    h.emit('browserPageLoaded', {});
+    h.emit('messageFromWebview', { detail: { type: 'roster-json', text: JSON_TEXT } });
+
+    await expect(p).resolves.toMatchObject({ kind: 'imported' });
+    expect(d.importRosterJson).toHaveBeenCalledTimes(1);
+  });
+
+  it('JSON e PDF chegando juntos: importa uma vez só', async () => {
+    const d = deps();
+    const p = connectPortal(LATAM_IFLIGHT, d, () => {});
+    await tick();
+    h.emit('messageFromWebview', { detail: { type: 'roster-json', text: JSON_TEXT } });
+    h.emit('messageFromWebview', { detail: { type: 'pdf', base64: PDF_B64, size: 9, request: null } });
+
+    await expect(p).resolves.toMatchObject({ kind: 'imported' });
+    expect(d.importRosterJson).toHaveBeenCalledTimes(1);
+    expect(d.importPdf).not.toHaveBeenCalled();
+  });
+});
+
+describe('uma tela do portal por vez', () => {
+  it('enquanto a conexão está aberta, sincronizar não abre outra tela', async () => {
+    savePortalState('latam', { status: 'saved' });
+    const first = connectPortal(LATAM_IFLIGHT, deps(), () => {});
+    await tick();
+
+    await expect(syncPortal(LATAM_IFLIGHT, deps(), () => {})).resolves.toEqual({
+      kind: 'error',
+      message: 'Já existe uma leitura do iFlight em andamento. Tente de novo em instantes.',
+    });
+    expect(h.openWebView).toHaveBeenCalledTimes(1);
+
+    h.emit('closeEvent', {});
+    await expect(first).resolves.toEqual({ kind: 'cancelled' });
   });
 });
 

@@ -13,6 +13,7 @@ import type { DevicePortalProvider, LearnedEndpoint } from './providers';
 export type PageMessage =
   | { type: 'ready'; url: string }
   | { type: 'pdf'; base64: string; size: number; request: LearnedEndpoint | null }
+  | { type: 'roster-json'; text: string; url: string }
   | { type: 'page'; url: string; title: string; errorHint?: string; navFound: boolean }
   | { type: 'replay-failed'; status: number; reason: string };
 
@@ -71,6 +72,8 @@ const PAGE_BODY = String.raw`
   var MAX = 15 * 1024 * 1024;
   var seen = {};
   var gotPdf = false;
+  var RJSON = CFG.rosterJson ? new RegExp(CFG.rosterJson.s, CFG.rosterJson.f) : null;
+  var gotJson = false;
   var origFetch = window.fetch ? window.fetch.bind(window) : null;
   window.__escalaxOrigFetch = origFetch;
   __HELPERS__
@@ -124,6 +127,26 @@ const PAGE_BODY = String.raw`
     setTimeout(function () { emitPdf(buf, null); }, 1500);
   }
 
+  function isRosterJson(url) {
+    return !!RJSON && RJSON.test(String(url || '').split('?')[0]);
+  }
+
+  // Só conta como escala o JSON com as linhas do relatório. Logo após o login o portal ainda
+  // responde 403 em HTML; isso não pode encerrar as tentativas.
+  function hasRosterRows(text) {
+    try {
+      var d = JSON.parse(String(text));
+      var rows = d && d.model && d.model.cWPRosterWidgetModel && d.model.cWPRosterWidgetModel.cWPCrewRosterDayReportDTO;
+      return Array.isArray(rows);
+    } catch (e) { return false; }
+  }
+
+  function sendJson(text, url) {
+    if (gotJson || !text || !hasRosterRows(text)) return;
+    gotJson = true;
+    send({ type: 'roster-json', text: String(text), url: absolute(url) });
+  }
+
   function grab(url) {
     if (!origFetch) return;
     origFetch(url, { credentials: 'include' }).then(function (r) { return r.arrayBuffer(); })
@@ -139,7 +162,9 @@ const PAGE_BODY = String.raw`
       var ct = headerCt(init && init.headers);
       return origFetch(input, init).then(function (resp) {
         try {
-          if (looksPdf(resp.headers.get('content-type'), resp.url || url)) {
+          if (isRosterJson(resp.url || url)) {
+            resp.clone().text().then(function (t) { sendJson(t, resp.url || url); }).catch(function () {});
+          } else if (looksPdf(resp.headers.get('content-type'), resp.url || url)) {
             resp.clone().arrayBuffer().then(function (buf) { sendPdf(buf, reqInfo(method, url, body, ct)); });
           }
         } catch (e) {}
@@ -149,23 +174,30 @@ const PAGE_BODY = String.raw`
   }
 
   if (window.XMLHttpRequest) {
-    var xo = XMLHttpRequest.prototype.open;
-    var xh = XMLHttpRequest.prototype.setRequestHeader;
-    var xs = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function (m, u) {
+    var XP = window.XMLHttpRequest.prototype;
+    var xo = XP.open;
+    var xh = XP.setRequestHeader;
+    var xs = XP.send;
+    XP.open = function (m, u) {
       this.__ex = { m: m, u: u, ct: '' };
       return xo.apply(this, arguments);
     };
-    XMLHttpRequest.prototype.setRequestHeader = function (k, v) {
+    XP.setRequestHeader = function (k, v) {
       if (this.__ex && /^content-type$/i.test(k)) this.__ex.ct = v;
       return xh.apply(this, arguments);
     };
-    XMLHttpRequest.prototype.send = function (b) {
+    XP.send = function (b) {
       var x = this;
       var info = x.__ex || {};
       x.addEventListener('load', function () {
         try {
           var url = x.responseURL || info.u;
+          if (isRosterJson(url) || isRosterJson(info.u)) {
+            var rt = x.responseType;
+            if (rt === '' || rt === 'text') sendJson(x.responseText, url);
+            else if (rt === 'json' && x.response) sendJson(JSON.stringify(x.response), url);
+            return;
+          }
           if (!looksPdf(x.getResponseHeader('content-type'), url)) return;
           var request = reqInfo(info.m, url, b, info.ct);
           var r = x.response;
@@ -215,6 +247,102 @@ const PAGE_BODY = String.raw`
     } catch (e) {}
   }, true);
 
+  // Relatório gerado por formulário num iframe escondido: o portal entrega o PDF como download,
+  // que quebra no navegador do app. O app faz o POST e baixa o arquivo ele mesmo; se algo falhar,
+  // a página segue o envio normal.
+  var RPT = CFG.report ? {
+    form: CFG.report.form,
+    run: CFG.report.run,
+    options: CFG.report.options,
+    model: CFG.report.model,
+    id: CFG.report.id,
+    action: new RegExp(CFG.report.action.s, CFG.report.action.f),
+    idPattern: new RegExp(CFG.report.idPattern.s, CFG.report.idPattern.f),
+    download: CFG.report.download
+  } : null;
+  var reportAsked = 0;
+
+  if (RPT && origFetch && window.HTMLFormElement) {
+    var fsub = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function () {
+      var form = this;
+      var args = arguments;
+      var action = absolute(form.getAttribute('action') || '');
+      if (!RPT.action.test(action.split('?')[0])) return fsub.apply(form, args);
+      var body;
+      try { body = new URLSearchParams(new FormData(form)).toString(); } catch (e) { return fsub.apply(form, args); }
+      reportAsked++;
+      var fmt = String(RPT.id).toLowerCase();
+      origFetch(action, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          var m = String(html).match(RPT.idPattern);
+          if (!m) throw new Error('sem id do relatório');
+          var url = absolute(RPT.download.replace('{id}', encodeURIComponent(m[1])).replace('{format}', encodeURIComponent(fmt)));
+          return origFetch(url, { credentials: 'include' }).then(function (r) { return r.arrayBuffer(); });
+        })
+        .then(function (buf) {
+          if (!isPdf(buf)) throw new Error('relatório não é PDF');
+          sendPdf(buf, { method: 'POST', url: action });
+        })
+        .catch(function () { try { fsub.apply(form, args); } catch (e) {} });
+    };
+  }
+
+  function getPath(o, path) {
+    var parts = String(path).split('.');
+    for (var i = 0; i < parts.length && o != null; i++) o = o[parts[i]];
+    return o;
+  }
+
+  function setPath(o, path, v) {
+    var parts = String(path).split('.');
+    for (var i = 0; i < parts.length - 1; i++) {
+      o = o[parts[i]];
+      if (o == null) return;
+    }
+    o[parts[parts.length - 1]] = v;
+  }
+
+  var runs = 0;
+  var lastRunAt = 0;
+  var askedAtRun = 0;
+  // Escolhe o PDF e aperta o botão. Se o relatório não foi pedido em 4 s (tela ainda carregando),
+  // tenta de novo; se foi pedido, espera o PDF por 20 s antes de tentar outra vez.
+  var navDoneAt = 0;
+  function tryRun() {
+    if (gotPdf || gotJson || runs >= 5) return;
+    // Com a escala em JSON disponível, o PDF só entra se o JSON não chegar em 12 s.
+    if (RJSON && (!navDoneAt || Date.now() - navDoneAt < 12000)) return;
+    if (lastRunAt && Date.now() - lastRunAt < (reportAsked > askedAtRun ? 20000 : 4000)) return;
+    var form = document.querySelector(RPT.form);
+    var btn = form && form.querySelector(RPT.run);
+    if (!btn || !window.angular) return;
+    try {
+      var sc = window.angular.element(form).scope();
+      var list = sc && getPath(sc, RPT.options);
+      var pick = null;
+      for (var i = 0; list && i < list.length; i++) {
+        if (list[i] && list[i].id === RPT.id) { pick = list[i]; break; }
+      }
+      if (!pick) return;
+      sc.$apply(function () { setPath(sc, RPT.model, pick); });
+      try {
+        var input = form.querySelector('[ng-model="' + RPT.model + '"]');
+        if (input && window.jQuery) window.jQuery(input).select2('data', pick);
+      } catch (e) {}
+      runs++;
+      lastRunAt = Date.now();
+      askedAtRun = reportAsked;
+      btn.click();
+    } catch (e) {}
+  }
+
   function ensureStatus() {
     if (!document.body) return null;
     var el = document.getElementById('escalax-status');
@@ -261,14 +389,67 @@ const PAGE_BODY = String.raw`
     return null;
   }
 
+  // Caminho rápido: pede a escala do mês pelo $http do Angular da página, que já manda os
+  // cabeçalhos de sessão do portal. Repete até o portal liberar (403 logo após o login).
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function monthPeriod() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = now.getMonth();
+    var last = new Date(y, m + 1, 0).getDate();
+    return {
+      periodFromDate: y + '-' + pad2(m + 1) + '-01T00:00:00.0',
+      periodToDate: y + '-' + pad2(m + 1) + '-' + pad2(last) + 'T00:00:00.0',
+      searchActualTimings: true,
+      displayLocalTimings: true
+    };
+  }
+  var fetchTries = 0;
+  var fetchBusy = false;
+  function tryFetchRoster() {
+    if (gotJson || fetchBusy || fetchTries >= 60) return;
+    var $http = null;
+    try {
+      var inj = window.angular && window.angular.element(document.body).injector();
+      $http = inj && inj.get('$http');
+    } catch (e) { $http = null; }
+    if (!$http || typeof $http.post !== 'function') return;
+    fetchTries++;
+    fetchBusy = true;
+    $http.post(CFG.rosterFetch.url, { cWPRosterReportSearchDTO: monthPeriod() }).then(function (r) {
+      fetchBusy = false;
+      var data = r && r.data;
+      if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { data = null; } }
+      var rows = data && data.model && data.model.cWPRosterWidgetModel && data.model.cWPRosterWidgetModel.cWPCrewRosterDayReportDTO;
+      if (rows && rows.length !== undefined) sendJson(JSON.stringify(data), CFG.rosterFetch.url);
+    }, function () { fetchBusy = false; });
+  }
+  if (CFG.rosterFetch && onPortal()) {
+    var fetchTimer = setInterval(function () {
+      if (gotJson || gotPdf || fetchTries >= 60) { clearInterval(fetchTimer); return; }
+      tryFetchRoster();
+    }, 1000);
+  }
+
   if (CFG.autoNav && onPortal()) {
     var step = 0;
     var nav = setInterval(function () {
-      if (gotPdf || step >= NAV.length) { clearInterval(nav); return; }
-      var el = findClickable(NAV[step]);
-      if (el) { step++; try { el.click(); } catch (e) {} }
+      if (gotPdf || gotJson) { clearInterval(nav); return; }
+      if (step < NAV.length) {
+        var el = findClickable(NAV[step]);
+        if (el) {
+          step++;
+          if (step >= NAV.length) navDoneAt = Date.now();
+          try { el.click(); } catch (e) {}
+        }
+        return;
+      }
+      if (!RPT) { clearInterval(nav); return; }
+      tryRun();
     }, 1500);
-    setTimeout(function () { if (!gotPdf) showGuide(); }, 20000);
+    // O passo a passo só aparece se a navegação travar; com relatório automático, espera mais.
+    setTimeout(function () { if (!gotPdf && !gotJson && (!RPT || step < NAV.length)) showGuide(); }, 20000);
+    if (RPT) setTimeout(function () { if (!gotPdf && !gotJson) showGuide(); }, 60000);
   }
 
   var LOGIN_ERRORS = [
@@ -330,11 +511,26 @@ function serialize(re: RegExp): { s: string; f: string } {
 }
 
 export function buildPageScript(provider: DevicePortalProvider, opts: { autoNav: boolean }): string {
+  const report = provider.report;
   const cfg = JSON.stringify({
     nav: provider.navSteps.map(serialize),
     portal: serialize(provider.portalHost),
     guide: provider.guideText,
     autoNav: opts.autoNav,
+    rosterJson: provider.rosterJson ? serialize(provider.rosterJson) : null,
+    rosterFetch: provider.rosterFetch ?? null,
+    report: report
+      ? {
+          form: report.form,
+          run: report.run,
+          options: report.format.options,
+          model: report.format.model,
+          id: report.format.id,
+          action: serialize(report.action),
+          idPattern: serialize(report.idPattern),
+          download: report.download,
+        }
+      : null,
   });
   return PAGE_BODY.replace('__HELPERS__', () => HELPERS).replace('__CFG__', () => cfg);
 }

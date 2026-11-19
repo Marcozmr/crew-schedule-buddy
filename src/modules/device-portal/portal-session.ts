@@ -23,6 +23,8 @@ export type PortalResult =
 
 export interface PortalDeps {
   importPdf(fileName: string, bytes: ArrayBuffer): Promise<PdfImportResult>;
+  /** Escala em JSON que a página do portal carregou (mais completa que o PDF). */
+  importRosterJson?(text: string): Promise<PdfImportResult>;
   now?(): Date;
   /** Espera após a página do portal carregar antes de refazer a requisição (redirecionamentos por JS). */
   settleMs?: number;
@@ -36,6 +38,10 @@ export const STEP_LABELS: Record<PortalStep, string> = {
 };
 
 const SYNC_TIMEOUT_MS = 45_000;
+/** Com relatório automático a sincronização navega e gera o PDF: o iFlight leva mais. */
+const REPORT_SYNC_TIMEOUT_MS = 90_000;
+/** Parado no login por mais que isso = sessão expirada; antes disso pode ser o SSO voltando sozinho. */
+const LOGIN_GRACE_MS = 10_000;
 
 function base64ToArrayBuffer(b64: string): ArrayBuffer {
   const bin = atob(b64);
@@ -79,19 +85,27 @@ async function closeQuietly(): Promise<void> {
   }
 }
 
+/** O que a página mandou e o app sabe importar: PDF da escala ou a escala em JSON. */
+type Captured = { kind: 'pdf'; bytes: ArrayBuffer; request: LearnedEndpoint | null } | { kind: 'json'; text: string };
+
+function capturedFrom(msg: PageMessage, deps: PortalDeps): Captured | null {
+  if (msg.type === 'pdf') return { kind: 'pdf', bytes: base64ToArrayBuffer(msg.base64), request: msg.request };
+  if (msg.type === 'roster-json' && deps.importRosterJson) return { kind: 'json', text: msg.text };
+  return null;
+}
+
 /**
- * Importa o PDF capturado e atualiza o estado. `learned` só é trocado quando há requisição de origem.
+ * Importa o que foi capturado e atualiza o estado. `learned` só é trocado quando há requisição de origem.
  */
-async function importCaptured(
-  provider: DevicePortalProvider,
-  deps: PortalDeps,
-  bytes: ArrayBuffer,
-  request: LearnedEndpoint | null,
-): Promise<PortalResult> {
+async function importCaptured(provider: DevicePortalProvider, deps: PortalDeps, captured: Captured): Promise<PortalResult> {
   const now = deps.now?.() ?? new Date();
+  const request = captured.kind === 'pdf' ? captured.request : null;
   let result: PdfImportResult;
   try {
-    result = await deps.importPdf(fileNameFor(provider, now), bytes);
+    result =
+      captured.kind === 'json' && deps.importRosterJson
+        ? await deps.importRosterJson(captured.text)
+        : await deps.importPdf(fileNameFor(provider, now), (captured as { bytes: ArrayBuffer }).bytes);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     savePortalState(provider.id, { lastError: message });
@@ -117,7 +131,32 @@ async function importCaptured(
   };
 }
 
-export async function connectPortal(
+/** Uma tela do portal por vez (conexão, sincronização manual ou automática). */
+let portalOpen = false;
+const BUSY: PortalResult = {
+  kind: 'error',
+  message: 'Já existe uma leitura do iFlight em andamento. Tente de novo em instantes.',
+};
+
+async function exclusive(run: () => Promise<PortalResult>): Promise<PortalResult> {
+  if (portalOpen) return BUSY;
+  portalOpen = true;
+  try {
+    return await run();
+  } finally {
+    portalOpen = false;
+  }
+}
+
+export function connectPortal(
+  provider: DevicePortalProvider,
+  deps: PortalDeps,
+  onStep: (s: PortalStep) => void,
+): Promise<PortalResult> {
+  return exclusive(() => connectVisible(provider, deps, onStep));
+}
+
+async function connectVisible(
   provider: DevicePortalProvider,
   deps: PortalDeps,
   onStep: (s: PortalStep) => void,
@@ -145,11 +184,11 @@ export async function connectPortal(
     finish(r);
   };
 
-  const handleBytes = async (bytes: ArrayBuffer, request: LearnedEndpoint | null) => {
+  const handleCaptured = async (captured: Captured) => {
     if (capturing || settled) return;
     capturing = true;
     setStep('salvando');
-    const r = await importCaptured(provider, deps, bytes, request);
+    const r = await importCaptured(provider, deps, captured);
     if (r.kind === 'imported') setStep('pronto');
     await settle(r, true);
   };
@@ -166,7 +205,8 @@ export async function connectPortal(
     messageFromWebview: (e) => {
       const msg = readMessage(e);
       if (!msg) return;
-      if (msg.type === 'pdf') void handleBytes(base64ToArrayBuffer(msg.base64), msg.request);
+      const captured = capturedFrom(msg, deps);
+      if (captured) void handleCaptured(captured);
       else if (msg.type === 'page' && msg.errorHint) lastHint = msg.errorHint;
     },
     downloadCompleted: (e) => {
@@ -175,7 +215,7 @@ export async function connectPortal(
       void (async () => {
         try {
           const buf = await (await fetch(Capacitor.convertFileSrc(path))).arrayBuffer();
-          if (isPdf(buf)) await handleBytes(buf, null);
+          if (isPdf(buf)) await handleCaptured({ kind: 'pdf', bytes: buf, request: null });
         } catch {
           /* download que não é PDF: ignora */
         }
@@ -213,7 +253,103 @@ export async function connectPortal(
   return result;
 }
 
-export async function syncPortal(
+/**
+ * Sincroniza com a tela escondida fazendo o mesmo caminho da conexão: navega até o relatório,
+ * escolhe PDF e gera. Não depende de requisição aprendida (ela traz token e datas fixas).
+ */
+async function syncByReport(
+  provider: DevicePortalProvider,
+  deps: PortalDeps,
+  onStep: (s: PortalStep) => void,
+): Promise<PortalResult> {
+  if (loadPortalState(provider.id).status === 'never') return { kind: 'needs_connect' };
+
+  const script = buildPageScript(provider, { autoNav: true });
+  let lastUrl = provider.startUrl;
+  let settled = false;
+  let capturing = false;
+  let reading = false;
+  let loginTimer: ReturnType<typeof setTimeout> | undefined;
+  let finish: (r: PortalResult) => void = () => {};
+  const done = new Promise<PortalResult>((resolve) => {
+    finish = resolve;
+  });
+
+  const settle = async (r: PortalResult) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    clearTimeout(loginTimer);
+    await closeQuietly();
+    finish(r);
+  };
+
+  const timer = setTimeout(() => void settle({ kind: 'error', message: 'O iFlight não respondeu' }), REPORT_SYNC_TIMEOUT_MS);
+
+  const stop = await listen({
+    urlChangeEvent: (e) => {
+      lastUrl = (e as { url?: string })?.url ?? lastUrl;
+    },
+    browserPageLoaded: () => {
+      if (settled) return;
+      const kind = hostKind(provider, lastUrl);
+      if (kind === 'login') {
+        if (loginTimer) return;
+        loginTimer = setTimeout(() => {
+          loginTimer = undefined;
+          if (settled || hostKind(provider, lastUrl) !== 'login') return;
+          savePortalState(provider.id, { status: 'expired' });
+          void settle({ kind: 'login_required' });
+        }, LOGIN_GRACE_MS);
+        return;
+      }
+      if (kind !== 'portal') return;
+      if (!reading) {
+        reading = true;
+        onStep('lendo');
+      }
+      InAppBrowser.executeScript({ code: script }).catch(() => undefined);
+    },
+    messageFromWebview: (e) => {
+      const msg = readMessage(e);
+      const captured = msg && capturedFrom(msg, deps);
+      if (!captured || settled || capturing) return;
+      capturing = true;
+      onStep('salvando');
+      void importCaptured(provider, deps, captured).then((r) => {
+        if (r.kind === 'imported') onStep('pronto');
+        return settle(r);
+      });
+    },
+  });
+
+  onStep('conectando');
+  try {
+    // Escondida não aceita preShowScript: o script entra a cada página carregada (browserPageLoaded).
+    await InAppBrowser.openWebView({
+      url: provider.startUrl,
+      title: provider.title,
+      hidden: true,
+      openBlankTargetInWebView: true,
+    });
+  } catch (err) {
+    await settle({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
+  }
+
+  const result = await done;
+  stop();
+  return result;
+}
+
+export function syncPortal(
+  provider: DevicePortalProvider,
+  deps: PortalDeps,
+  onStep: (s: PortalStep) => void,
+): Promise<PortalResult> {
+  return exclusive(() => (provider.report ? syncByReport(provider, deps, onStep) : syncByReplay(provider, deps, onStep)));
+}
+
+async function syncByReplay(
   provider: DevicePortalProvider,
   deps: PortalDeps,
   onStep: (s: PortalStep) => void,
@@ -275,7 +411,7 @@ export async function syncPortal(
       if (msg.type === 'pdf' && !capturing) {
         capturing = true;
         onStep('salvando');
-        void importCaptured(provider, deps, base64ToArrayBuffer(msg.base64), msg.request ?? learned).then((r) => {
+        void importCaptured(provider, deps, { kind: 'pdf', bytes: base64ToArrayBuffer(msg.base64), request: msg.request ?? learned }).then((r) => {
           if (r.kind === 'imported') onStep('pronto');
           return settle(r);
         });

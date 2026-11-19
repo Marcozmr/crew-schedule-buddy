@@ -8,6 +8,7 @@ import {
   type CrewRosterParseStats,
 } from '@/lib/roster/crew-roster-parser';
 import { isOfficialCrewRosterFileName } from '@/lib/roster/official-crew-roster';
+import { IFLIGHT_JSON_PARSER_VERSION, parseIflightRosterReport } from '@/lib/roster/iflight-roster-json';
 import type { UserRosterConnectionType } from '@/modules/roster/services/UserRosterConnectionService';
 import { dedupeScheduleEntryRows } from '@/lib/schedule-entry-dedupe';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -301,7 +302,91 @@ export type PdfImportRunOptions = {
   importOrigin: 'manual' | 'latam_automation' | 'gol_automation' | 'azul_automation';
   /** Quando a importação vem do worker Playwright (coluna `automation_run_id`). */
   automationRunId?: string | null;
+  /**
+   * Escala já lida (ex.: JSON do iFlight): pula a extração de texto e o leitor de PDF.
+   * `arrayBuffer` deve ser um conteúdo estável da escala, para a detecção de repetida funcionar.
+   */
+  preparsed?: {
+    header: Partial<RosterHeader>;
+    entries: CrewRosterParsedEntry[];
+    parserVersion: string;
+    /** Resumo em texto guardado em `raw_text_excerpt`. */
+    sourceText: string;
+  };
 };
+
+function statsFromEntries(entries: CrewRosterParsedEntry[]): ParseStats {
+  const count = (t: string) => entries.filter((e) => e.entryType === t).length;
+  return {
+    ...EMPTY_PARSE_STATS,
+    totalEntries: entries.length,
+    totalRawAnchors: entries.length,
+    totalFlights: entries.filter((e) => e.isFlight).length,
+    totalDO: count('day_off'),
+    totalStandby: count('standby'),
+    totalReserve: count('reserve'),
+    totalOnCall: count('on_call'),
+    totalAfterDedup: entries.length,
+  };
+}
+
+/**
+ * Monta a importação da escala em JSON do iFlight (`loadRosterReport`). O conteúdo gravado é a
+ * lista de eventos já lida — estável entre leituras —, então a mesma escala vira "já atualizada".
+ */
+export function buildIflightJsonImport(json: unknown): {
+  fileName: string;
+  bytes: ArrayBuffer;
+  preparsed: NonNullable<PdfImportRunOptions['preparsed']>;
+} {
+  const { header, entries } = parseIflightRosterReport(json);
+  const canonical = JSON.stringify(entries);
+  const encoded = new TextEncoder().encode(canonical);
+  const bytes = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength) as ArrayBuffer;
+  const period = `${header.rosterStartDate ?? 'inicio'}_${header.rosterEndDate ?? 'fim'}`;
+  return {
+    fileName: `iflight-escala-${period}.json`,
+    bytes,
+    preparsed: {
+      header: {
+        rosterStartDate: header.rosterStartDate ?? '',
+        rosterEndDate: header.rosterEndDate ?? '',
+        crewRole: header.crewRole ?? '',
+      },
+      entries,
+      parserVersion: IFLIGHT_JSON_PARSER_VERSION,
+      sourceText: entries.map((e) => `${e.date} ${e.rawLine}`).join('\n'),
+    },
+  };
+}
+
+/** Importa a escala em JSON capturada do iFlight na tela do próprio app. */
+export async function importIflightRosterJson(text: string, userId: string): Promise<PdfImportResult> {
+  let built: ReturnType<typeof buildIflightJsonImport>;
+  try {
+    built = buildIflightJsonImport(JSON.parse(text));
+  } catch (err) {
+    return {
+      success: false, header: null, parsedCount: 0, insertedCount: 0, rosterId: null, fileName: 'iflight-escala.json',
+      extractedTextPreview: '', parsedEntriesPreview: [], savedRowsPreview: [],
+      debug: { currentUserId: userId, rosterId: null, deactivatedRosterIds: [], activeRoster: null, totalRowsActiveRoster: 0, totalRowsOldRosters: 0 },
+      textByDay: {}, parseStats: EMPTY_PARSE_STATS,
+      error: `Não foi possível ler a escala do iFlight: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  const { supabase } = await import('@/integrations/supabase/client');
+  return importPdfArrayBufferCore({
+    supabaseClient: supabase,
+    fileName: built.fileName,
+    arrayBuffer: built.bytes,
+    userId,
+    useSessionUser: true,
+    emitRosterEvent: true,
+    importOrigin: 'manual',
+    automationRunId: null,
+    preparsed: built.preparsed,
+  });
+}
 
 function isAutomationWorkerImport(importOrigin: PdfImportRunOptions['importOrigin']): boolean {
   return importOrigin === 'latam_automation' || importOrigin === 'gol_automation' || importOrigin === 'azul_automation';
@@ -348,7 +433,9 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     emitRosterEvent,
     importOrigin,
     automationRunId,
+    preparsed,
   } = params;
+  const parserVersion = preparsed?.parserVersion ?? PARSER_VERSION;
   const emptyDebug: ImportDebugInfo = { currentUserId: userId, rosterId: null, deactivatedRosterIds: [], activeRoster: null, totalRowsActiveRoster: 0, totalRowsOldRosters: 0 };
   const emptyStats = EMPTY_PARSE_STATS;
   const emptyResult = (error: string): PdfImportResult => ({
@@ -378,32 +465,38 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
       .limit(1)
       .maybeSingle();
     const hashDup = dupByHash as { id: string; parser_version: string | null } | null;
-    if (hashDup?.id && hashDup.parser_version === PARSER_VERSION) {
+    if (hashDup?.id && hashDup.parser_version === parserVersion) {
       return duplicateResult(fileName, hashDup.id, emptyDebug, emptyStats);
     }
 
-    const { data: dupByMeta } = await supabaseClient
-      .from('imported_rosters')
-      .select('id, parser_version')
-      .eq('user_id', effectiveUserId)
-      .eq('file_name', fileName)
-      .eq('file_size_bytes', fileSizeBytes)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const metaDup = dupByMeta as { id: string; parser_version: string | null } | null;
-    if (metaDup?.id && metaDup.parser_version === PARSER_VERSION) {
-      return duplicateResult(fileName, metaDup.id, emptyDebug, emptyStats);
+    // Nome + tamanho só serve para PDF: no JSON do iFlight, escalas diferentes do mesmo mês
+    // podem ter o mesmo tamanho.
+    if (!preparsed) {
+      const { data: dupByMeta } = await supabaseClient
+        .from('imported_rosters')
+        .select('id, parser_version')
+        .eq('user_id', effectiveUserId)
+        .eq('file_name', fileName)
+        .eq('file_size_bytes', fileSizeBytes)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const metaDup = dupByMeta as { id: string; parser_version: string | null } | null;
+      if (metaDup?.id && metaDup.parser_version === parserVersion) {
+        return duplicateResult(fileName, metaDup.id, emptyDebug, emptyStats);
+      }
     }
 
     const storagePath = `${effectiveUserId}/${Date.now()}-${fileName}`;
     const isHtmlSource = Boolean(extractedTextOverride) || /\.html?$/i.test(fileName);
-    const uploadType = isHtmlSource ? 'text/html' : 'application/pdf';
+    const uploadType = preparsed ? 'application/json' : isHtmlSource ? 'text/html' : 'application/pdf';
     const blob = new Blob([new Uint8Array(arrayBuffer)], { type: uploadType });
     await supabaseClient.storage.from('crew-rosters').upload(storagePath, blob, { contentType: uploadType, upsert: true });
 
     let extractedText: string;
-    if (extractedTextOverride !== undefined && extractedTextOverride.trim().length > 0) {
+    if (preparsed) {
+      extractedText = preparsed.sourceText;
+    } else if (extractedTextOverride !== undefined && extractedTextOverride.trim().length > 0) {
       extractedText = extractedTextOverride;
     } else {
       try {
@@ -413,17 +506,19 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
       }
     }
 
-    if (!extractedText.trim()) {
+    if (!preparsed && !extractedText.trim()) {
       return emptyResult(isHtmlSource ? 'O HTML/texto extraído está vazio.' : 'O PDF não contém texto extraível.');
     }
 
-    const header = parseHeader(extractedText);
-    const normalized = normalizeCrewRosterPdfText(extractedText);
-    const { entries: parsed, stats, textByDay, devUnrecognizedLines } = parseCrewRosterEntries(normalized);
+    const header: RosterHeader = preparsed ? { ...parseHeader(''), ...preparsed.header } : parseHeader(extractedText);
+    const normalized = preparsed ? extractedText : normalizeCrewRosterPdfText(extractedText);
+    const { entries: parsed, stats, textByDay, devUnrecognizedLines } = preparsed
+      ? { entries: preparsed.entries, stats: statsFromEntries(preparsed.entries), textByDay: {} as Record<string, string>, devUnrecognizedLines: [] as string[] }
+      : parseCrewRosterEntries(normalized);
     const entries = parsed.map(mapParsedToRosterEntry);
 
     if (import.meta.env.DEV) {
-      console.log('Using parser:', PARSER_VERSION);
+      console.log('Using parser:', parserVersion);
       console.log('PDF text length:', extractedText.length);
       console.log('RAW PDF TEXT:', extractedText.slice(0, 1000));
       console.log('Normalized text sample:', normalized.slice(0, 500));
@@ -463,7 +558,7 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
         debug: { ...emptyDebug, currentUserId: effectiveUserId },
         textByDay,
         parseStats,
-        error: import.meta.env.DEV ? devMsg : 'Nenhum voo ou atividade identificado no PDF.',
+        error: import.meta.env.DEV ? devMsg : (preparsed ? 'Nenhum voo ou atividade na escala do iFlight.' : 'Nenhum voo ou atividade identificado no PDF.'),
       };
     }
 
@@ -500,10 +595,10 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
       flying_hours_total: header.flyingHoursTotal,
       duty_hours_total: header.dutyHoursTotal,
       raw_text_excerpt: extractedText.substring(0, 2000),
-      parser_version: PARSER_VERSION,
+      parser_version: parserVersion,
       import_origin: importOrigin,
-      roster_provider: isAutomationWorkerImport(importOrigin) ? 'corporate_portal' : 'pdf',
-      source_type: isOfficialPdf ? 'official_pdf' : 'pdf',
+      roster_provider: preparsed ? 'iflight' : isAutomationWorkerImport(importOrigin) ? 'corporate_portal' : 'pdf',
+      source_type: preparsed ? 'iflight_json' : isOfficialPdf ? 'official_pdf' : 'pdf',
       import_status: 'processing',
       parsed_count: entries.length,
       is_active: true,
@@ -517,7 +612,7 @@ async function importPdfArrayBufferCore(params: PdfImportRunOptions): Promise<Pd
     if (rosterId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: metaErr } = await (supabaseClient.from('imported_rosters') as any).update({
-        roster_source: isAutomationWorkerImport(importOrigin) ? 'corporate_portal' : 'manual',
+        roster_source: preparsed ? 'portal' : isAutomationWorkerImport(importOrigin) ? 'corporate_portal' : 'manual',
         roster_status: 'active',
       }).eq('id', rosterId);
       if (metaErr) {

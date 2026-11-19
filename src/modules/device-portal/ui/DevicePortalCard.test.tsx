@@ -9,8 +9,10 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => h.native } }));
+const nav = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => nav.navigate }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
-vi.mock('@/lib/pdf-import', () => ({ importPdfArrayBuffer: vi.fn() }));
+vi.mock('@/lib/pdf-import', () => ({ importPdfArrayBuffer: vi.fn(), importIflightRosterJson: vi.fn() }));
 vi.mock('../portal-session', () => ({
   STEP_LABELS: { conectando: 'Conectando ao portal', lendo: 'Lendo sua escala', salvando: 'Salvando no aparelho', pronto: 'Pronto' },
   syncPortal: h.syncPortal,
@@ -70,5 +72,30 @@ describe('DevicePortalCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sincronizar escala' }));
 
     await waitFor(() => expect(h.connectPortal).toHaveBeenCalled());
+  });
+
+  it('conectou e importou: avisa que a escala mudou e vai direto para a Escala', async () => {
+    h.connectPortal.mockImplementation(async () => {
+      savePortalState('latam', { status: 'saved', lastSyncAt: '2026-11-19T14:30:00.000Z' });
+      return { kind: 'imported', parsedCount: 30, insertedCount: 30, duplicate: false };
+    });
+    const updated = vi.fn();
+    window.addEventListener('escalax:roster-updated', updated);
+    render(<DevicePortalCard />);
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar iFlight' }));
+
+    await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('/schedule'));
+    expect(updated).toHaveBeenCalledTimes(1);
+    window.removeEventListener('escalax:roster-updated', updated);
+  });
+
+  it('a sincronização automática terminou: o card mostra o horário novo', async () => {
+    savePortalState('latam', { status: 'saved', lastSyncAt: '2026-11-18T16:03:00.000Z' });
+    render(<DevicePortalCard />);
+    savePortalState('latam', { status: 'saved', lastSyncAt: '2026-11-19T09:15:00.000Z' });
+    window.dispatchEvent(new CustomEvent('escalax:roster-updated', { detail: { userId: 'u1', reason: 'portal_sync_auto', at: '' } }));
+
+    const when = new Date('2026-11-19T09:15:00.000Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    await waitFor(() => expect(screen.getByText(`Atualizado em ${when}`)).toBeInTheDocument());
   });
 });
