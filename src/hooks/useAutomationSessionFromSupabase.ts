@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { AutomationRunRow, AutomationSessionRow } from '@/lib/roster/automation-types';
 
-export function useAutomationSessionFromSupabase(userId: string | undefined, pollMs = 2800) {
+/**
+ * Estado do robô LATAM no servidor. As mudanças chegam pelo tempo real (canal abaixo); a consulta
+ * periódica é só reserva. Antes era a cada 2,8 s no app inteiro, o que pesava no banco.
+ */
+export function useAutomationSessionFromSupabase(userId: string | undefined, pollMs = 120_000) {
   const [session, setSession] = useState<AutomationSessionRow | null>(null);
   const [latestRun, setLatestRun] = useState<AutomationRunRow | null>(null);
   const [loading, setLoading] = useState(Boolean(userId));
