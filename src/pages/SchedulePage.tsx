@@ -15,7 +15,8 @@ import { WeekStrip } from '@/components/schedule/WeekStrip';
 import { DayKindLegend } from '@/components/schedule/DayKindLegend';
 import { NextEventBanner } from '@/components/schedule/NextEventBanner';
 import { ScheduleListView } from '@/components/schedule/ScheduleListView';
-import { useAirportWeather } from '@/hooks/useAirportWeather';
+import { legWeatherQuery, useLegWeather } from '@/hooks/useLegWeather';
+import type { ScheduleEntry } from '@/hooks/useScheduleData';
 import { FlightCard } from '@/components/flight/FlightCard';
 import { motion } from 'framer-motion';
 import { parseDateBRT } from '@/lib/date-utils';
@@ -33,11 +34,11 @@ import { getRosterEventVisualType } from '@/lib/roster/roster-calendar-visual';
 
 // Sub-component so hooks run unconditionally per entry list
 function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof Array.prototype.filter>; monthLabel: string }) {
-  const flightArrCodes = useMemo(
-    () => [...new Set(entries.filter((e: { is_flight: boolean; arrival?: string }) => e.is_flight && e.arrival).map((e: { arrival: string }) => e.arrival.trim().toUpperCase().slice(0, 3)))],
+  const weatherQueries = useMemo(
+    () => (entries as ScheduleEntry[]).filter((e) => e.is_flight).map(legWeatherQuery).filter((q): q is NonNullable<typeof q> => q != null),
     [entries]
   );
-  const { data: wxData } = useAirportWeather(flightArrCodes as string[]);
+  const legWeather = useLegWeather(weatherQueries);
 
   if (entries.length === 0) {
     return <EmptyState icon={Calendar} title="Sem atividades neste dia" className="my-4" />;
@@ -49,7 +50,6 @@ function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof 
         const tripCrew = entry.is_flight ? buildCrewSituationDisplayFromEntry(entry) : null;
 
         if (entry.is_flight) {
-          const arrCode = entry.arrival?.trim().toUpperCase().slice(0, 3);
           return (
             <motion.div
               key={entry.id}
@@ -59,7 +59,7 @@ function DayDetailContent({ entries, monthLabel }: { entries: ReturnType<typeof 
             >
               <FlightCard
                 leg={entry}
-                weather={wxData[arrCode]}
+                weather={legWeather[entry.id]}
                 reportTime={entry.report_time}
                 debriefTime={entry.debrief_time}
                 showMetButton

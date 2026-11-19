@@ -53,7 +53,7 @@ describe('dayKindForEntries', () => {
   });
 
   it('voo → voo', () => {
-    expect(dayKindForEntries([entry({ is_flight: true, flight_number: 'LA3748' })])).toBe('voo');
+    expect(dayKindForEntries([entry({ is_flight: true, flight_number: 'LA9004' })])).toBe('voo');
   });
 
   it('dia sem lançamento → vazio (não folga)', () => {

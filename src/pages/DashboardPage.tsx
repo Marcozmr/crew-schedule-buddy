@@ -3,21 +3,18 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Upload,
-  Calendar,
   Shield,
   Clock,
   Plane,
-  ChevronRight,
-  BedDouble,
-  Settings,
   Gauge,
-  Radar,
   CalendarClock,
 } from "lucide-react";
 
 import { AppLayout } from "../components/AppLayout";
 import { PdfImportDialog } from "../components/PdfImportDialog";
 import { DashboardNextPresentationCard } from "../components/dashboard/DashboardNextPresentationCard";
+import { WeatherStrip } from "../components/dashboard/WeatherStrip";
+import { legWeatherQuery } from "../hooks/useLegWeather";
 import { DashboardRosterUpdatedHint } from "../components/dashboard/DashboardRosterUpdatedHint";
 import {
   OnboardingModal,
@@ -128,6 +125,12 @@ export default function DashboardPage() {
     () => getNextDutyPeriod(allDutyPeriods, todayStr, now, safeTz),
     [allDutyPeriods, todayStr, now, safeTz]
   );
+
+  const nextArrival = useMemo(() => {
+    const leg = nextDuty?.legs.find((l) => l.is_flight);
+    const q = leg ? legWeatherQuery(leg) : null;
+    return q ? { iata: q.iata, date: q.date, time: q.time } : null;
+  }, [nextDuty]);
 
   const analysis = useMemo(
     () => analyzeOperationalSchedule(schedule, safeTz, homeBase),
@@ -284,6 +287,11 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
+        {/* ── Tempo discreto: agora na base e previsão do próximo pouso ── */}
+        {!loading && (
+          <WeatherStrip base={homeBase} nextArrival={nextArrival} />
+        )}
+
         {/* ── Voos hoje ── */}
         {!loading && todayDuties.length > 0 && (
           <motion.div
@@ -406,36 +414,6 @@ export default function DashboardPage() {
                     desc: "PDF, atualização e status",
                     icon: CalendarClock,
                     path: "/minha-escala",
-                  },
-                  {
-                    title: "Pro Board",
-                    desc: "Consulta aeroporto e ao vivo",
-                    icon: Radar,
-                    path: "/pro-board",
-                  },
-                  {
-                    title: "Calcular jornada",
-                    desc: "Cálculo operacional",
-                    icon: Clock,
-                    path: "/duty-calc",
-                  },
-                  {
-                    title: "Calcular descanso",
-                    desc: "Repouso real",
-                    icon: BedDouble,
-                    path: "/rest-calc",
-                  },
-                  {
-                    title: "Calculadora operacional",
-                    desc: "Visão completa",
-                    icon: Shield,
-                    path: "/regulation",
-                  },
-                  {
-                    title: "Configurações",
-                    desc: "Preferências do app",
-                    icon: Settings,
-                    path: "/settings",
                   },
                 ].map((card, index) =>
                   card.action === "import" ? (
@@ -627,74 +605,6 @@ export default function DashboardPage() {
               )}
             </motion.div>
 
-            <motion.div
-              {...fade(0.2)}
-              className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
-            >
-              {[
-                {
-                  label: "Minha escala",
-                  path: "/minha-escala",
-                  icon: CalendarClock,
-                  desc: "PDF, atualização e status",
-                },
-                {
-                  label: "Pro Board",
-                  path: "/pro-board",
-                  icon: Radar,
-                  desc: "Consulta aeroporto e voos ao vivo",
-                },
-                {
-                  label: "Calendário da escala",
-                  path: "/schedule",
-                  icon: Calendar,
-                  desc: "Calendário mensal",
-                },
-                {
-                  label: "Calcular jornada",
-                  path: "/duty-calc",
-                  icon: Clock,
-                  desc: "Cálculo operacional",
-                },
-                {
-                  label: "Calcular descanso",
-                  path: "/rest-calc",
-                  icon: BedDouble,
-                  desc: "Repouso operacional",
-                },
-                {
-                  label: "Calculadora operacional",
-                  path: "/regulation",
-                  icon: Shield,
-                  desc: "Situação e limites",
-                },
-                {
-                  label: "Configurações",
-                  path: "/settings",
-                  icon: Settings,
-                  desc: "Preferências do app",
-                },
-              ].map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className="glass group flex min-w-0 items-center gap-3 px-4 py-3.5 hover-lift"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/8 transition-colors group-hover:bg-primary/12">
-                    <item.icon className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {item.label}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {item.desc}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground" />
-                </Link>
-              ))}
-            </motion.div>
           </div>
         )}
       </div>

@@ -43,6 +43,7 @@ const PerDiemPage = lazy(() => import("./pages/PerDiemPage"));
 const RestCalcPage = lazy(() => import("./pages/RestCalcPage"));
 const DutyCalcPage = lazy(() => import("./pages/DutyCalcPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
+const StatsPage = lazy(() => import("./pages/StatsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UploadPage = lazy(() => import("./pages/UploadPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -261,6 +262,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <WeatherPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/estatisticas"
+        element={
+          <ProtectedRoute>
+            <StatsPage />
           </ProtectedRoute>
         }
       />

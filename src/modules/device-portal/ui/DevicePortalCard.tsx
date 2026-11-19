@@ -2,12 +2,14 @@
  * Card "iFlight — LATAM": conecta o portal pela tela de navegador do app e sincroniza com a
  * sessão salva no aparelho. Só aparece no app instalado.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { Check, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { importPdfArrayBuffer } from '@/lib/pdf-import';
+import { emitRosterUpdated, subscribeRosterUpdated } from '@/lib/events/roster-events';
+import { importIflightRosterJson, importPdfArrayBuffer } from '@/lib/pdf-import';
 import { connectPortal, resetPortal, STEP_LABELS, syncPortal, type PortalResult, type PortalStep } from '../portal-session';
 import { LATAM_IFLIGHT } from '../providers';
 import { loadPortalState, type PortalStatus } from '../session-store';
@@ -34,7 +36,11 @@ function formatWhen(iso: string): string {
 
 export function DevicePortalCard({ onImported }: { onImported?: () => void }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [state, setState] = useState(() => loadPortalState(PROVIDER.id));
+
+  // A sincronização automática roda fora do card: quando a escala muda, relê o estado salvo.
+  useEffect(() => subscribeRosterUpdated(() => setState(loadPortalState(PROVIDER.id))), []);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<PortalStep | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +52,10 @@ export function DevicePortalCard({ onImported }: { onImported?: () => void }) {
       setBusy(true);
       setError(null);
       setInfo(null);
-      const deps = { importPdf: (name: string, bytes: ArrayBuffer) => importPdfArrayBuffer(name, bytes, user.id) };
+      const deps = {
+        importPdf: (name: string, bytes: ArrayBuffer) => importPdfArrayBuffer(name, bytes, user.id),
+        importRosterJson: (text: string) => importIflightRosterJson(text, user.id),
+      };
       let result: PortalResult =
         mode === 'sync' ? await syncPortal(PROVIDER, deps, setStep) : await connectPortal(PROVIDER, deps, setStep);
       if (result.kind === 'needs_connect') result = await connectPortal(PROVIDER, deps, setStep);
@@ -55,6 +64,8 @@ export function DevicePortalCard({ onImported }: { onImported?: () => void }) {
       if (result.kind === 'imported') {
         setInfo(result.duplicate ? 'Sua escala já estava atualizada.' : `Escala atualizada: ${result.insertedCount} eventos.`);
         onImported?.();
+        emitRosterUpdated({ userId: user.id, reason: 'portal_sync_success', at: new Date().toISOString() });
+        navigate('/schedule');
       } else if (result.kind === 'login_required') {
         setError('Sessão expirada. Toque em Reconectar.');
       } else if (result.kind === 'error') {
@@ -63,7 +74,7 @@ export function DevicePortalCard({ onImported }: { onImported?: () => void }) {
       setStep(null);
       setBusy(false);
     },
-    [user, onImported],
+    [user, onImported, navigate],
   );
 
   const reset = useCallback(async () => {

@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { toast } from "@/components/ui/sonner";
 import { getEscalaxBuildId } from "@/lib/build-id";
+import { cleanupServiceWorkerOnNative, shouldUseServiceWorker } from "@/lib/native-service-worker";
 
 /** Marca, antes do reload, que a próxima carga deve avisar "atualizado". Sobrevive ao reload
  *  (localStorage, não sessionStorage) e é removida assim que o aviso é mostrado. */
@@ -20,8 +21,19 @@ export function PWAUpdatePrompt() {
   if (import.meta.env.DEV) {
     return null;
   }
+  // App instalado: sem service worker (ver native-service-worker.ts).
+  if (!shouldUseServiceWorker()) {
+    return <NativeServiceWorkerCleanup />;
+  }
 
   return <PWAUpdatePromptInner />;
+}
+
+function NativeServiceWorkerCleanup() {
+  useEffect(() => {
+    void cleanupServiceWorkerOnNative();
+  }, []);
+  return null;
 }
 
 function PWAUpdatePromptInner() {

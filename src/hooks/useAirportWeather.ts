@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { AIRPORTS_DB } from '@/lib/airports';
+import { getAirport } from '@/lib/airports';
+import { fetchMetar, metarTempC } from '@/lib/weather/metar';
+import { wmoCondition } from '@/lib/weather/wmo';
 
 export interface AirportWeather {
   iata: string;
@@ -21,7 +23,7 @@ const FC_COLOR: Record<AirportWeather['flightCategory'], string> = {
 };
 export { FC_COLOR };
 
-function parseFlightCategory(metar: string): AirportWeather['flightCategory'] {
+export function parseFlightCategory(metar: string): AirportWeather['flightCategory'] {
   if (!metar) return 'UNKN';
   let ceilingFt = 99999;
   for (const m of metar.matchAll(/\b(BKN|OVC|VV)(\d{3})\b/g)) {
@@ -43,28 +45,12 @@ function parseFlightCategory(metar: string): AirportWeather['flightCategory'] {
   return 'VFR';
 }
 
-function getConditionLabel(code: number): { label: string; emoji: string } {
-  if (code < 0)  return { label: 'Desconhecido', emoji: '❓' };
-  if (code === 0) return { label: 'Céu limpo', emoji: '☀️' };
-  if (code === 1) return { label: 'Predominante limpo', emoji: '🌤️' };
-  if (code === 2) return { label: 'Parcialmente nublado', emoji: '⛅' };
-  if (code === 3) return { label: 'Nublado', emoji: '☁️' };
-  if (code <= 48) return { label: 'Nevoeiro', emoji: '🌫️' };
-  if (code <= 55) return { label: 'Garoa', emoji: '🌦️' };
-  if (code <= 67) return { label: 'Chuva', emoji: '🌧️' };
-  if (code <= 77) return { label: 'Neve', emoji: '❄️' };
-  if (code <= 82) return { label: 'Chuvisco leve', emoji: '🌦️' };
-  if (code <= 86) return { label: 'Neve forte', emoji: '❄️' };
-  if (code <= 99) return { label: 'Tempestade', emoji: '⛈️' };
-  return { label: 'Desconhecido', emoji: '❓' };
-}
-
 export function useAirportWeather(iataCodes: string[]) {
   const [data, setData] = useState<Record<string, AirportWeather>>({});
   const [loading, setLoading] = useState(false);
   const prevKeyRef = useRef('');
 
-  const key = [...new Set(iataCodes.filter(Boolean).filter(c => AIRPORTS_DB[c]))].sort().join(',');
+  const key = [...new Set(iataCodes.filter(Boolean).map(c => c.trim().toUpperCase()).filter(c => getAirport(c)))].sort().join(',');
 
   useEffect(() => {
     if (!key || key === prevKeyRef.current) return;
@@ -73,20 +59,22 @@ export function useAirportWeather(iataCodes: string[]) {
     setLoading(true);
 
     Promise.all(codes.map(async (iata) => {
-      const apt = AIRPORTS_DB[iata];
+      const apt = getAirport(iata);
       if (!apt) return null;
       try {
         const [wxResult, metarResult] = await Promise.allSettled([
-          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${apt.lat}&longitude=${apt.lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&timezone=auto`).then(r => r.json()),
-          fetch(`https://aviationweather.gov/api/data/metar?ids=${apt.icao}&format=raw`).then(r => r.text()),
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${apt.lat}&longitude=${apt.lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kn&timezone=auto`).then(r => r.json()),
+          fetchMetar(apt.icao),
         ]);
         const wx = wxResult.status === 'fulfilled' ? wxResult.value : null;
         const metarRaw = metarResult.status === 'fulfilled' ? (metarResult.value as string).trim() : '';
         const c = wx?.current;
-        const cond = getConditionLabel(c?.weather_code ?? -1);
+        const cond = wmoCondition(c?.weather_code ?? -1);
+        // Temperatura observada (METAR) vale mais que a estimada pelo modelo.
+        const observed = metarTempC(metarRaw);
         return [iata, {
           iata,
-          temp: c?.temperature_2m ?? null,
+          temp: observed ?? c?.temperature_2m ?? null,
           windSpeed: c?.wind_speed_10m ?? null,
           windDir: c?.wind_direction_10m ?? null,
           condition: cond.label,

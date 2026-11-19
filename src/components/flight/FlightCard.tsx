@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 import { Cloud, Wind, Users, Clock, ChevronRight, CheckCircle2, Plane } from 'lucide-react';
 import type { ScheduleEntry } from '@/hooks/useScheduleData';
-import type { AirportWeather } from '@/hooks/useAirportWeather';
 import { FC_COLOR } from '@/hooks/useAirportWeather';
-import { AIRPORTS_DB } from '@/lib/airports';
+import type { LegWeather } from '@/hooks/useLegWeather';
+import { getAirport } from '@/lib/airports';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,7 +49,8 @@ function calcDuration(depTime?: string | null, arrTime?: string | null): string 
 
 export interface FlightCardProps {
   leg: ScheduleEntry;
-  weather?: AirportWeather;
+  /** Previsão para a hora do pouso + categoria atual do destino (useLegWeather). */
+  weather?: LegWeather;
   reportTime?: string | null;
   debriefTime?: string | null;
   showMetButton?: boolean;
@@ -68,7 +69,8 @@ export function FlightCard({
   const flightNum = parseFlightNum(leg.flight_number);
   const duration = calcDuration(leg.departure_time, leg.arrival_time);
   const arrIata = leg.arrival?.trim().toUpperCase().slice(0, 3);
-  const arrIcao = AIRPORTS_DB[arrIata]?.icao;
+  const arrIcao = getAirport(arrIata)?.icao;
+  const forecast = weather?.forecast ?? null;
   const style = airlineStyle(airlineCode);
 
   return (
@@ -123,28 +125,27 @@ export function FlightCard({
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${FC_COLOR[weather.flightCategory]}`}>
             {weather.flightCategory}
           </span>
-          {weather.temp != null && (
-            <span className="text-[11px] font-semibold text-foreground">{Math.round(weather.temp)}°C</span>
+          {forecast && (
+            <span className="text-[11px] font-semibold text-foreground">{Math.round(forecast.temp)}°C</span>
           )}
-          {weather.windSpeed != null && (
+          {forecast?.windKt != null && (
             <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Wind className="w-3 h-3" />{Math.round(weather.windSpeed)}kt
+              <Wind className="w-3 h-3" />{Math.round(forecast.windKt)}kt
             </span>
           )}
         </div>
       )}
 
-      {/* ── Mini-card de clima ── */}
-      {weather && (
+      {/* ── Mini-card de clima: previsão para a hora do pouso (sem previsão, não aparece) ── */}
+      {forecast && (
         <div className="mx-3 mb-3 rounded-xl bg-secondary/60 border border-border/30 px-3 py-2.5 flex items-center gap-3">
-          <span className="text-xl shrink-0">{weather.conditionEmoji}</span>
+          <span className="text-xl shrink-0">{forecast.conditionEmoji}</span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">
-              {weather.temp != null ? `${Math.round(weather.temp)}°C` : ''}{' '}
-              <span className="font-normal text-muted-foreground">{weather.condition}</span>
+              {Math.round(forecast.temp)}°C <span className="font-normal text-muted-foreground">{forecast.condition}</span>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Pouso em {arrIcao || arrIata}{leg.arrival_time ? ` às ${leg.arrival_time}` : ''}
+              Previsão no pouso em {arrIcao || arrIata}{leg.arrival_time ? ` às ${leg.arrival_time}` : ''}
             </p>
           </div>
         </div>

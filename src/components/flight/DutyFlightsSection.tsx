@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { DutyPeriod } from '@/lib/duty-grouping';
 import { formatDateBR } from '@/lib/date-utils';
-import { useAirportWeather } from '@/hooks/useAirportWeather';
+import { legWeatherQuery, useLegWeather } from '@/hooks/useLegWeather';
 import { FlightCard } from './FlightCard';
 
 interface Props {
@@ -20,12 +20,12 @@ export function DutyFlightsSection({ duty, todayStr, delay = 0, hideDateLabel = 
     [duty]
   );
 
-  const arrivalCodes = useMemo(
-    () => [...new Set(flightLegs.map(l => l.arrival.trim().toUpperCase().slice(0, 3)))],
+  const weatherQueries = useMemo(
+    () => flightLegs.map(legWeatherQuery).filter((q): q is NonNullable<typeof q> => q != null),
     [flightLegs]
   );
 
-  const { data: wxData } = useAirportWeather(arrivalCodes);
+  const legWeather = useLegWeather(weatherQueries);
 
   if (flightLegs.length === 0) return null;
 
@@ -61,14 +61,13 @@ export function DutyFlightsSection({ duty, todayStr, delay = 0, hideDateLabel = 
 
       {/* Flight cards */}
       {flightLegs.map((leg, i) => {
-        const arrCode = leg.arrival.trim().toUpperCase().slice(0, 3);
         const isFirst = i === 0;
         const isLast = i === flightLegs.length - 1;
         return (
           <FlightCard
             key={leg.id}
             leg={leg}
-            weather={wxData[arrCode]}
+            weather={legWeather[leg.id]}
             reportTime={isFirst ? duty.reportTime : undefined}
             debriefTime={isLast ? duty.debriefTime : undefined}
             showMetButton={isLast}
