@@ -15,6 +15,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { APP_VERSION } from '@/components/legal/LegalDocument';
 import { motion } from 'framer-motion';
 import { RosterSourcesCard } from '@/components/roster/RosterSourcesCard';
+import { ToolsSection } from '@/components/settings/ToolsSection';
 import { dispatchOperationalPreferencesChanged } from '@/lib/events/operational-preferences-events';
 import { applyResolvedThemePreference, normalizeThemePreference } from '@/lib/themeByTime';
 import { getTimezoneLabel, isKnownOperationalTimezone, OPERATIONAL_TIMEZONE_OPTIONS } from '@/lib/timezone-options';
@@ -90,6 +91,12 @@ export default function SettingsPage() {
         <motion.div {...fade(0)}>
           <SectionLabel>Minha escala</SectionLabel>
           <RosterSourcesCard />
+        </motion.div>
+
+        {/* Ferramentas */}
+        <motion.div {...fade(0.03)}>
+          <SectionLabel>Ferramentas</SectionLabel>
+          <ToolsSection />
         </motion.div>
 
         {/* Perfil */}
