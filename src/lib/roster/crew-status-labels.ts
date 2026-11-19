@@ -54,6 +54,7 @@ interface ActivityDef {
 const ACTIVITY_CODE_MAP: Record<string, ActivityDef> = {
   // ── Folga / dia livre ─────────────────────────────────────────────────────
   DO: { label: 'Folga', entryType: 'day_off' },
+  DOF: { label: 'Folga fixa anual', entryType: 'day_off' },
   DB: { label: 'Folga aniversário', entryType: 'day_off' },
   DBC: { label: 'Folga aniversário casada', entryType: 'day_off' },
   DC: { label: 'Folga casada', entryType: 'day_off' },

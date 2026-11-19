@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link as RouterLink, useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, Clock, BedDouble, Shield, Settings, LogOut, Bell, ChevronLeft, HelpCircle, Cloud, CalendarClock, Users, Home, Map, BarChart2 } from 'lucide-react';
+import { Settings, LogOut, Bell, ChevronLeft, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,28 +13,7 @@ import { EscalaXLogo } from '@/components/brand/EscalaXLogo';
 import { useFlightNotifications } from '@/hooks/useFlightNotifications';
 import { useRosterSyncReminder } from '@/hooks/useRosterSyncReminder';
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/minha-escala', label: 'Minha escala', icon: CalendarClock },
-  { path: '/schedule', label: 'Calendário da escala', icon: Calendar },
-  { path: '/connections', label: 'Conexões', icon: Users },
-  { path: '/duty-calc', label: 'Calcular jornada', icon: Clock },
-  { path: '/rest-calc', label: 'Calcular descanso', icon: BedDouble },
-  { path: '/regulation', label: 'Calculadora operacional', icon: Shield },
-  { path: '/weather', label: 'MetCenter', icon: Cloud },
-  { path: '/settings', label: 'Configurações', icon: Settings },
-];
-
-const bottomNavItems = [
-  { path: '/dashboard', label: 'Início', icon: Home },
-  { path: '/schedule', label: 'Escala', icon: Calendar },
-  { path: '/connections', label: 'Conexões', icon: Users },
-  { path: '/weather', label: 'MetCenter', icon: Map },
-  { path: '/salary', label: 'Stats', icon: BarChart2 },
-  { path: '/settings', label: 'Ajustes', icon: Settings },
-];
-
-const mainTabPaths = new Set(['/dashboard', '/schedule', '/connections', '/weather', '/salary', '/settings']);
+import { bottomNavItems, mainTabPaths, navItems } from '@/components/navigation-items';
 
 function desktopNavLinkClass(active: boolean) {
   return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 ${

@@ -7,10 +7,9 @@
 
 name: Roster history cleanup
 
+# Agendamento desligado em 2026-11-19: as Estatísticas (Ano/Sempre) usam o histórico das importações
+# antigas. Rodar só manualmente, se um dia o espaço apertar.
 on:
-  schedule:
-    # Toda segunda-feira, ~06:30 UTC.
-    - cron: "30 6 * * 1"
   workflow_dispatch:
 
 jobs:
