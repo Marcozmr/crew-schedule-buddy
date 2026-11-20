@@ -5,6 +5,7 @@ import {
   getConfiguredAppOrigin,
   joinAppPath,
   normalizeAppOrigin,
+  pickAppOrigin,
 } from "./appUrl";
 
 describe("appUrl", () => {
@@ -58,5 +59,18 @@ describe("appUrl", () => {
         Object.defineProperty(window, "location", originGetter);
       }
     }
+  });
+});
+
+describe("pickAppOrigin — app instalado (Capacitor)", () => {
+  it("dentro do app instalado (https://localhost ou capacitor://localhost) os links dos emails vão para o site de produção", () => {
+    expect(pickAppOrigin(null, "https://localhost", true)).toBe(DEFAULT_PRODUCTION_APP_ORIGIN);
+    expect(pickAppOrigin(null, "capacitor://localhost", true)).toBe(DEFAULT_PRODUCTION_APP_ORIGIN);
+  });
+  it("desenvolvimento local (com porta) continua usando a própria origem", () => {
+    expect(pickAppOrigin(null, "http://localhost:5173", false)).toBe("http://localhost:5173");
+  });
+  it("VITE_APP_URL configurada sempre vence", () => {
+    expect(pickAppOrigin("https://www.escalax.app.br", "https://localhost", true)).toBe("https://www.escalax.app.br");
   });
 });
