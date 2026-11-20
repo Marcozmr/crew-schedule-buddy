@@ -1,0 +1,85 @@
+# Migração única do banco: projeto antigo (Oregon) → projeto novo (São Paulo).
+# Copia papéis, estrutura e dados (inclui as contas com as senhas, que continuam valendo).
+# Arquivos do Storage e Edge Functions são copiados à parte (CLI), não aqui.
+#
+# Secrets (Settings → Secrets and variables → Actions), ambos em Connect → "Session pooler":
+#   OLD_DB_URL — URI do projeto ANTIGO, com a senha do banco
+#   NEW_DB_URL — URI do projeto NOVO (São Paulo), com a senha do banco
+#
+# Rodar: Actions → "Migrar banco para São Paulo" → Run workflow → digitar MIGRAR.
+# O projeto novo precisa estar vazio (recém-criado). Nada é apagado no projeto antigo.
+
+name: Migrar banco para São Paulo
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacao:
+        description: "Digite MIGRAR para confirmar"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  migrar:
+    if: ${{ github.event.inputs.confirmacao == 'MIGRAR' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Confere os secrets
+        env:
+          OLD_DB_URL: ${{ secrets.OLD_DB_URL }}
+          NEW_DB_URL: ${{ secrets.NEW_DB_URL }}
+        run: |
+          if [ -z "$OLD_DB_URL" ] || [ -z "$NEW_DB_URL" ]; then
+            echo "::error::Cadastre OLD_DB_URL e NEW_DB_URL em Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ "$OLD_DB_URL" = "$NEW_DB_URL" ]; then
+            echo "::error::OLD_DB_URL e NEW_DB_URL são iguais."
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.84.4
+
+      - name: Instala o psql 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          psql --version
+
+      - name: Exporta o projeto antigo
+        env:
+          OLD_DB_URL: ${{ secrets.OLD_DB_URL }}
+        run: |
+          supabase db dump --db-url "$OLD_DB_URL" -f roles.sql --role-only
+          supabase db dump --db-url "$OLD_DB_URL" -f schema.sql
+          supabase db dump --db-url "$OLD_DB_URL" -f data.sql --use-copy --data-only
+          wc -c roles.sql schema.sql data.sql
+
+      - name: Restaura no projeto novo
+        env:
+          NEW_DB_URL: ${{ secrets.NEW_DB_URL }}
+        run: |
+          psql --single-transaction --variable ON_ERROR_STOP=1 \
+            --file roles.sql \
+            --file schema.sql \
+            --command 'SET session_replication_role = replica' \
+            --file data.sql \
+            --dbname "$NEW_DB_URL"
+
+      - name: Confere contagens (antigo x novo)
+        env:
+          OLD_DB_URL: ${{ secrets.OLD_DB_URL }}
+          NEW_DB_URL: ${{ secrets.NEW_DB_URL }}
+        run: |
+          Q="select 'usuarios', count(*) from auth.users union all select 'perfis', count(*) from public.profiles union all select 'escalas', count(*) from public.imported_rosters union all select 'linhas_escala', count(*) from public.schedule_entries union all select 'arquivos', count(*) from storage.objects order by 1"
+          echo "ANTIGO:"; psql "$OLD_DB_URL" -At -F ' ' -c "$Q"
+          echo "NOVO:";   psql "$NEW_DB_URL" -At -F ' ' -c "$Q"
+          rm -f roles.sql schema.sql data.sql
