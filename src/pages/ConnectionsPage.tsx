@@ -16,6 +16,8 @@ import {
   type RosterCrewmateEntry,
 } from '@/lib/services/crew-discovery-service';
 import { CrewConversationService, type CrewConversationSummary } from '@/lib/services/crew-conversation-service';
+import { useScheduleData } from '@/hooks/useScheduleData';
+import { sameRosterPartners } from '@/lib/connections/same-roster';
 
 type Tab = 'voos' | 'colegas' | 'conversas';
 
@@ -266,16 +268,27 @@ export default function ConnectionsPage() {
     };
   }, [userId]);
 
+  // Mesma escala em outra conta: não é colega. Some das abas e vira só um aviso.
+  const { schedule } = useScheduleData();
+  const myFlightCount = useMemo(() => schedule.filter((e) => e.is_flight).length, [schedule]);
+  const sameRoster = useMemo(() => sameRosterPartners(connections, myFlightCount), [connections, myFlightCount]);
+  const sameRosterNames = useMemo(() => connections.filter((c) => sameRoster.has(c.partnerUserId)).map((c) => c.partnerName), [connections, sameRoster]);
+  const realCrewmates = useMemo(() => crewmates.filter((c) => !sameRoster.has(c.partnerUserId)), [crewmates, sameRoster]);
+  const realConnections = useMemo(() => connections.filter((c) => !sameRoster.has(c.partnerUserId)), [connections, sameRoster]);
+  const realConversations = useMemo(() => conversations.filter((c) => !sameRoster.has(c.partnerId)), [conversations, sameRoster]);
+  // Colegas com voo na escala ativa (próximos voos) x quem só voou junto em escalas antigas.
+  const inCurrentRoster = useMemo(() => new Set(realCrewmates.map((c) => c.partnerUserId)), [realCrewmates]);
+
   const chatFor = useMemo(() => {
     const byPartner = new Map(connections.filter((c) => c.conversationId).map((c) => [c.partnerUserId, c.conversationId as string]));
     return (id: string) => byPartner.get(id) ?? null;
   }, [connections]);
 
-  const upcoming = useMemo(() => new Set(crewmates.filter((c) => c.flightDate >= today()).map((c) => c.flightDate)).size, [crewmates]);
+  const upcoming = useMemo(() => new Set(realCrewmates.filter((c) => c.flightDate >= today()).map((c) => c.flightDate)).size, [realCrewmates]);
   const tabs: Array<{ id: Tab; label: string; count: number }> = [
     { id: 'voos', label: 'Voos', count: upcoming },
-    { id: 'colegas', label: 'Colegas', count: connections.length },
-    { id: 'conversas', label: 'Conversas', count: conversations.length },
+    { id: 'colegas', label: 'Colegas', count: realConnections.length },
+    { id: 'conversas', label: 'Conversas', count: realConversations.length },
   ];
 
   return (
@@ -316,19 +329,38 @@ export default function ConnectionsPage() {
           </p>
         ) : (
           <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-            {tab === 'voos' && <FlightsTab crewmates={crewmates} chatFor={chatFor} />}
+            {tab === 'voos' && <FlightsTab crewmates={realCrewmates} chatFor={chatFor} />}
             {tab === 'colegas' &&
-              (connections.length === 0 ? (
+              (realConnections.length === 0 ? (
                 <Empty emoji="🤝" title="Seus colegas aparecem aqui" text="Depois de voar com alguém que usa o EscalaX, veja as folgas e os pernoites que vocês têm em comum." />
               ) : (
-                <ul className="space-y-3">
-                  {connections.map((c) => (
-                    <ColleagueCard key={c.partnerUserId} c={c} />
-                  ))}
-                </ul>
+                <div className="space-y-5">
+                  {[
+                    { title: 'Na sua escala atual', items: realConnections.filter((c) => inCurrentRoster.has(c.partnerUserId)) },
+                    { title: 'Já voaram juntos', items: realConnections.filter((c) => !inCurrentRoster.has(c.partnerUserId)) },
+                  ]
+                    .filter((s) => s.items.length > 0)
+                    .map((s) => (
+                      <section key={s.title} aria-label={s.title} className="space-y-2">
+                        <h2 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">{s.title}</h2>
+                        <ul className="space-y-3">
+                          {s.items.map((c) => (
+                            <ColleagueCard key={c.partnerUserId} c={c} />
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                </div>
               ))}
-            {tab === 'conversas' && <ConversationsTab conversations={conversations} />}
+            {tab === 'conversas' && <ConversationsTab conversations={realConversations} />}
           </motion.div>
+        )}
+
+        {!loading && sameRosterNames.length > 0 && (
+          <p className="rounded-2xl bg-muted/60 px-4 py-3 text-xs text-muted-foreground">
+            🪞 A conta de {sameRosterNames.join(', ')} tem a mesma escala que a sua, então não aparece como colega. Colegas
+            de verdade aparecem aqui quando também usam o EscalaX.
+          </p>
         )}
       </div>
     </AppLayout>

@@ -9,9 +9,13 @@ const h = vi.hoisted(() => ({
   conversations: [] as unknown[],
   daysOff: vi.fn(),
   layovers: vi.fn(),
+  myFlights: 0,
 }));
 
 vi.mock('@/components/AppLayout', () => ({ AppLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock('@/hooks/useScheduleData', () => ({
+  useScheduleData: () => ({ schedule: Array.from({ length: h.myFlights }, (_, i) => ({ id: `f${i}`, is_flight: true })), loading: false }),
+}));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
 vi.mock('@/lib/services/crew-discovery-service', () => ({
   CrewDiscoveryService: {
@@ -38,6 +42,7 @@ beforeEach(() => {
   h.crewmates = [];
   h.connections = [];
   h.conversations = [];
+  h.myFlights = 0;
   h.daysOff.mockReset().mockResolvedValue([]);
   h.layovers.mockReset().mockResolvedValue([]);
 });
@@ -67,6 +72,36 @@ describe('ConnectionsPage', () => {
     expect(screen.getByText('LA9001')).toBeInTheDocument();
     expect(screen.getAllByText('Ana Souza')).toHaveLength(1);
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('a mesma escala em outra conta não aparece como colega (aparece só um aviso)', async () => {
+    h.myFlights = 40;
+    h.connections = [
+      { partnerUserId: 'mesma', partnerName: 'CARLA DIAS', partnerAirline: 'LATAM', flightsTogetherCount: 58, hasConversation: true, conversationId: 'c1' },
+      { partnerUserId: 'p2', partnerName: 'BEATRIZ ROCHA', partnerAirline: 'LATAM', flightsTogetherCount: 4, hasConversation: false, conversationId: null },
+    ];
+    h.crewmates = [{ flightDate: '2099-03-20', flightNumber: 'LA9001', departure: 'GRU', arrival: 'REC', partnerUserId: 'mesma', partnerName: 'CARLA DIAS', partnerAirline: 'LATAM', crewRole: 'CC' }];
+    renderPage();
+    expect(await screen.findByText(/mesma escala/i)).toBeInTheDocument();
+    expect(screen.queryByText('LA9001')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: /Colegas/ }));
+    expect(await screen.findByText('BEATRIZ ROCHA')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /CARLA DIAS/ })).toBeNull();
+  });
+
+  it('Colegas separa quem está na escala atual de quem voou junto em escalas antigas', async () => {
+    h.connections = [
+      { partnerUserId: 'p2', partnerName: 'BEATRIZ ROCHA', partnerAirline: 'LATAM', flightsTogetherCount: 4, hasConversation: false, conversationId: null },
+      { partnerUserId: 'p1', partnerName: 'Ana Souza', partnerAirline: 'LATAM', flightsTogetherCount: 2, hasConversation: false, conversationId: null },
+    ];
+    h.crewmates = [{ flightDate: '2099-03-20', flightNumber: 'LA9001', departure: 'GRU', arrival: 'REC', partnerUserId: 'p1', partnerName: 'Ana Souza', partnerAirline: 'LATAM', crewRole: 'CC' }];
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: /Colegas/ }));
+    const atual = await screen.findByRole('region', { name: 'Na sua escala atual' });
+    const antes = screen.getByRole('region', { name: 'Já voaram juntos' });
+    expect(atual.textContent).toContain('Ana Souza');
+    expect(atual.textContent).not.toContain('BEATRIZ');
+    expect(antes.textContent).toContain('BEATRIZ ROCHA');
   });
 
   it('tocar num colega abre as folgas e os pernoites em comum', async () => {
