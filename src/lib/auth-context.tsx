@@ -9,6 +9,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { getAuthCallbackUrl } from '@/lib/auth/authRedirect';
 import { getAppOrigin } from '@/lib/auth/appUrl';
+import { existingAccountError } from '@/lib/auth/signupResult';
 import { deriveAuthAccessState, isEmailConfirmed, type AuthAccessState } from '@/lib/auth/authAccess';
 import { AuthFlowError, AUTH_FLOW_CODES } from '@/lib/auth/authErrors';
 import { assertAuthRateLimitAllowed } from '@/lib/auth/authRateLimitClient';
@@ -255,6 +256,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
+    const existing = existingAccountError(data?.user);
+    if (existing) throw existing;
     logAuthAuditEvent('signup_completed', { ok: true });
     if (data?.user && !isEmailConfirmed(data.user)) {
       logAuthAuditEvent('email_confirmation_sent', { domain: emailDomainOnly(normalizedEmail) });

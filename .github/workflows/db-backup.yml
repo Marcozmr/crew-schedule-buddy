@@ -1,0 +1,71 @@
+# Backup semanal do banco (Supabase), além dos backups diários do plano Pro (guardados 7 dias).
+#
+# O repositório é PÚBLICO: o backup é criptografado (AES-256, senha no secret BACKUP_PASSPHRASE)
+# antes de virar artefato do GitHub. Sem a senha, o arquivo não serve para nada. Fica guardado 90 dias.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL    — Supabase → Connect → "Session pooler" (a URI com a senha do banco)
+#   BACKUP_PASSPHRASE  — uma senha longa que só você sabe (guarde num gerenciador de senhas)
+#
+# Restaurar: baixe o artefato e rode
+#   gpg -d escalax-db-AAAA-MM-DD.tar.gz.gpg | tar -xz
+#   psql "$NOVO_DB_URL" -f backup/roles.sql -f backup/schema.sql -c 'SET session_replication_role = replica' -f backup/data.sql
+#
+# Observação: o GitHub pausa agendamentos de repositório público após 60 dias sem nenhum commit.
+
+name: Backup semanal do banco
+
+on:
+  schedule:
+    # Domingo, 07:00 UTC (04:00 em Brasília).
+    - cron: "0 7 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Confere os secrets
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB_URL" ] || [ -z "$PASS" ]; then
+            echo "::error::Cadastre SUPABASE_DB_URL e BACKUP_PASSPHRASE em Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.84.4
+
+      - name: Exporta papéis, estrutura e dados
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p backup
+          supabase db dump --db-url "$DB_URL" -f backup/roles.sql --role-only
+          supabase db dump --db-url "$DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$DB_URL" -f backup/data.sql --use-copy --data-only
+          ls -la backup | awk '{print $5, $9}'
+
+      - name: Compacta e criptografa
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          STAMP=$(date -u +%Y-%m-%d)
+          tar -czf - backup | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+            --symmetric --cipher-algo AES256 -o "escalax-db-$STAMP.tar.gz.gpg" 3<<<"$PASS"
+          rm -rf backup
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: escalax-db-${{ env.STAMP }}
+          path: escalax-db-*.tar.gz.gpg
+          retention-days: 90
+          if-no-files-found: error

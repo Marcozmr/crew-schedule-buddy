@@ -43,17 +43,23 @@ export function getConfiguredAppOrigin(): string | null {
  * Origem usada ao montar redirectTo / emailRedirectTo para o Supabase Auth.
  */
 export function getAppOrigin(): string {
-  const configured = getConfiguredAppOrigin();
+  const windowOrigin = typeof window !== "undefined" ? window.location?.origin : undefined;
+  return pickAppOrigin(getConfiguredAppOrigin(), windowOrigin, Boolean(import.meta.env.PROD));
+}
+
+/**
+ * Origem do app instalado (Capacitor): Android serve em https://localhost e iOS em
+ * capacitor://localhost. Link de email com essa origem não abre no celular.
+ */
+function isNativeShellOrigin(origin: string): boolean {
+  return origin === "https://localhost" || origin.startsWith("capacitor://");
+}
+
+/** Regra de getAppOrigin, separada para teste: configurada > janela (fora do app instalado) > produção. */
+export function pickAppOrigin(configured: string | null, windowOrigin: string | undefined, isProd: boolean): string {
   if (configured) return configured;
-
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  if (import.meta.env.PROD) {
-    return DEFAULT_PRODUCTION_APP_ORIGIN;
-  }
-
+  if (windowOrigin && !isNativeShellOrigin(windowOrigin)) return windowOrigin;
+  if (isProd || (windowOrigin && isNativeShellOrigin(windowOrigin))) return DEFAULT_PRODUCTION_APP_ORIGIN;
   return "";
 }
 
