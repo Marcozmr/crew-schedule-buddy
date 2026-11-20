@@ -208,7 +208,7 @@ function parseHeader(text: string): RosterHeader {
   const dhMatch = text.match(/(?:DUTY)\s*(?:HRS?|Hours?|Time)[:\s|]*(\d+:\d{2})/i);
   if (dhMatch) header.dutyHoursTotal = parseHoursMinutes(dhMatch[1]);
 
-  // Extract crew name from pipe-delimited header like "MAYARA BESSA | 04449142 | JJCC320 | BSB | CC"
+  // Extract crew name from pipe-delimited header like "FULANA DE TAL | 00000000 | JJCC320 | BSB | CC"
   if (!header.crewName) {
     const nameFromPipe = text.match(/([A-Z][A-Z\s]{3,30})\s*\|\s*\d{4,8}/);
     if (nameFromPipe) header.crewName = nameFromPipe[1].trim();
